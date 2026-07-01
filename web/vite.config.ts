@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+// 启动前设置：VITE_API_GATEWAY=http://localhost:8088 npm run dev
 const gateway = process.env.VITE_API_GATEWAY
 const apiTarget = gateway || 'http://localhost:8093'
 const useGateway = !!gateway
