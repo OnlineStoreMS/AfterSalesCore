@@ -9,7 +9,7 @@ import {
   uploadUnboxingPhoto,
   uploadUnboxingVideo,
 } from '../../api/unboxing'
-import { captureVideoFrame, formatCameraError, requestCameraStream, scanBarcodeFromVideo } from '../../utils/barcodeScan'
+import { captureVideoFrame, formatCameraError, hasLiveVideoTrack, pickRecorderMimeType, requestCameraStream, scanBarcodeFromVideo } from '../../utils/barcodeScan'
 import { isValidTrackingNo, normalizeTrackingNo } from '../../utils/trackingNo'
 
 interface CapturedPhoto {
@@ -34,6 +34,7 @@ const scanTimer = ref<number | null>(null)
 const recording = ref(false)
 const recordStartAt = ref(0)
 const recordDurationSec = ref(0)
+const recordTickTimer = ref<number | null>(null)
 const mediaRecorder = ref<MediaRecorder | null>(null)
 const recordedChunks = ref<Blob[]>([])
 const videoBlob = ref<Blob | null>(null)
@@ -62,6 +63,13 @@ function cameraUnavailableMessage(): string {
   return '无法访问摄像头，请检查浏览器权限设置。'
 }
 
+async function waitVideoReady(video: HTMLVideoElement): Promise<void> {
+  if (video.readyState >= HTMLMediaElement.HAVE_METADATA) return
+  await new Promise<void>((resolve) => {
+    video.onloadedmetadata = () => resolve()
+  })
+}
+
 async function initCamera() {
   cameraError.value = ''
   cameraReady.value = false
@@ -72,9 +80,15 @@ async function initCamera() {
   try {
     stopCamera()
     const media = await requestCameraStream()
+    if (!hasLiveVideoTrack(media)) {
+      media.getTracks().forEach((t) => t.stop())
+      cameraError.value = '未检测到摄像头画面，请在 Windows 设置中允许浏览器访问摄像头后刷新页面。'
+      return
+    }
     stream.value = media
     if (videoRef.value) {
       videoRef.value.srcObject = media
+      await waitVideoReady(videoRef.value)
       await videoRef.value.play()
     }
     cameraReady.value = true
@@ -83,7 +97,24 @@ async function initCamera() {
   }
 }
 
+function stopRecordTimer() {
+  if (recordTickTimer.value) {
+    window.clearInterval(recordTickTimer.value)
+    recordTickTimer.value = null
+  }
+}
+
+function startRecordTimer() {
+  stopRecordTimer()
+  recordStartAt.value = Date.now()
+  recordDurationSec.value = 0
+  recordTickTimer.value = window.setInterval(() => {
+    recordDurationSec.value = Math.floor((Date.now() - recordStartAt.value) / 1000)
+  }, 200)
+}
+
 function stopCamera() {
+  stopRecordTimer()
   if (scanTimer.value) {
     window.clearInterval(scanTimer.value)
     scanTimer.value = null
@@ -126,33 +157,33 @@ function onTrackingInput() {
 }
 
 function startRecording() {
-  if (!stream.value) {
+  if (!stream.value || !hasLiveVideoTrack(stream.value)) {
     ElMessage.warning('摄像头未就绪')
     return
   }
   recordedChunks.value = []
   revokeVideoPreview()
-  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-    ? 'video/webm;codecs=vp9'
-    : MediaRecorder.isTypeSupported('video/webm')
-      ? 'video/webm'
-      : ''
+  const mime = pickRecorderMimeType()
   const recorder = mime
-    ? new MediaRecorder(stream.value, { mimeType: mime })
-    : new MediaRecorder(stream.value)
+    ? new MediaRecorder(stream.value, {
+        mimeType: mime,
+        videoBitsPerSecond: 2_500_000,
+      })
+    : new MediaRecorder(stream.value, { videoBitsPerSecond: 2_500_000 })
   recorder.ondataavailable = (ev) => {
     if (ev.data.size > 0) recordedChunks.value.push(ev.data)
   }
   recorder.onstop = () => {
+    stopRecordTimer()
+    recordDurationSec.value = Math.max(1, Math.round((Date.now() - recordStartAt.value) / 1000))
     const blob = new Blob(recordedChunks.value, { type: recorder.mimeType || 'video/webm' })
     videoBlob.value = blob
     videoPreviewUrl.value = URL.createObjectURL(blob)
-    recordDurationSec.value = Math.max(1, Math.round((Date.now() - recordStartAt.value) / 1000))
     recording.value = false
   }
   mediaRecorder.value = recorder
-  recordStartAt.value = Date.now()
-  recorder.start(1000)
+  startRecordTimer()
+  recorder.start()
   recording.value = true
 }
 

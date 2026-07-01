@@ -34,25 +34,23 @@ export function captureVideoFrame(video: HTMLVideoElement): HTMLCanvasElement {
   return canvas
 }
 
-/** 依次尝试多种约束，兼容 USB 摄像头（无 environment facingMode）及无麦克风环境 */
-export async function requestCameraStream(): Promise<MediaStream> {
-  const attempts: MediaStreamConstraints[] = [
-    {
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: { echoCancellation: true },
-    },
-    {
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: true,
-    },
-    { video: true, audio: true },
+/** 先单独获取摄像头，再可选合并麦克风（避免 Windows 上只授权麦克风而无画面） */
+export async function requestCameraStream(withAudio = true): Promise<MediaStream> {
+  const videoAttempts: MediaStreamConstraints[] = [
+    { video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } },
+    { video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } } },
     { video: true },
   ]
 
+  let videoStream: MediaStream | null = null
   let lastError: unknown
-  for (const constraints of attempts) {
+
+  for (const constraints of videoAttempts) {
     try {
-      return await navigator.mediaDevices.getUserMedia(constraints)
+      videoStream = await navigator.mediaDevices.getUserMedia(constraints)
+      if (videoStream.getVideoTracks().length > 0) break
+      videoStream.getTracks().forEach((t) => t.stop())
+      videoStream = null
     } catch (e) {
       lastError = e
       if (e instanceof DOMException && e.name === 'NotAllowedError') {
@@ -60,7 +58,38 @@ export async function requestCameraStream(): Promise<MediaStream> {
       }
     }
   }
-  throw lastError
+
+  if (!videoStream?.getVideoTracks().length) {
+    throw lastError ?? new DOMException('No camera found', 'NotFoundError')
+  }
+
+  if (withAudio) {
+    try {
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      })
+      audioStream.getAudioTracks().forEach((t) => videoStream!.addTrack(t))
+    } catch {
+      // 无麦克风时仍可仅录制视频
+    }
+  }
+
+  return videoStream
+}
+
+export function hasLiveVideoTrack(stream: MediaStream): boolean {
+  const track = stream.getVideoTracks()[0]
+  return !!track && track.readyState === 'live'
+}
+
+export function pickRecorderMimeType(): string {
+  const candidates = [
+    'video/webm;codecs=vp8,opus',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ]
+  return candidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? ''
 }
 
 export function formatCameraError(err: unknown): string {
