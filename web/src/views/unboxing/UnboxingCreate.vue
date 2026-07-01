@@ -52,9 +52,23 @@ const recordDurationLabel = computed(() => {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 })
 
+function cameraUnavailableMessage(): string {
+  if (!window.isSecureContext) {
+    return '摄像头需要在安全环境下使用，请通过 HTTPS 或 localhost 访问（局域网 IP 的 HTTP 地址不支持摄像头），也可改用手动输入快递单号。'
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return '当前浏览器不支持摄像头 API，请更换浏览器或改用手动输入快递单号。'
+  }
+  return '无法访问摄像头，请检查浏览器权限设置。'
+}
+
 async function initCamera() {
   cameraError.value = ''
   cameraReady.value = false
+  if (!navigator.mediaDevices?.getUserMedia) {
+    cameraError.value = cameraUnavailableMessage()
+    return
+  }
   try {
     stopCamera()
     const media = await navigator.mediaDevices.getUserMedia({
