@@ -1,0 +1,32 @@
+server:
+  port: 8093
+  mode: debug
+
+database:
+  driver: postgres
+  postgres_dsn: "host=127.0.0.1 user=aftersalescore password=YOUR_PASSWORD dbname=aftersalescore port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+
+auth:
+  enabled: true
+  jwt_secret: "与 UserCore 一致"
+
+storage:
+  driver: minio
+  prefix: "unboxing"
+  local_path: "./data/uploads"
+  public_base_url: "http://127.0.0.1:9100/aftersalescore"
+  minio:
+    endpoint: "127.0.0.1:9100"
+    access_key: "minioadmin"
+    secret_key: "minioadmin"
+    bucket: "aftersalescore"
+    use_ssl: false
+    prefix: "unboxing"
+    public_read: true
+
+cors:
+  allow_origins:
+    - "http://localhost:5176"
+    - "http://127.0.0.1:5176"
+    - "http://localhost:5174"
+    - "http://127.0.0.1:5174"
