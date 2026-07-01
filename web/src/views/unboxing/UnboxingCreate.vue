@@ -9,7 +9,7 @@ import {
   uploadUnboxingPhoto,
   uploadUnboxingVideo,
 } from '../../api/unboxing'
-import { captureVideoFrame, scanBarcodeFromVideo } from '../../utils/barcodeScan'
+import { captureVideoFrame, formatCameraError, requestCameraStream, scanBarcodeFromVideo } from '../../utils/barcodeScan'
 import { isValidTrackingNo, normalizeTrackingNo } from '../../utils/trackingNo'
 
 interface CapturedPhoto {
@@ -71,10 +71,7 @@ async function initCamera() {
   }
   try {
     stopCamera()
-    const media = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: true,
-    })
+    const media = await requestCameraStream()
     stream.value = media
     if (videoRef.value) {
       videoRef.value.srcObject = media
@@ -82,7 +79,7 @@ async function initCamera() {
     }
     cameraReady.value = true
   } catch (e) {
-    cameraError.value = (e as Error).message || '无法访问摄像头，请检查权限'
+    cameraError.value = formatCameraError(e)
   }
 }
 
