@@ -155,7 +155,7 @@ async function handleBatchDelete() {
 
 <template>
   <div class="record-list">
-    <el-card v-loading="loading">
+    <el-card v-loading="loading" class="record-card">
       <template #header>
         <span>{{ typeLabel }}记录</span>
         <el-button type="primary" :icon="Plus" @click="router.push(createPath)">
@@ -169,11 +169,11 @@ async function handleBatchDelete() {
           placeholder="按快递单号搜索"
           :prefix-icon="Search"
           clearable
-          style="width: 220px"
+          class="toolbar-input"
           @keyup.enter="handleSearch"
           @clear="handleSearch"
         />
-        <el-select v-model="edgeId" placeholder="录制端" clearable style="width: 150px" @change="handleSearch">
+        <el-select v-model="edgeId" placeholder="录制端" clearable class="toolbar-select" @change="handleSearch">
           <el-option
             v-for="opt in edgeOptions"
             :key="opt.edgeId"
@@ -187,28 +187,28 @@ async function handleBatchDelete() {
         </el-button>
       </div>
 
-      <el-table :data="tableData" stripe border @selection-change="onSelectionChange">
-        <el-table-column type="selection" width="44" />
-        <el-table-column prop="trackingNo" label="快递单号" width="150" show-overflow-tooltip>
+      <el-table :data="tableData" stripe border class="record-table" @selection-change="onSelectionChange">
+        <el-table-column type="selection" width="48" />
+        <el-table-column prop="trackingNo" label="快递单号" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" @click="openDetail(row)">{{ row.trackingNo }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column label="录制端" width="108" show-overflow-tooltip>
+        <el-table-column label="录制端" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tooltip :content="row.edgeId" placement="top">
-              <el-tag size="small" type="info" class="edge-tag">{{ edgeLabel(row) }}</el-tag>
+              <el-tag size="small" type="info">{{ edgeLabel(row) }}</el-tag>
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="82" align="center">
+        <el-table-column label="状态" min-width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="photoCount" label="照片" width="58" align="center" />
-        <el-table-column prop="createdAt" label="创建时间" width="158" show-overflow-tooltip />
-        <el-table-column label="操作" width="168" fixed="right">
+        <el-table-column prop="photoCount" label="照片" min-width="72" align="center" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="168" show-overflow-tooltip />
+        <el-table-column label="操作" min-width="168" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openDetail(row)">查看</el-button>
             <el-button
@@ -240,17 +240,40 @@ async function handleBatchDelete() {
 </template>
 
 <style scoped>
+.record-list {
+  width: 100%;
+}
+.record-card {
+  width: 100%;
+}
 .record-list :deep(.el-card__header) {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.toolbar { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-.pager { margin-top: 16px; display: flex; justify-content: flex-end; }
-.edge-tag {
-  max-width: 88px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: middle;
+.record-list :deep(.el-card__body) {
+  width: 100%;
+}
+.record-table {
+  width: 100%;
+}
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.toolbar-input {
+  width: 240px;
+  max-width: 100%;
+}
+.toolbar-select {
+  width: 160px;
+}
+.pager {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

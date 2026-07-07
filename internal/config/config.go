@@ -69,6 +69,7 @@ type EdgeMinIOConfig struct {
 	Bucket        string `mapstructure:"bucket"`
 	UseSSL        bool   `mapstructure:"use_ssl"`
 	PublicBaseURL string `mapstructure:"public_base_url"`
+	PublicRead    bool   `mapstructure:"public_read"`
 }
 
 func Load(path string) (*Config, error) {
@@ -148,6 +149,9 @@ func Load(path string) (*Config, error) {
 			scheme = "https"
 		}
 		cfg.Edge.MinIO.PublicBaseURL = fmt.Sprintf("%s://%s/%s", scheme, cfg.Edge.MinIO.Endpoint, cfg.Edge.MinIO.Bucket)
+	}
+	if !v.IsSet("edge.minio.public_read") {
+		cfg.Edge.MinIO.PublicRead = true
 	}
 	return &cfg, nil
 }
