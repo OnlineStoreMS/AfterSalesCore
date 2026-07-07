@@ -33,10 +33,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	if err != nil {
 		panic(err)
 	}
-	media, err := storage.NewEdgeMediaResolver(cfg, store)
-	if err != nil {
-		panic(err)
-	}
+	media := storage.NewEdgeMediaResolver(cfg, store)
 
 	repos := repo.New(db)
 	unboxingSvc := service.NewUnboxingService(repos, store)
