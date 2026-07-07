@@ -135,15 +135,12 @@ func (s *EdgeRecordService) Complete(id int64, in *dto.EdgeRecordCompleteInput) 
 }
 
 func (s *EdgeRecordService) Delete(id int64) error {
-	rec, err := s.repos.EdgeRecord.Get(id)
+	_, err := s.repos.EdgeRecord.Get(id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrNotFound
 	}
 	if err != nil {
 		return err
-	}
-	if rec.EdgeID != s.cloudEdgeID {
-		return ErrInvalidStatus
 	}
 	return s.repos.EdgeRecord.Delete(id)
 }

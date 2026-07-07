@@ -73,7 +73,7 @@ const breadcrumbs = computed(() => {
         </div>
       </header>
       <main class="content">
-        <router-view />
+        <router-view :key="route.path" />
       </main>
     </div>
   </div>

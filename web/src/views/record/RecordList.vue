@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, VideoCamera } from '@element-plus/icons-vue'
+import { Download, Plus, Search } from '@element-plus/icons-vue'
 import {
   batchDeleteEdgeRecords,
+  deleteEdgeRecord,
   fetchEdgeRecords,
+  getEdgeRecordVideoDownload,
   RECORD_STATUS_MAP,
   RECORD_TYPE_LABEL,
+  type EdgeRecordListItem,
   type RecordType,
 } from '../../api/edgeRecord'
 import { fetchEdgeDevices } from '../../api/edgeDevice'
@@ -18,13 +21,14 @@ const recordType = computed(() => (route.meta.recordType as RecordType) || 'unbo
 const typeLabel = computed(() => RECORD_TYPE_LABEL[recordType.value])
 const createPath = computed(() => `/${recordType.value}/create`)
 
-const tableData = ref<Awaited<ReturnType<typeof fetchEdgeRecords>>['list']>([])
+const tableData = ref<EdgeRecordListItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(15)
 const trackingNo = ref('')
 const edgeId = ref('')
 const loading = ref(false)
+const downloadingId = ref<number | null>(null)
 const selectedIds = ref<number[]>([])
 const edgeOptions = ref<{ edgeId: string; name: string }[]>([])
 
@@ -54,9 +58,21 @@ async function loadEdgeOptions() {
   } catch { /* ignore */ }
 }
 
+function resetAndLoad() {
+  page.value = 1
+  selectedIds.value = []
+  loadData()
+}
+
 onMounted(() => {
   loadEdgeOptions()
   loadData()
+})
+
+watch(recordType, () => {
+  trackingNo.value = ''
+  edgeId.value = ''
+  resetAndLoad()
 })
 
 function handleSearch() {
@@ -64,7 +80,7 @@ function handleSearch() {
   loadData()
 }
 
-function openDetail(row: { id: number }) {
+function openDetail(row: EdgeRecordListItem) {
   router.push(`/${recordType.value}/${row.id}`)
 }
 
@@ -73,7 +89,7 @@ function onPageChange(p: number) {
   loadData()
 }
 
-function onSelectionChange(rows: { id: number }[]) {
+function onSelectionChange(rows: EdgeRecordListItem[]) {
   selectedIds.value = rows.map((r) => r.id)
 }
 
@@ -85,10 +101,48 @@ function statusType(s: string) {
   return RECORD_STATUS_MAP[s]?.type || 'info'
 }
 
+function edgeLabel(row: EdgeRecordListItem) {
+  return row.edgeName || row.edgeId
+}
+
+async function handleDownload(row: EdgeRecordListItem) {
+  if (!row.videoUrl) {
+    ElMessage.warning('该记录暂无视频')
+    return
+  }
+  downloadingId.value = row.id
+  try {
+    const { url, filename } = await getEdgeRecordVideoDownload(row.id)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.target = '_blank'
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  } catch (e) {
+    ElMessage.error((e as Error).message || '下载失败')
+  } finally {
+    downloadingId.value = null
+  }
+}
+
+async function handleDelete(row: EdgeRecordListItem) {
+  try {
+    await ElMessageBox.confirm(`确定删除单号 ${row.trackingNo} 的记录？`, '删除')
+    await deleteEdgeRecord(row.id)
+    ElMessage.success('已删除')
+    loadData()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error((e as Error).message || '删除失败')
+  }
+}
+
 async function handleBatchDelete() {
   if (!selectedIds.value.length) return
   try {
-    await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 条记录？仅可删除云端浏览器录制的记录。`, '批量删除')
+    await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 条记录？`, '批量删除')
     const { deleted } = await batchDeleteEdgeRecords(selectedIds.value)
     ElMessage.success(`已删除 ${deleted} 条`)
     selectedIds.value = []
@@ -115,46 +169,59 @@ async function handleBatchDelete() {
           placeholder="按快递单号搜索"
           :prefix-icon="Search"
           clearable
-          style="width: 240px"
+          style="width: 220px"
           @keyup.enter="handleSearch"
           @clear="handleSearch"
         />
-        <el-select v-model="edgeId" placeholder="录制端" clearable style="width: 180px" @change="handleSearch">
-          <el-option v-for="opt in edgeOptions" :key="opt.edgeId" :label="`${opt.name} (${opt.edgeId})`" :value="opt.edgeId" />
+        <el-select v-model="edgeId" placeholder="录制端" clearable style="width: 150px" @change="handleSearch">
+          <el-option
+            v-for="opt in edgeOptions"
+            :key="opt.edgeId"
+            :label="opt.name"
+            :value="opt.edgeId"
+          />
         </el-select>
         <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
-        <el-button v-if="selectedIds.length" type="danger" @click="handleBatchDelete">批量删除 ({{ selectedIds.length }})</el-button>
+        <el-button v-if="selectedIds.length" type="danger" @click="handleBatchDelete">
+          批量删除 ({{ selectedIds.length }})
+        </el-button>
       </div>
 
       <el-table :data="tableData" stripe border @selection-change="onSelectionChange">
-        <el-table-column type="selection" width="48" />
-        <el-table-column prop="trackingNo" label="快递单号" min-width="150">
+        <el-table-column type="selection" width="44" />
+        <el-table-column prop="trackingNo" label="快递单号" width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" @click="openDetail(row)">{{ row.trackingNo }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column label="录制端" min-width="140">
+        <el-table-column label="录制端" width="108" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag size="small" type="info">{{ row.edgeName || row.edgeId }}</el-tag>
-            <span class="edge-id">{{ row.edgeId }}</span>
+            <el-tooltip :content="row.edgeId" placement="top">
+              <el-tag size="small" type="info" class="edge-tag">{{ edgeLabel(row) }}</el-tag>
+            </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100" align="center">
+        <el-table-column label="状态" width="82" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="视频" width="100" align="center">
+        <el-table-column prop="photoCount" label="照片" width="58" align="center" />
+        <el-table-column prop="createdAt" label="创建时间" width="158" show-overflow-tooltip />
+        <el-table-column label="操作" width="168" fixed="right">
           <template #default="{ row }">
-            <span v-if="row.videoUrl"><el-icon><VideoCamera /></el-icon> 有</span>
-            <span v-else class="muted">-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="photoCount" label="照片" width="80" align="center" />
-        <el-table-column prop="createdAt" label="创建时间" width="170" />
-        <el-table-column label="操作" width="90" fixed="right">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="openDetail(row)">详情</el-button>
+            <el-button type="primary" link @click="openDetail(row)">查看</el-button>
+            <el-button
+              type="primary"
+              link
+              :icon="Download"
+              :disabled="!row.videoUrl"
+              :loading="downloadingId === row.id"
+              @click="handleDownload(row)"
+            >
+              下载
+            </el-button>
+            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -180,6 +247,10 @@ async function handleBatchDelete() {
 }
 .toolbar { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .pager { margin-top: 16px; display: flex; justify-content: flex-end; }
-.muted { color: #909399; }
-.edge-id { margin-left: 6px; color: #909399; font-size: 12px; }
+.edge-tag {
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
 </style>
