@@ -33,13 +33,36 @@ func Connect(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 }
 
 func AutoMigrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&model.UnboxingRecord{}, &model.UnboxingPhoto{}); err != nil {
+	if err := db.AutoMigrate(&model.UnboxingRecord{}, &model.UnboxingPhoto{}, &model.EdgeDevice{}); err != nil {
 		return err
 	}
 	if db.Dialector.Name() == "postgres" {
+		if err := db.Exec(`
+			CREATE SCHEMA IF NOT EXISTS after_sales;
+			CREATE TABLE IF NOT EXISTS after_sales.edge_record (
+				id BIGSERIAL PRIMARY KEY,
+				edge_id TEXT NOT NULL DEFAULT '',
+				type TEXT NOT NULL CHECK (type IN ('packing', 'unboxing')),
+				tracking_number TEXT NOT NULL,
+				status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'recording', 'completed')),
+				video_path TEXT NOT NULL DEFAULT '',
+				photo_paths JSONB NOT NULL DEFAULT '[]'::jsonb,
+				remark TEXT NOT NULL DEFAULT '',
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				completed_at TIMESTAMPTZ
+			);
+			CREATE INDEX IF NOT EXISTS idx_edge_record_tracking ON after_sales.edge_record (tracking_number);
+			CREATE INDEX IF NOT EXISTS idx_edge_record_type ON after_sales.edge_record (type);
+			CREATE INDEX IF NOT EXISTS idx_edge_record_edge ON after_sales.edge_record (edge_id);
+			CREATE INDEX IF NOT EXISTS idx_edge_record_created ON after_sales.edge_record (created_at DESC);
+		`).Error; err != nil {
+			return err
+		}
 		return db.Exec(`
 			CREATE INDEX IF NOT EXISTS idx_unboxing_tenant_tracking ON unboxing_records (tenant_id, tracking_no);
 			CREATE INDEX IF NOT EXISTS idx_unboxing_created ON unboxing_records (tenant_id, created_at DESC);
+			CREATE INDEX IF NOT EXISTS idx_edge_devices_edge_id ON edge_devices (edge_id);
 		`).Error
 	}
 	return nil

@@ -3,11 +3,17 @@ package repo
 import "gorm.io/gorm"
 
 type Repos struct {
-	Unboxing *UnboxingRepo
+	Unboxing   *UnboxingRepo
+	EdgeRecord *EdgeRecordRepo
+	EdgeDevice *EdgeDeviceRepo
 }
 
 func New(db *gorm.DB) *Repos {
-	return &Repos{Unboxing: NewUnboxingRepo(db)}
+	return &Repos{
+		Unboxing:   NewUnboxingRepo(db),
+		EdgeRecord: NewEdgeRecordRepo(db),
+		EdgeDevice: NewEdgeDeviceRepo(db),
+	}
 }
 
 func NormalizeTenantID(id uint64) uint64 {

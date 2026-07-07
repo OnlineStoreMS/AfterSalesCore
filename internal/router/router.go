@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"path/filepath"
 
 	"aftersalescore/admin"
@@ -32,10 +33,20 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	if err != nil {
 		panic(err)
 	}
+	media := storage.NewEdgeMediaResolver(cfg, store)
 
 	repos := repo.New(db)
 	unboxingSvc := service.NewUnboxingService(repos, store)
+	edgeRecordSvc := service.NewEdgeRecordService(repos, store, media, cfg)
+	edgeDeviceSvc := service.NewEdgeDeviceService(repos, cfg)
+	_ = edgeDeviceSvc.EnsureDefaults()
+	_ = edgeDeviceSvc.SyncFromRecords()
+
 	unboxingH := admin.NewUnboxingHandler(unboxingSvc)
+	edgeRecordH := admin.NewEdgeRecordHandler(edgeRecordSvc)
+	edgeDeviceH := admin.NewEdgeDeviceHandler(edgeDeviceSvc)
+
+	go edgeDeviceSvc.StartHealthPoller(context.Background())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "service": "aftersalescore"})
@@ -45,7 +56,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	adminGroup := v1.Group("/admin")
 	jwtMgr := jwtmgr.NewManager(cfg.Auth.JWTSecret)
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(adminGroup, unboxingH)
+	admin.RegisterRoutes(adminGroup, unboxingH, edgeRecordH, edgeDeviceH)
 
 	return r
 }

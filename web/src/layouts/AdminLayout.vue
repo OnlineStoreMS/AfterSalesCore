@@ -29,10 +29,14 @@ function logout() {
 }
 
 const breadcrumbs = computed(() => {
-  const title = (route.meta.title as string) || 'AfterSalesCore'
+  const title = (route.meta.title as string) || '售后管理'
   if (route.path.startsWith('/unboxing/create')) return ['售后', '录制开箱']
-  if (route.path.startsWith('/unboxing/')) return ['售后', '开箱详情']
+  if (route.path.startsWith('/packing/create')) return ['售后', '录制打包']
+  if (route.path.match(/^\/unboxing\/\d+/)) return ['售后', '开箱详情']
+  if (route.path.match(/^\/packing\/\d+/)) return ['售后', '打包详情']
   if (route.path.startsWith('/unboxing')) return ['售后', '开箱记录']
+  if (route.path.startsWith('/packing')) return ['售后', '打包记录']
+  if (route.path.startsWith('/edge-devices')) return ['售后', '录制端管理']
   return ['首页', title]
 })
 </script>

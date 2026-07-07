@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HomeFilled, VideoCamera, Search } from '@element-plus/icons-vue'
+import { HomeFilled, VideoCamera, Box, Search, Monitor } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,10 +12,13 @@ const activeMenu = computed(() => route.path)
 const menuItems = [
   { path: '/dashboard', title: '工作台', icon: HomeFilled },
   { path: '/unboxing/create', title: '录制开箱', icon: VideoCamera },
+  { path: '/packing/create', title: '录制打包', icon: Box },
   { path: '/unboxing', title: '开箱记录', icon: Search },
+  { path: '/packing', title: '打包记录', icon: Search },
+  { path: '/edge-devices', title: '录制端管理', icon: Monitor },
 ]
 
-const logoText = computed(() => (collapsed.value ? 'AS' : 'AfterSales'))
+const logoText = computed(() => (collapsed.value ? 'AS' : '售后管理'))
 
 function navigate(path: string) {
   router.push(path)

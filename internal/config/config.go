@@ -12,6 +12,7 @@ type Config struct {
 	Database DatabaseConfig
 	Auth     AuthConfig
 	Storage  StorageConfig
+	Edge     EdgeConfig
 	CORS     CORSConfig
 }
 
@@ -51,6 +52,23 @@ type MinIOConfig struct {
 
 type CORSConfig struct {
 	AllowOrigins []string `mapstructure:"allow_origins"`
+}
+
+type EdgeConfig struct {
+	Schema       string          `mapstructure:"schema"`
+	Table        string          `mapstructure:"table"`
+	CloudEdgeID  string          `mapstructure:"cloud_edge_id"`
+	HealthPollSec int            `mapstructure:"health_poll_sec"`
+	MinIO        EdgeMinIOConfig `mapstructure:"minio"`
+}
+
+type EdgeMinIOConfig struct {
+	Endpoint      string `mapstructure:"endpoint"`
+	AccessKey     string `mapstructure:"access_key"`
+	SecretKey     string `mapstructure:"secret_key"`
+	Bucket        string `mapstructure:"bucket"`
+	UseSSL        bool   `mapstructure:"use_ssl"`
+	PublicBaseURL string `mapstructure:"public_base_url"`
 }
 
 func Load(path string) (*Config, error) {
@@ -102,6 +120,34 @@ func Load(path string) (*Config, error) {
 			"http://localhost:5174",
 			"http://127.0.0.1:5174",
 		}
+	}
+	if cfg.Edge.Schema == "" {
+		cfg.Edge.Schema = "after_sales"
+	}
+	if cfg.Edge.Table == "" {
+		cfg.Edge.Table = "edge_record"
+	}
+	if cfg.Edge.CloudEdgeID == "" {
+		cfg.Edge.CloudEdgeID = "cloud"
+	}
+	if cfg.Edge.HealthPollSec == 0 {
+		cfg.Edge.HealthPollSec = 30
+	}
+	if cfg.Edge.MinIO.Bucket == "" {
+		cfg.Edge.MinIO.Bucket = "box-edge"
+	}
+	if cfg.Edge.MinIO.Endpoint == "" {
+		cfg.Edge.MinIO.Endpoint = cfg.Storage.MinIO.Endpoint
+		cfg.Edge.MinIO.AccessKey = cfg.Storage.MinIO.AccessKey
+		cfg.Edge.MinIO.SecretKey = cfg.Storage.MinIO.SecretKey
+		cfg.Edge.MinIO.UseSSL = cfg.Storage.MinIO.UseSSL
+	}
+	if cfg.Edge.MinIO.PublicBaseURL == "" && cfg.Edge.MinIO.Endpoint != "" {
+		scheme := "http"
+		if cfg.Edge.MinIO.UseSSL {
+			scheme = "https"
+		}
+		cfg.Edge.MinIO.PublicBaseURL = fmt.Sprintf("%s://%s/%s", scheme, cfg.Edge.MinIO.Endpoint, cfg.Edge.MinIO.Bucket)
 	}
 	return &cfg, nil
 }
