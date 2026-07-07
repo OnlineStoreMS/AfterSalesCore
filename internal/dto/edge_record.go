@@ -11,26 +11,18 @@ type EdgeRecordCompleteInput struct {
 }
 
 type EdgeRecordListItem struct {
-	ID               int64              `json:"id"`
-	EdgeID           string             `json:"edgeId"`
-	EdgeName         string             `json:"edgeName,omitempty"`
-	Type             string             `json:"type"`
-	TrackingNo       string             `json:"trackingNo"`
-	Status           string             `json:"status"`
-	VideoURL         string             `json:"videoUrl,omitempty"`
-	VideoDurationSec int                `json:"videoDurationSec,omitempty"`
-	PhotoCount       int                `json:"photoCount"`
-	Goods            []EdgeRecordGoods  `json:"goods,omitempty"`
-	Remark           string             `json:"remark,omitempty"`
-	CreatedAt        string             `json:"createdAt"`
-	CompletedAt      string             `json:"completedAt,omitempty"`
-}
-
-type EdgeRecordGoods struct {
-	Title   string `json:"title,omitempty"`
-	SkuName string `json:"skuName,omitempty"`
-	PicURL  string `json:"picUrl,omitempty"`
-	Num     int    `json:"num,omitempty"`
+	ID               int64    `json:"id"`
+	EdgeID           string   `json:"edgeId"`
+	EdgeName         string   `json:"edgeName,omitempty"`
+	Type             string   `json:"type"`
+	TrackingNo       string   `json:"trackingNo"`
+	Status           string   `json:"status"`
+	VideoURL         string   `json:"videoUrl,omitempty"`
+	VideoDurationSec int      `json:"videoDurationSec,omitempty"`
+	PhotoCount       int      `json:"photoCount"`
+	Remark           string   `json:"remark,omitempty"`
+	CreatedAt        string   `json:"createdAt"`
+	CompletedAt      string   `json:"completedAt,omitempty"`
 }
 
 type EdgeRecordPhotoDetail struct {

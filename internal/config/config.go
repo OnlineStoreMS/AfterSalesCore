@@ -8,17 +8,12 @@ import (
 )
 
 type Config struct {
-	Server       ServerConfig
-	Database     DatabaseConfig
-	Auth         AuthConfig
-	Storage      StorageConfig
-	Edge         EdgeConfig
-	Integrations IntegrationsConfig
-	CORS         CORSConfig
-}
-
-type IntegrationsConfig struct {
-	StoreSyncAgentURL string `mapstructure:"storesyncagent_url"`
+	Server   ServerConfig
+	Database DatabaseConfig
+	Auth     AuthConfig
+	Storage  StorageConfig
+	Edge     EdgeConfig
+	CORS     CORSConfig
 }
 
 type ServerConfig struct {

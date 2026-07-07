@@ -13,7 +13,6 @@ type EdgeRecordListFilter struct {
 	TrackingNo string
 	EdgeID     string
 	Status     string
-	WithGoods  bool
 	Page       int
 	PageSize   int
 }

@@ -38,9 +38,6 @@ edge:
     public_read: true
     public_base_url: "http://127.0.0.1:9100/box-edge"
 
-integrations:
-  storesyncagent_url: "http://127.0.0.1:8097"
-
 cors:
   allow_origins:
     - "http://localhost:5176"

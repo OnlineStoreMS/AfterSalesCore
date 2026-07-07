@@ -25,10 +25,9 @@ func NewEdgeRecordHandler(svc *service.EdgeRecordService) *EdgeRecordHandler {
 
 func (h *EdgeRecordHandler) List(c *gin.Context) {
 	page, pageSize := httputil.ParsePage(c)
-	list, total, err := h.svc.List(c.Request.Context(), c.GetHeader("Authorization"), repo.EdgeRecordListFilter{
+	list, total, err := h.svc.List(repo.EdgeRecordListFilter{
 		Type: c.Query("type"), TrackingNo: c.Query("trackingNo"),
 		EdgeID: c.Query("edgeId"), Status: c.Query("status"),
-		WithGoods: c.Query("withGoods") == "1" || c.Query("withGoods") == "true",
 		Page: page, PageSize: pageSize,
 	})
 	if err != nil {

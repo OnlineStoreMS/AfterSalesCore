@@ -8,7 +8,6 @@ import (
 	adminmw "aftersalescore/admin/middleware"
 	"aftersalescore/internal/config"
 	jwtmgr "aftersalescore/internal/pkg/jwt"
-	"aftersalescore/internal/integrations/storesyncagent"
 	"aftersalescore/internal/repo"
 	"aftersalescore/internal/service"
 	"aftersalescore/internal/storage"
@@ -39,11 +38,10 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	if err != nil {
 		panic(err)
 	}
-	storeSync := storesyncagent.NewClient(cfg.Integrations.StoreSyncAgentURL)
 
 	repos := repo.New(db)
 	unboxingSvc := service.NewUnboxingService(repos, store)
-	edgeRecordSvc := service.NewEdgeRecordService(repos, store, media, edgeObjects, storeSync, cfg)
+	edgeRecordSvc := service.NewEdgeRecordService(repos, store, media, edgeObjects, cfg)
 	edgeDeviceSvc := service.NewEdgeDeviceService(repos, cfg)
 	_ = edgeDeviceSvc.EnsureDefaults()
 	_ = edgeDeviceSvc.SyncFromRecords()

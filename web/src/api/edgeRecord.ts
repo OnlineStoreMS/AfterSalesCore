@@ -24,13 +24,6 @@ export interface EdgeRecord {
   completedAt?: string
 }
 
-export interface EdgeRecordGoods {
-  title?: string
-  skuName?: string
-  picUrl?: string
-  num?: number
-}
-
 export interface EdgeRecordListItem {
   id: number
   edgeId: string
@@ -41,7 +34,6 @@ export interface EdgeRecordListItem {
   videoUrl?: string
   videoDurationSec?: number
   photoCount: number
-  goods?: EdgeRecordGoods[]
   remark?: string
   createdAt: string
   completedAt?: string
@@ -66,16 +58,10 @@ export async function fetchEdgeRecords(params: {
   type?: RecordType
   trackingNo?: string
   edgeId?: string
-  withGoods?: boolean
   page?: number
   pageSize?: number
 }) {
-  const res = await client.get('/edge-records', {
-    params: {
-      ...params,
-      withGoods: params.withGoods ? '1' : undefined,
-    },
-  })
+  const res = await client.get('/edge-records', { params })
   return unwrap<PageData<EdgeRecordListItem>>(res)
 }
 

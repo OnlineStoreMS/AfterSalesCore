@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 
 	"aftersalescore/internal/config"
 	"aftersalescore/internal/dto"
-	"aftersalescore/internal/integrations/storesyncagent"
 	"aftersalescore/internal/model"
 	"aftersalescore/internal/repo"
 	"aftersalescore/internal/storage"
@@ -25,7 +23,6 @@ type EdgeRecordService struct {
 	store       storage.Storage
 	media       *storage.EdgeMediaResolver
 	objects     *storage.EdgeObjectStore
-	storeSync   *storesyncagent.Client
 	cloudEdgeID string
 }
 
@@ -35,14 +32,14 @@ type EdgeRecordVideoFile struct {
 	Filename    string
 }
 
-func NewEdgeRecordService(repos *repo.Repos, store storage.Storage, media *storage.EdgeMediaResolver, objects *storage.EdgeObjectStore, storeSync *storesyncagent.Client, cfg *config.Config) *EdgeRecordService {
+func NewEdgeRecordService(repos *repo.Repos, store storage.Storage, media *storage.EdgeMediaResolver, objects *storage.EdgeObjectStore, cfg *config.Config) *EdgeRecordService {
 	return &EdgeRecordService{
-		repos: repos, store: store, media: media, objects: objects, storeSync: storeSync,
+		repos: repos, store: store, media: media, objects: objects,
 		cloudEdgeID: cfg.Edge.CloudEdgeID,
 	}
 }
 
-func (s *EdgeRecordService) List(ctx context.Context, bearerToken string, f repo.EdgeRecordListFilter) ([]dto.EdgeRecordListItem, int64, error) {
+func (s *EdgeRecordService) List(f repo.EdgeRecordListFilter) ([]dto.EdgeRecordListItem, int64, error) {
 	list, total, err := s.repos.EdgeRecord.List(f)
 	if err != nil {
 		return nil, 0, err
@@ -51,9 +48,6 @@ func (s *EdgeRecordService) List(ctx context.Context, bearerToken string, f repo
 	out := make([]dto.EdgeRecordListItem, 0, len(list))
 	for _, rec := range list {
 		out = append(out, s.toListItem(&rec, nameMap))
-	}
-	if f.WithGoods {
-		s.attachGoods(ctx, bearerToken, f.Type, out)
 	}
 	return out, total, nil
 }
@@ -285,51 +279,4 @@ func (s *EdgeRecordService) toDetail(rec *model.EdgeRecord, nameMap map[string]s
 		detail.CompletedAt = formatTime(*rec.CompletedAt)
 	}
 	return detail
-}
-
-func (s *EdgeRecordService) attachGoods(ctx context.Context, bearerToken, recordType string, items []dto.EdgeRecordListItem) {
-	if s.storeSync == nil || !s.storeSync.Enabled() || len(items) == 0 {
-		return
-	}
-	trackingNos := make([]string, 0, len(items))
-	seen := make(map[string]struct{}, len(items))
-	for _, item := range items {
-		key := repo.NormalizeTrackingNo(item.TrackingNo)
-		if key == "" {
-			continue
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		trackingNos = append(trackingNos, key)
-	}
-	if len(trackingNos) == 0 {
-		return
-	}
-	lookups, err := s.storeSync.LookupByTrackingNos(ctx, bearerToken, recordType, trackingNos)
-	if err != nil {
-		return
-	}
-	for i := range items {
-		key := repo.NormalizeTrackingNo(items[i].TrackingNo)
-		lookup, ok := lookups[key]
-		if !ok || !lookup.Found || len(lookup.Goods) == 0 {
-			continue
-		}
-		items[i].Goods = toEdgeRecordGoods(lookup.Goods)
-	}
-}
-
-func toEdgeRecordGoods(goods []storesyncagent.TradeGoods) []dto.EdgeRecordGoods {
-	out := make([]dto.EdgeRecordGoods, 0, len(goods))
-	for _, g := range goods {
-		out = append(out, dto.EdgeRecordGoods{
-			Title:   g.Title,
-			SkuName: g.SkuName,
-			PicURL:  g.PicURL,
-			Num:     g.Num,
-		})
-	}
-	return out
 }
