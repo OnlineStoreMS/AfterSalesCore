@@ -28,6 +28,7 @@ func (h *EdgeRecordHandler) List(c *gin.Context) {
 	list, total, err := h.svc.List(c.Request.Context(), c.GetHeader("Authorization"), repo.EdgeRecordListFilter{
 		Type: c.Query("type"), TrackingNo: c.Query("trackingNo"),
 		EdgeID: c.Query("edgeId"), Status: c.Query("status"),
+		WithGoods: c.Query("withGoods") == "1" || c.Query("withGoods") == "true",
 		Page: page, PageSize: pageSize,
 	})
 	if err != nil {
@@ -169,7 +170,7 @@ func (h *EdgeRecordHandler) VideoDownload(c *gin.Context) {
 	}
 	defer file.Reader.Close()
 
-	c.Header("Content-Type", file.ContentType)
+	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", attachmentDisposition(file.Filename))
 	c.Status(http.StatusOK)
 	_, _ = io.Copy(c.Writer, file.Reader)

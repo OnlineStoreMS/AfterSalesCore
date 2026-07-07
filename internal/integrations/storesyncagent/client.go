@@ -36,7 +36,7 @@ func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 120 * time.Second,
 		},
 	}
 }
@@ -51,11 +51,14 @@ type apiBody struct {
 	Data    json.RawMessage `json:"data"`
 }
 
-func (c *Client) LookupByTrackingNos(ctx context.Context, bearerToken string, trackingNos []string) (map[string]OrderLookup, error) {
+func (c *Client) LookupByTrackingNos(ctx context.Context, bearerToken, recordType string, trackingNos []string) (map[string]OrderLookup, error) {
 	if !c.Enabled() || len(trackingNos) == 0 {
 		return map[string]OrderLookup{}, nil
 	}
-	payload, err := json.Marshal(map[string]any{"trackingNos": trackingNos})
+	payload, err := json.Marshal(map[string]any{
+		"trackingNos": trackingNos,
+		"recordType":  recordType,
+	})
 	if err != nil {
 		return nil, err
 	}

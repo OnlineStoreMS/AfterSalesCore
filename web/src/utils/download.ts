@@ -13,13 +13,18 @@ export async function saveResponseBlob(res: Response, fallbackName: string) {
   const blob = await res.blob()
   const filename = filenameFromDisposition(res.headers.get('Content-Disposition'), fallbackName)
   const objectUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = objectUrl
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(objectUrl)
+  try {
+    const a = document.createElement('a')
+    a.style.display = 'none'
+    a.href = objectUrl
+    a.download = filename
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
 }
 
 export async function downloadAuthenticated(url: string, fallbackName: string) {

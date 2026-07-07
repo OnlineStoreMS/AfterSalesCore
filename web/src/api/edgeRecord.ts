@@ -66,10 +66,16 @@ export async function fetchEdgeRecords(params: {
   type?: RecordType
   trackingNo?: string
   edgeId?: string
+  withGoods?: boolean
   page?: number
   pageSize?: number
 }) {
-  const res = await client.get('/edge-records', { params })
+  const res = await client.get('/edge-records', {
+    params: {
+      ...params,
+      withGoods: params.withGoods ? '1' : undefined,
+    },
+  })
   return unwrap<PageData<EdgeRecordListItem>>(res)
 }
 

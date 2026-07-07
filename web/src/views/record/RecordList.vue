@@ -16,11 +16,16 @@ import {
 import { fetchEdgeDevices } from '../../api/edgeDevice'
 import OrderGoodsCell from '../../components/OrderGoodsCell.vue'
 
+const LOAD_GOODS_KEY = 'aftersales_record_load_goods'
+
 const route = useRoute()
 const router = useRouter()
 const recordType = computed(() => (route.meta.recordType as RecordType) || 'unboxing')
 const typeLabel = computed(() => RECORD_TYPE_LABEL[recordType.value])
 const createPath = computed(() => `/${recordType.value}/create`)
+
+const loadGoods = ref(localStorage.getItem(LOAD_GOODS_KEY) === '1')
+const goodsLoading = ref(false)
 
 const tableData = ref<EdgeRecordListItem[]>([])
 const total = ref(0)
@@ -35,11 +40,13 @@ const edgeOptions = ref<{ edgeId: string; name: string }[]>([])
 
 async function loadData() {
   loading.value = true
+  goodsLoading.value = loadGoods.value
   try {
     const data = await fetchEdgeRecords({
       type: recordType.value,
       trackingNo: trackingNo.value || undefined,
       edgeId: edgeId.value || undefined,
+      withGoods: loadGoods.value,
       page: page.value,
       pageSize: pageSize.value,
     })
@@ -49,6 +56,16 @@ async function loadData() {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {
     loading.value = false
+    goodsLoading.value = false
+  }
+}
+
+function onLoadGoodsChange(val: boolean) {
+  localStorage.setItem(LOAD_GOODS_KEY, val ? '1' : '0')
+  if (val) {
+    loadData()
+  } else {
+    tableData.value = tableData.value.map((row) => ({ ...row, goods: undefined }))
   }
 }
 
@@ -175,6 +192,15 @@ async function handleBatchDelete() {
           />
         </el-select>
         <el-button type="primary" :icon="Search" @click="handleSearch">搜索</el-button>
+        <el-switch
+          v-model="loadGoods"
+          inline-prompt
+          active-text="商品"
+          inactive-text="商品"
+          :loading="goodsLoading"
+          @change="onLoadGoodsChange"
+        />
+        <span class="goods-tip muted">开启后按快递单号查询商品（较慢）</span>
         <el-button v-if="selectedIds.length" type="danger" @click="handleBatchDelete">
           批量删除 ({{ selectedIds.length }})
         </el-button>
@@ -273,5 +299,11 @@ async function handleBatchDelete() {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+.goods-tip {
+  font-size: 12px;
+}
+.muted {
+  color: #909399;
 }
 </style>

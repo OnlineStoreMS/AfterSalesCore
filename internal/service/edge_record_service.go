@@ -52,7 +52,9 @@ func (s *EdgeRecordService) List(ctx context.Context, bearerToken string, f repo
 	for _, rec := range list {
 		out = append(out, s.toListItem(&rec, nameMap))
 	}
-	s.attachGoods(ctx, bearerToken, out)
+	if f.WithGoods {
+		s.attachGoods(ctx, bearerToken, f.Type, out)
+	}
 	return out, total, nil
 }
 
@@ -285,7 +287,7 @@ func (s *EdgeRecordService) toDetail(rec *model.EdgeRecord, nameMap map[string]s
 	return detail
 }
 
-func (s *EdgeRecordService) attachGoods(ctx context.Context, bearerToken string, items []dto.EdgeRecordListItem) {
+func (s *EdgeRecordService) attachGoods(ctx context.Context, bearerToken, recordType string, items []dto.EdgeRecordListItem) {
 	if s.storeSync == nil || !s.storeSync.Enabled() || len(items) == 0 {
 		return
 	}
@@ -305,7 +307,7 @@ func (s *EdgeRecordService) attachGoods(ctx context.Context, bearerToken string,
 	if len(trackingNos) == 0 {
 		return
 	}
-	lookups, err := s.storeSync.LookupByTrackingNos(ctx, bearerToken, trackingNos)
+	lookups, err := s.storeSync.LookupByTrackingNos(ctx, bearerToken, recordType, trackingNos)
 	if err != nil {
 		return
 	}
