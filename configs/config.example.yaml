@@ -24,6 +24,23 @@ storage:
     prefix: "unboxing"
     public_read: true
 
+edge:
+  schema: after_sales
+  table: edge_record
+  cloud_edge_id: cloud
+  health_poll_sec: 30
+  minio:
+    endpoint: "127.0.0.1:9100"
+    access_key: "minioadmin"
+    secret_key: "minioadmin"
+    bucket: "box-edge"
+    use_ssl: false
+    public_read: true
+    public_base_url: "http://127.0.0.1:9100/box-edge"
+
+integrations:
+  storesyncagent_url: "http://127.0.0.1:8097"
+
 cors:
   allow_origins:
     - "http://localhost:5176"

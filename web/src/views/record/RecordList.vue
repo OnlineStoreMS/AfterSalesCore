@@ -7,13 +7,14 @@ import {
   batchDeleteEdgeRecords,
   deleteEdgeRecord,
   fetchEdgeRecords,
-  getEdgeRecordVideoDownload,
+  downloadEdgeRecordVideo,
   RECORD_STATUS_MAP,
   RECORD_TYPE_LABEL,
   type EdgeRecordListItem,
   type RecordType,
 } from '../../api/edgeRecord'
 import { fetchEdgeDevices } from '../../api/edgeDevice'
+import OrderGoodsCell from '../../components/OrderGoodsCell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -112,15 +113,7 @@ async function handleDownload(row: EdgeRecordListItem) {
   }
   downloadingId.value = row.id
   try {
-    const { url, filename } = await getEdgeRecordVideoDownload(row.id)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.target = '_blank'
-    a.rel = 'noopener'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    await downloadEdgeRecordVideo(row.id)
   } catch (e) {
     ElMessage.error((e as Error).message || '下载失败')
   } finally {
@@ -189,9 +182,14 @@ async function handleBatchDelete() {
 
       <el-table :data="tableData" stripe border class="record-table" @selection-change="onSelectionChange">
         <el-table-column type="selection" width="48" />
-        <el-table-column prop="trackingNo" label="快递单号" min-width="160" show-overflow-tooltip>
+        <el-table-column prop="trackingNo" label="快递单号" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" @click="openDetail(row)">{{ row.trackingNo }}</el-link>
+          </template>
+        </el-table-column>
+        <el-table-column label="商品" min-width="280">
+          <template #default="{ row }">
+            <OrderGoodsCell :goods="row.goods" />
           </template>
         </el-table-column>
         <el-table-column label="录制端" min-width="120" show-overflow-tooltip>

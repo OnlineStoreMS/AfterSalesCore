@@ -120,3 +120,8 @@ func (s *MinIOStorage) PublicURL(objectKey string) string {
 	objectKey = strings.TrimPrefix(objectKey, "/")
 	return s.baseURL + "/" + objectKey
 }
+
+func (s *MinIOStorage) GetObject(objectKey string) (*minio.Object, error) {
+	objectKey = strings.TrimPrefix(strings.TrimSpace(objectKey), "/")
+	return s.client.GetObject(context.Background(), s.bucket, objectKey, minio.GetObjectOptions{})
+}

@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, Download, Picture } from '@element-plus/icons-vue'
 import {
   fetchEdgeRecord,
-  getEdgeRecordVideoDownload,
+  downloadEdgeRecordVideo,
   RECORD_STATUS_MAP,
   RECORD_TYPE_LABEL,
   type RecordType,
@@ -46,15 +46,7 @@ function statusType(s: string) {
 async function handleDownload() {
   downloading.value = true
   try {
-    const { url, filename } = await getEdgeRecordVideoDownload(recordId.value)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.target = '_blank'
-    a.rel = 'noopener'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    await downloadEdgeRecordVideo(recordId.value)
   } catch (e) {
     ElMessage.error((e as Error).message || '下载失败')
   } finally {

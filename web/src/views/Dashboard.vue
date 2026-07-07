@@ -87,19 +87,32 @@ function edgeStatusType(status: string) {
 </template>
 
 <style scoped>
-.dashboard { max-width: 960px; }
+.dashboard {
+  width: 100%;
+}
 .page-title { margin: 0 0 8px; font-size: 22px; }
 .desc { color: #606266; margin: 0 0 24px; line-height: 1.6; }
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 24px;
+}
+@media (max-width: 1100px) {
+  .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .action-card {
   cursor: pointer;
   text-align: center;
   transition: transform 0.15s;
+  height: 100%;
 }
 .action-card:hover { transform: translateY(-2px); }
 .action-card h3 { margin: 12px 0 6px; font-size: 16px; }
@@ -111,4 +124,7 @@ function edgeStatusType(status: string) {
   gap: 8px;
 }
 .edge-card :deep(.el-card__header) { padding: 12px 20px; }
+.edge-card {
+  width: 100%;
+}
 </style>

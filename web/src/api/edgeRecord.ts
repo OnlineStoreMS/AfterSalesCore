@@ -1,4 +1,5 @@
 import client, { unwrap, type PageData } from './client'
+import { downloadAuthenticated } from '../utils/download'
 
 export type RecordType = 'unboxing' | 'packing'
 
@@ -23,6 +24,13 @@ export interface EdgeRecord {
   completedAt?: string
 }
 
+export interface EdgeRecordGoods {
+  title?: string
+  skuName?: string
+  picUrl?: string
+  num?: number
+}
+
 export interface EdgeRecordListItem {
   id: number
   edgeId: string
@@ -33,6 +41,7 @@ export interface EdgeRecordListItem {
   videoUrl?: string
   videoDurationSec?: number
   photoCount: number
+  goods?: EdgeRecordGoods[]
   remark?: string
   createdAt: string
   completedAt?: string
@@ -106,6 +115,6 @@ export async function batchDeleteEdgeRecords(ids: number[]) {
   return unwrap<{ deleted: number }>(await client.post('/edge-records/batch-delete', { ids }))
 }
 
-export async function getEdgeRecordVideoDownload(id: number) {
-  return unwrap<{ url: string; filename: string }>(await client.get(`/edge-records/${id}/video/download`))
+export async function downloadEdgeRecordVideo(id: number) {
+  await downloadAuthenticated(`/api/v1/admin/edge-records/${id}/video/download`, `video-${id}.webm`)
 }

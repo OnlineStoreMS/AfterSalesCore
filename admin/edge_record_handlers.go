@@ -1,7 +1,9 @@
 package admin
 
 import (
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"aftersalescore/internal/dto"
@@ -23,7 +25,7 @@ func NewEdgeRecordHandler(svc *service.EdgeRecordService) *EdgeRecordHandler {
 
 func (h *EdgeRecordHandler) List(c *gin.Context) {
 	page, pageSize := httputil.ParsePage(c)
-	list, total, err := h.svc.List(repo.EdgeRecordListFilter{
+	list, total, err := h.svc.List(c.Request.Context(), c.GetHeader("Authorization"), repo.EdgeRecordListFilter{
 		Type: c.Query("type"), TrackingNo: c.Query("trackingNo"),
 		EdgeID: c.Query("edgeId"), Status: c.Query("status"),
 		Page: page, PageSize: pageSize,
@@ -160,12 +162,21 @@ func (h *EdgeRecordHandler) VideoDownload(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	resp, err := h.svc.VideoDownload(id)
+	file, err := h.svc.OpenVideoDownload(id)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
-	response.OK(c, resp)
+	defer file.Reader.Close()
+
+	c.Header("Content-Type", file.ContentType)
+	c.Header("Content-Disposition", attachmentDisposition(file.Filename))
+	c.Status(http.StatusOK)
+	_, _ = io.Copy(c.Writer, file.Reader)
+}
+
+func attachmentDisposition(filename string) string {
+	return `attachment; filename="` + filename + `"; filename*=UTF-8''` + url.PathEscape(filename)
 }
 
 func parseInt64ID(c *gin.Context) (int64, error) {
