@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowDown, Expand, Fold } from '@element-plus/icons-vue'
 import Sidebar from './Sidebar.vue'
+import TenantSwitcher from '../components/TenantSwitcher.vue'
 import { portalAppsUrl, portalLoginUrl } from '../utils/auth'
 import { useSessionStore } from '../stores/session'
 
@@ -16,7 +17,7 @@ const userInitial = computed(() => {
 })
 
 onMounted(() => {
-  void sessionStore.load()
+  void sessionStore.load(true)
 })
 
 function backToPortal() {
@@ -53,6 +54,7 @@ const breadcrumbs = computed(() => {
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <TenantSwitcher />
           <el-dropdown trigger="click" @command="(cmd: string) => cmd === 'logout' ? logout() : backToPortal()">
             <div class="user-trigger">
               <el-avatar :size="32" class="user-avatar">{{ userInitial }}</el-avatar>
