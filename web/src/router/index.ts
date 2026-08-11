@@ -5,7 +5,7 @@ import {redirectToPortal, ensureSession, clearToken} from '../utils/auth'
 const APP_TITLE = 'AfterSalesCore - 售后管理'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/auth/callback',
