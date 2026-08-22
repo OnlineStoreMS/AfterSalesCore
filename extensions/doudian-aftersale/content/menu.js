@@ -117,23 +117,34 @@ async function expandParent(parentName) {
   await sleep(350)
 }
 
+function hasWorkbenchCards() {
+  return (
+    document.querySelectorAll('[class*="groupTitle"]').length > 0 &&
+    document.querySelectorAll('[class*="groupItems"]').length > 0
+  )
+}
+
 function alreadyThere(target) {
-  const href = location.href || ''
-  if (target.readyNeedles.some((n) => href.includes(n))) return true
   if (target.name === '服务工单') {
+    const href = location.href || ''
+    if (target.readyNeedles.some((n) => href.includes(n))) {
+      const tabs = Array.from(document.querySelectorAll('.auxo-tabs-tab')).map((el) => textOf(el))
+      if (tabs.some((t) => /^待处理\s*\d+/.test(t))) return true
+    }
     const tabs = Array.from(document.querySelectorAll('.auxo-tabs-tab')).map((el) => textOf(el))
     return tabs.some((t) => /^待处理\s*\d+/.test(t)) && tabs.some((t) => /^处理中\s*\d+/.test(t))
   }
   if (target.name === '售后工作台') {
-    return !!document.querySelector('[class*="groupTitle"]') && !!document.querySelector('[class*="groupItems"]')
+    return hasWorkbenchCards()
   }
-  return false
+  const href = location.href || ''
+  return target.readyNeedles.some((n) => href.includes(n))
 }
 
-async function clickMenu(key) {
+async function clickMenu(key, force) {
   const target = MENU_TARGETS[key]
   if (!target) throw new Error(`未知菜单 ${key}`)
-  if (alreadyThere(target)) {
+  if (!force && alreadyThere(target)) {
     return { ok: true, already: true, url: location.href, name: target.name }
   }
   let item = findMenuItem(target)
@@ -158,7 +169,7 @@ if (!window.__osmsDoudianMenu) {
   window.__osmsDoudianMenu = true
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== 'AFTERSALE_CLICK_MENU') return
-    clickMenu(msg.target)
+    clickMenu(msg.target, !!msg.force)
       .then((data) => sendResponse(data))
       .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }))
     return true

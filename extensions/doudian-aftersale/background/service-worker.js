@@ -11,7 +11,12 @@ const DEFAULT_API_BASE = 'https://osms.zfcycle.com/apps/aftersales/api/v1'
 const HEARTBEAT_ALARM = 'aftersale-heartbeat'
 const AUTO_SYNC_ALARM = 'aftersale-autosync'
 const AUTO_SYNC_MINUTES = 5
-const WORKBENCH_MATCH = 'https://fxg.jinritemai.com/ffa/merchant-aftersale-workbench/*'
+const FXG_MATCHES = [
+  'https://fxg.jinritemai.com/ffa/merchant-aftersale-workbench/*',
+  'https://fxg.jinritemai.com/ffa/task-order/*',
+  'https://fxg.jinritemai.com/ffa/*',
+  'https://fxg.jinritemai.com/*',
+]
 
 let syncing = false
 
@@ -100,9 +105,29 @@ async function heartbeat() {
   }
 }
 
-async function findWorkbenchTab() {
-  const tabs = await chrome.tabs.query({ url: [WORKBENCH_MATCH] })
-  return tabs.find((t) => t.id) || null
+async function findFxgTab() {
+  const stored = await chrome.storage.local.get(['aftersaleFxgTabId'])
+  const savedId = Number(stored.aftersaleFxgTabId || 0)
+  if (savedId) {
+    try {
+      const tab = await chrome.tabs.get(savedId)
+      if (tab?.id && tab.url && tab.url.includes('fxg.jinritemai.com') && !/login|passport/i.test(tab.url)) {
+        return tab
+      }
+    } catch {
+      /* tab closed */
+    }
+  }
+  for (const url of FXG_MATCHES) {
+    const tabs = await chrome.tabs.query({ url: [url] })
+    const hit = tabs.find((t) => t.id && t.url && !/login|passport/i.test(t.url || ''))
+    if (hit) return hit
+  }
+  return null
+}
+
+async function rememberFxgTab(tabId) {
+  await chrome.storage.local.set({ aftersaleFxgTabId: tabId })
 }
 
 function installPageLogisticsExtractor() {
@@ -266,6 +291,7 @@ async function installServiceExtractor(tabId) {
 }
 
 async function collectFromTab(tabId) {
+  await injectWorkbench(tabId)
   await installLogisticsExtractor(tabId)
   for (let i = 0; i < 8; i++) {
     try {
@@ -274,7 +300,8 @@ async function collectFromTab(tabId) {
       throw new Error(res?.error || '采集失败')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      if (i === 7) throw new Error(msg.includes('Receiving end') ? '请先打开并停留在抖店售后工作台页面' : msg)
+      if (i === 7) throw new Error(msg.includes('Receiving end') ? '未进入售后工作台，请保持抖店后台打开' : msg)
+      await injectWorkbench(tabId)
       await sleep(400)
     }
   }
@@ -292,11 +319,22 @@ async function injectMenu(tabId) {
   }
 }
 
-async function clickDoudianMenu(tabId, target) {
+async function injectWorkbench(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content/workbench.js'],
+    })
+  } catch (e) {
+    console.warn('inject workbench.js failed', e)
+  }
+}
+
+async function clickDoudianMenu(tabId, target, force = false) {
   await injectMenu(tabId)
   for (let i = 0; i < 6; i++) {
     try {
-      const res = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_CLICK_MENU', target })
+      const res = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_CLICK_MENU', target, force })
       if (res?.ok) return res
       throw new Error(res?.error || '未找到左侧菜单')
     } catch (e) {
@@ -307,6 +345,27 @@ async function clickDoudianMenu(tabId, target) {
     }
   }
   throw new Error('菜单点击失败')
+}
+
+async function waitWorkbenchReady(tabId) {
+  for (let i = 0; i < 50; i++) {
+    try {
+      await injectWorkbench(tabId)
+      const ping = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_PING_WORKBENCH' })
+      if (ping?.ready) return
+    } catch {
+      /* SPA 切换后脚本可能尚未注入 */
+    }
+    await sleep(400)
+  }
+  throw new Error('售后工作台未就绪，请确认左侧菜单可点击「售后 → 售后工作台」')
+}
+
+async function prepareWorkbench(tabId) {
+  await injectMenu(tabId)
+  await injectWorkbench(tabId)
+  await clickDoudianMenu(tabId, 'workbench', true)
+  await waitWorkbenchReady(tabId)
 }
 
 async function injectServiceContent(tabId) {
@@ -354,7 +413,8 @@ async function collectServiceOrders(tabId) {
     throw new Error('服务工单采集失败')
   } finally {
     try {
-      await clickDoudianMenu(tabId, 'workbench')
+      await clickDoudianMenu(tabId, 'workbench', true)
+      await waitWorkbenchReady(tabId)
     } catch (e) {
       console.warn('return to workbench failed', e)
     }
@@ -365,13 +425,15 @@ async function syncNow() {
   if (syncing) return { ok: false, error: '正在同步' }
   const device = await getDevice()
   if (!device) return { ok: false, error: '尚未绑定店铺' }
-  const tab = await findWorkbenchTab()
-  if (!tab?.id) return { ok: false, error: '请先打开抖店售后工作台' }
+  const tab = await findFxgTab()
+  if (!tab?.id) return { ok: false, error: '请先打开抖店后台（任意页面即可，插件会自动点售后工作台）' }
+  await rememberFxgTab(tab.id)
   syncing = true
   const keepAlive = setInterval(() => {
     chrome.runtime.getPlatformInfo(() => {})
   }, 15000)
   try {
+    await prepareWorkbench(tab.id)
     const collected = await collectFromTab(tab.id)
     let serviceOrders = []
     let serviceError = ''
@@ -462,7 +524,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 async function maybeAutoSync(minIntervalMs = 60000) {
   const device = await getDevice()
   if (!device || syncing) return
-  const tab = await findWorkbenchTab()
+  const tab = await findFxgTab()
   if (!tab?.id) return
   const extra = await chrome.storage.local.get([STORAGE.lastSyncAt])
   const last = Number(extra[STORAGE.lastSyncAt] || 0)
@@ -472,7 +534,9 @@ async function maybeAutoSync(minIntervalMs = 60000) {
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.status !== 'complete') return
-  if (!tab.url || !tab.url.includes('/ffa/merchant-aftersale-workbench/')) return
+  if (!tab.url || !tab.url.includes('fxg.jinritemai.com')) return
+  if (/login|passport/i.test(tab.url)) return
+  rememberFxgTab(tabId)
   setTimeout(() => maybeAutoSync(60000), 2500)
 })
 

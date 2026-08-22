@@ -437,16 +437,19 @@ async function collectAll() {
   }
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg?.type !== 'AFTERSALE_COLLECT') return
-  collectAll()
-    .then((data) => sendResponse(data))
-    .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }))
-  return true
-})
-
-if (!window.__OSMS_AFTERSALE_READY__) {
-  window.__OSMS_AFTERSALE_READY__ = true
+if (!window.__osmsWorkbenchInjected) {
+  window.__osmsWorkbenchInjected = true
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === 'AFTERSALE_PING_WORKBENCH') {
+      sendResponse({ ok: true, ready: parseCards().length > 0 })
+      return
+    }
+    if (msg?.type !== 'AFTERSALE_COLLECT') return
+    collectAll()
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }))
+    return true
+  })
   setTimeout(() => {
     try {
       chrome.runtime.sendMessage({ type: 'AFTERSALE_WORKBENCH_READY' })
