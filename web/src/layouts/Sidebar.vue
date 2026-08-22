@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HomeFilled, VideoCamera, Box, Search, Monitor } from '@element-plus/icons-vue'
+import { HomeFilled, VideoCamera, Box, Search, Monitor, Shop } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const collapsed = defineModel<boolean>('collapsed', { default: false })
 
-const activeMenu = computed(() => route.path)
+const activeMenu = computed(() => {
+  if (route.path.startsWith('/shops')) return '/shops'
+  return route.path
+})
 
 const menuItems = [
   { path: '/dashboard', title: '工作台', icon: HomeFilled },
+  { path: '/shops', title: '店铺管理', icon: Shop },
   { path: '/unboxing/create', title: '录制开箱', icon: VideoCamera },
   { path: '/packing/create', title: '录制打包', icon: Box },
   { path: '/unboxing', title: '开箱记录', icon: Search },

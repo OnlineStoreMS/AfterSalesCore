@@ -7,6 +7,7 @@ func RegisterRoutes(
 	unboxingH *UnboxingHandler,
 	edgeRecordH *EdgeRecordHandler,
 	edgeDeviceH *EdgeDeviceHandler,
+	shopH *ShopHandler,
 ) {
 	// legacy browser unboxing (kept for backward compatibility)
 	g.GET("/unboxing-records", unboxingH.List)
@@ -36,4 +37,13 @@ func RegisterRoutes(
 	g.PUT("/edge-devices/:id", edgeDeviceH.Update)
 	g.DELETE("/edge-devices/:id", edgeDeviceH.Delete)
 	g.POST("/edge-devices/:id/probe", edgeDeviceH.Probe)
+
+	g.GET("/shops", shopH.List)
+	g.POST("/shops", shopH.Create)
+	g.GET("/shops/:id", shopH.Get)
+	g.PUT("/shops/:id", shopH.Update)
+	g.DELETE("/shops/:id", shopH.Delete)
+	g.POST("/shops/:id/reset-bind", shopH.ResetBind)
+	g.GET("/shops/:id/workbench", shopH.Workbench)
+	g.GET("/shops/:id/tickets", shopH.Tickets)
 }

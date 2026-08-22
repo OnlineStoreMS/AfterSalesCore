@@ -62,6 +62,18 @@ const router = createRouter({
           meta: { title: '打包详情', recordType: 'packing' },
         },
         {
+          path: 'shops',
+          name: 'Shops',
+          component: () => import('../views/shop/ShopList.vue'),
+          meta: { title: '店铺管理' },
+        },
+        {
+          path: 'shops/:id',
+          name: 'ShopWorkbench',
+          component: () => import('../views/shop/ShopWorkbench.vue'),
+          meta: { title: '店铺售后工作台' },
+        },
+        {
           path: 'edge-devices',
           name: 'EdgeDevices',
           component: () => import('../views/edge/EdgeDeviceList.vue'),

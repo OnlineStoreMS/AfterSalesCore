@@ -33,7 +33,15 @@ func Connect(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 }
 
 func AutoMigrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&model.UnboxingRecord{}, &model.UnboxingPhoto{}, &model.EdgeDevice{}); err != nil {
+	if err := db.AutoMigrate(
+		&model.UnboxingRecord{},
+		&model.UnboxingPhoto{},
+		&model.EdgeDevice{},
+		&model.MarketplaceShop{},
+		&model.AftersaleFilterCard{},
+		&model.AftersaleTicket{},
+		&model.AftersaleTicketCard{},
+	); err != nil {
 		return err
 	}
 	if db.Dialector.Name() == "postgres" {

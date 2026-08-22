@@ -6,6 +6,7 @@ type Repos struct {
 	Unboxing   *UnboxingRepo
 	EdgeRecord *EdgeRecordRepo
 	EdgeDevice *EdgeDeviceRepo
+	Shop       *ShopRepo
 }
 
 func New(db *gorm.DB) *Repos {
@@ -13,6 +14,7 @@ func New(db *gorm.DB) *Repos {
 		Unboxing:   NewUnboxingRepo(db),
 		EdgeRecord: NewEdgeRecordRepo(db),
 		EdgeDevice: NewEdgeDeviceRepo(db),
+		Shop:       NewShopRepo(db),
 	}
 }
 

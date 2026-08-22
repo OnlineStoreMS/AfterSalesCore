@@ -11,6 +11,7 @@ import (
 	"aftersalescore/internal/repo"
 	"aftersalescore/internal/service"
 	"aftersalescore/internal/storage"
+	"aftersalescore/plugin"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -46,9 +47,12 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	_ = edgeDeviceSvc.EnsureDefaults()
 	_ = edgeDeviceSvc.SyncFromRecords()
 
+	shopSvc := service.NewShopService(repos)
 	unboxingH := admin.NewUnboxingHandler(unboxingSvc)
 	edgeRecordH := admin.NewEdgeRecordHandler(edgeRecordSvc)
 	edgeDeviceH := admin.NewEdgeDeviceHandler(edgeDeviceSvc)
+	shopH := admin.NewShopHandler(shopSvc)
+	pluginH := plugin.NewHandler(shopSvc)
 
 	go edgeDeviceSvc.StartHealthPoller(context.Background())
 
@@ -60,7 +64,14 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	adminGroup := v1.Group("/admin")
 	jwtMgr := jwtmgr.NewManager(cfg.Auth.JWTSecret)
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(adminGroup, unboxingH, edgeRecordH, edgeDeviceH)
+	admin.RegisterRoutes(adminGroup, unboxingH, edgeRecordH, edgeDeviceH, shopH)
+
+	pluginGroup := v1.Group("/plugin")
+	pluginGroup.POST("/bind", pluginH.Bind)
+	authed := pluginGroup.Group("")
+	authed.Use(pluginH.AuthRequired())
+	authed.POST("/heartbeat", pluginH.Heartbeat)
+	authed.POST("/sync", pluginH.Sync)
 
 	return r
 }
@@ -80,7 +91,7 @@ func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", origin)
 		}
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization")
+		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Plugin-Key,X-Plugin-Secret")
 		c.Header("Access-Control-Allow-Credentials", "true")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)

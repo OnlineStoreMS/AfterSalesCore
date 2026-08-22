@@ -36,6 +36,10 @@ func HandleServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrNotFound):
 		response.Fail(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrPluginAuth):
+		response.Fail(c, http.StatusUnauthorized, err.Error())
+	case errors.Is(err, service.ErrBindCodeInvalid), errors.Is(err, service.ErrAlreadyBound):
+		response.Fail(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrInvalidStatus), errors.Is(err, service.ErrBadRequest):
 		response.Fail(c, http.StatusBadRequest, err.Error())
 	default:

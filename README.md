@@ -20,6 +20,11 @@
 - 详情页视频预览、下载与问题照片画廊
 - 状态：草稿 → 已完成
 
+### 店铺售后工作台
+- 按平台（抖店 / 淘宝 / 拼多多）管理售后店铺
+- 生成绑定码，供抖店 Chrome 扩展认领店铺并上报快捷筛选卡片与售后单
+- 按店铺查看与抖店类似的售后工作台
+
 ## API 概览
 
 | 方法 | 路径 | 说明 |
@@ -31,6 +36,15 @@
 | POST | `/api/v1/admin/unboxing-records/:id/photos` | 上传问题照片 |
 | POST | `/api/v1/admin/unboxing-records/:id/complete` | 完成记录 |
 | GET | `/api/v1/admin/unboxing-records/:id/video/download` | 获取视频下载链接 |
+| GET | `/api/v1/admin/shops` | 售后店铺列表 |
+| POST | `/api/v1/admin/shops` | 新增店铺 |
+| GET | `/api/v1/admin/shops/:id/workbench` | 店铺售后工作台（卡片 + 售后单） |
+| POST | `/api/v1/admin/shops/:id/reset-bind` | 重置绑定码 |
+| POST | `/api/v1/plugin/bind` | 扩展用绑定码换密钥 |
+| POST | `/api/v1/plugin/heartbeat` | 扩展心跳 |
+| POST | `/api/v1/plugin/sync` | 扩展上报卡片与售后单 |
+
+抖店插件见 `extensions/doudian-aftersale/`。
 
 ## 快速开始
 
