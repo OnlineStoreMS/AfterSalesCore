@@ -6,9 +6,12 @@ import { Search } from '@element-plus/icons-vue'
 import {
   PLUGIN_STATUS_MAP,
   fetchShopWorkbench,
+  fetchShopServiceOrders,
   type FilterCard,
   type MarketplaceShop,
   type AftersaleTicket,
+  type ServiceOrder,
+  type ServiceTabCount,
 } from '../../api/shop'
 
 const route = useRoute()
@@ -27,6 +30,15 @@ const activeCardKey = ref('')
 const lastSyncAt = ref('')
 const nowTick = ref(Date.now())
 let tickTimer = 0
+
+const serviceOrders = ref<ServiceOrder[]>([])
+const serviceTabs = ref<ServiceTabCount[]>([])
+const serviceTotal = ref(0)
+const servicePage = ref(1)
+const servicePageSize = ref(20)
+const serviceKeyword = ref('')
+const activeServiceTab = ref('待处理')
+const serviceTabOrder = ['待处理', '处理中', '已逾期']
 
 const groupedCards = computed(() => {
   const groups: { name: string; items: FilterCard[] }[] = []
@@ -59,11 +71,25 @@ async function loadData() {
     tickets.value = data.tickets
     total.value = data.total
     lastSyncAt.value = data.lastSyncAt || ''
+    await loadService()
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {
     loading.value = false
   }
+}
+
+async function loadService() {
+  if (!shopId.value) return
+  const data = await fetchShopServiceOrders(shopId.value, {
+    statusTab: activeServiceTab.value || undefined,
+    keyword: serviceKeyword.value || undefined,
+    page: servicePage.value,
+    pageSize: servicePageSize.value,
+  })
+  serviceOrders.value = data.list || []
+  serviceTabs.value = data.tabs || []
+  serviceTotal.value = data.total || 0
 }
 
 onMounted(() => {
@@ -79,6 +105,9 @@ watch(shopId, () => {
   activeCardKey.value = ''
   keyword.value = ''
   page.value = 1
+  activeServiceTab.value = '待处理'
+  serviceKeyword.value = ''
+  servicePage.value = 1
   loadData()
 })
 
@@ -94,6 +123,21 @@ function handleSearch() {
   loadData()
 }
 
+function tabCount(name: string) {
+  return serviceTabs.value.find((t) => t.statusTab === name)?.count || 0
+}
+
+function selectServiceTab(name: string) {
+  activeServiceTab.value = activeServiceTab.value === name ? '' : name
+  servicePage.value = 1
+  loadService()
+}
+
+function handleServiceSearch() {
+  servicePage.value = 1
+  loadService()
+}
+
 function statusType(s: string) {
   return PLUGIN_STATUS_MAP[s as keyof typeof PLUGIN_STATUS_MAP]?.type || 'info'
 }
@@ -106,7 +150,7 @@ function urgentGroup(name: string) {
   return name === '紧急'
 }
 
-function remainSecondsOf(row: AftersaleTicket) {
+function remainSecondsOf(row: AftersaleTicket | ServiceOrder) {
   void nowTick.value
   if (row.deadlineAt) {
     const t = Date.parse(row.deadlineAt)
@@ -263,6 +307,108 @@ function remainClass(sec: number) {
         />
       </div>
     </el-card>
+
+    <el-card class="filter-card">
+      <div class="filter-title">服务工单</div>
+      <div class="group-items">
+        <button
+          v-for="name in serviceTabOrder"
+          :key="name"
+          type="button"
+          class="card-item"
+          :class="{ active: activeServiceTab === name, hot: tabCount(name) > 0, danger: name === '已逾期' && tabCount(name) > 0 }"
+          @click="selectServiceTab(name)"
+        >
+          <span class="card-label">{{ name }}</span>
+          <span class="card-count">{{ tabCount(name) }}</span>
+        </button>
+      </div>
+      <div class="toolbar" style="margin-top: 12px">
+        <el-input
+          v-model="serviceKeyword"
+          clearable
+          placeholder="工单ID / 订单号 / 商品 / 买家"
+          style="width: 280px"
+          @keyup.enter="handleServiceSearch"
+        />
+        <el-button type="primary" :icon="Search" @click="handleServiceSearch">查询</el-button>
+        <span class="total">共 {{ serviceTotal }} 条</span>
+      </div>
+      <el-table :data="serviceOrders" stripe border>
+        <el-table-column label="订单 / 工单" min-width="260">
+          <template #default="{ row }">
+            <div class="product">
+              <img v-if="row.productImage" class="thumb" :src="row.productImage" alt="" />
+              <div class="product-meta">
+                <div class="title">{{ row.productTitle || '—' }}</div>
+                <div v-if="row.productContent" class="sub">{{ row.productContent }}</div>
+                <div class="sub">订单 {{ row.orderNo || '—' }}</div>
+                <div class="sub">工单 {{ row.platformServiceId }}</div>
+                <div v-if="row.tags" class="tags">{{ row.tags }}</div>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="买家 / 来源" min-width="140">
+          <template #default="{ row }">
+            <div>{{ row.buyerNick || '—' }}</div>
+            <div class="sub">{{ row.createSource || '—' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="工单类型" min-width="130">
+          <template #default="{ row }">
+            <div>{{ row.businessType || '—' }}</div>
+            <div class="sub">{{ row.orderType }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="处理进度" min-width="180">
+          <template #default="{ row }">
+            <div>{{ row.status || '—' }}</div>
+            <div
+              v-if="row.deadlineAt || row.timeoutText"
+              class="timeout"
+              :class="remainClass(remainSecondsOf(row))"
+            >
+              <template v-if="row.deadlineAt || row.remainSeconds">
+                <template v-if="remainSecondsOf(row) <= 0">
+                  已逾期<span v-if="row.timeoutAction"> · {{ row.timeoutAction }}</span>
+                </template>
+                <template v-else>
+                  剩余 {{ formatRemain(remainSecondsOf(row)) }}
+                  <span v-if="row.timeoutAction">后{{ row.timeoutAction }}</span>
+                </template>
+              </template>
+              <template v-else>{{ row.timeoutText }}</template>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="处理方案" min-width="120">
+          <template #default="{ row }">{{ row.solution || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="最近更新" min-width="160">
+          <template #default="{ row }">
+            <div>{{ row.lastLog || '—' }}</div>
+            <div class="sub">{{ row.lastLogTime || row.createTime }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="工单要求" min-width="220">
+          <template #default="{ row }">
+            <div class="detail">{{ row.detail || '—' }}</div>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="pager">
+        <el-pagination
+          v-model:current-page="servicePage"
+          v-model:page-size="servicePageSize"
+          :total="serviceTotal"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next"
+          @current-change="loadService"
+          @size-change="() => { servicePage = 1; loadService() }"
+        />
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -298,6 +444,7 @@ function remainClass(sec: number) {
 .card-count { font-weight: 700; color: #909399; min-width: 1.2em; text-align: right; }
 .card-item.hot .card-count { color: #409eff; }
 .card-item.active .card-count { color: #409eff; }
+.card-item.danger .card-count { color: #f56c6c; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .total { margin-left: auto; color: #909399; font-size: 13px; }
 .product { display: flex; gap: 10px; align-items: flex-start; }
@@ -312,4 +459,5 @@ function remainClass(sec: number) {
 .logistics { margin: 0; font: inherit; white-space: pre-line; color: #303133; }
 .tracking { color: #409eff; font-size: 12px; margin-top: 4px; word-break: break-all; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
+.detail { font-size: 12px; color: #606266; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 </style>

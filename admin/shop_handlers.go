@@ -136,3 +136,24 @@ func (h *ShopHandler) Tickets(c *gin.Context) {
 	}
 	response.OK(c, response.PageResult(list, total, page, pageSize))
 }
+
+func (h *ShopHandler) ServiceOrders(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	page, pageSize := httputil.ParsePage(c)
+	list, tabs, total, err := h.ss(c).ListServiceOrders(id, c.Query("statusTab"), c.Query("keyword"), page, pageSize)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{
+		"list":     list,
+		"tabs":     tabs,
+		"total":    total,
+		"page":     page,
+		"pageSize": pageSize,
+	})
+}

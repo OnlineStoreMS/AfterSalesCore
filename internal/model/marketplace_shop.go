@@ -88,3 +88,36 @@ type AftersaleTicketCard struct {
 }
 
 func (AftersaleTicketCard) TableName() string { return "aftersale_ticket_cards" }
+
+type ServiceOrder struct {
+	ID                uint64     `gorm:"primaryKey" json:"id"`
+	TenantID          uint64     `gorm:"index;not null" json:"tenantId"`
+	ShopID            uint64     `gorm:"uniqueIndex:uk_shop_service;index;not null" json:"shopId"`
+	PlatformServiceID string     `gorm:"size:64;uniqueIndex:uk_shop_service;not null" json:"platformServiceId"`
+	OrderNo           string     `gorm:"size:64;index" json:"orderNo"`
+	ProductTitle      string     `gorm:"size:512" json:"productTitle"`
+	ProductImage      string     `gorm:"size:2048" json:"productImage"`
+	ProductContent    string     `gorm:"size:256" json:"productContent"`
+	BuyerNick         string     `gorm:"size:128" json:"buyerNick"`
+	CreateSource      string     `gorm:"size:64" json:"createSource"`
+	BusinessType      string     `gorm:"size:64;index" json:"businessType"`
+	OrderType         string     `gorm:"size:64" json:"orderType"`
+	Tags              string     `gorm:"size:256" json:"tags"`
+	StatusTab         string     `gorm:"size:32;index" json:"statusTab"`
+	Status            string     `gorm:"size:64;index" json:"status"`
+	TimeoutText       string     `gorm:"size:256" json:"timeoutText"`
+	TimeoutAction     string     `gorm:"size:128" json:"timeoutAction"`
+	DeadlineAt        *time.Time `gorm:"index" json:"deadlineAt"`
+	DelayEndTime      int64      `json:"delayEndTime"`
+	Detail            string     `gorm:"type:text" json:"detail"`
+	Solution          string     `gorm:"size:256" json:"solution"`
+	LastLog           string     `gorm:"size:256" json:"lastLog"`
+	LastLogTime       string     `gorm:"size:64" json:"lastLogTime"`
+	CreateTime        string     `gorm:"size:64" json:"createTime"`
+	RawJSON           string     `gorm:"type:text" json:"rawJson"`
+	SyncedAt          time.Time  `json:"syncedAt"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
+}
+
+func (ServiceOrder) TableName() string { return "service_orders" }

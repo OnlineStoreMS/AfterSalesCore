@@ -33,6 +33,18 @@ func ParseTimeout(text string, from time.Time) (deadline *time.Time, action stri
 	return &t, action, int(dur.Seconds())
 }
 
+func deadlineFromUnix(sec int64, text string, from time.Time) (deadline *time.Time, action string) {
+	parsed, action, _ := ParseTimeout(text, from)
+	if sec > 1_000_000_000 && sec < 4_000_000_000 {
+		t := time.Unix(sec, 0)
+		if action == "" {
+			action = "逾期"
+		}
+		return &t, action
+	}
+	return parsed, action
+}
+
 func remainSeconds(deadline *time.Time, now time.Time) int {
 	if deadline == nil {
 		return 0

@@ -46,4 +46,5 @@ func RegisterRoutes(
 	g.POST("/shops/:id/reset-bind", shopH.ResetBind)
 	g.GET("/shops/:id/workbench", shopH.Workbench)
 	g.GET("/shops/:id/tickets", shopH.Tickets)
+	g.GET("/shops/:id/service-orders", shopH.ServiceOrders)
 }

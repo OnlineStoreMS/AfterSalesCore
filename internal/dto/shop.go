@@ -64,6 +64,37 @@ type TicketItem struct {
 	SyncedAt            string   `json:"syncedAt"`
 }
 
+type ServiceOrderItem struct {
+	ID                uint64 `json:"id"`
+	PlatformServiceID string `json:"platformServiceId"`
+	OrderNo           string `json:"orderNo"`
+	ProductTitle      string `json:"productTitle"`
+	ProductImage      string `json:"productImage,omitempty"`
+	ProductContent    string `json:"productContent,omitempty"`
+	BuyerNick         string `json:"buyerNick,omitempty"`
+	CreateSource      string `json:"createSource,omitempty"`
+	BusinessType      string `json:"businessType,omitempty"`
+	OrderType         string `json:"orderType,omitempty"`
+	Tags              string `json:"tags,omitempty"`
+	StatusTab         string `json:"statusTab"`
+	Status            string `json:"status"`
+	TimeoutText       string `json:"timeoutText,omitempty"`
+	TimeoutAction     string `json:"timeoutAction,omitempty"`
+	DeadlineAt        string `json:"deadlineAt,omitempty"`
+	RemainSeconds     int    `json:"remainSeconds"`
+	Detail            string `json:"detail,omitempty"`
+	Solution          string `json:"solution,omitempty"`
+	LastLog           string `json:"lastLog,omitempty"`
+	LastLogTime       string `json:"lastLogTime,omitempty"`
+	CreateTime        string `json:"createTime,omitempty"`
+	SyncedAt          string `json:"syncedAt"`
+}
+
+type ServiceTabCount struct {
+	StatusTab string `json:"statusTab"`
+	Count     int64  `json:"count"`
+}
+
 type ShopWorkbench struct {
 	Shop       ShopItem         `json:"shop"`
 	Cards      []FilterCardItem `json:"cards"`
@@ -131,15 +162,41 @@ type PluginSyncTicket struct {
 
 type PluginSyncInput struct {
 	PluginAuthInput
-	PlatformShopID   string             `json:"platformShopId"`
-	PlatformShopName string             `json:"platformShopName"`
-	Cards            []PluginSyncCard   `json:"cards"`
-	Tickets          []PluginSyncTicket `json:"tickets"`
+	PlatformShopID   string                   `json:"platformShopId"`
+	PlatformShopName string                   `json:"platformShopName"`
+	Cards            []PluginSyncCard         `json:"cards"`
+	Tickets          []PluginSyncTicket       `json:"tickets"`
+	ServiceOrders    []PluginSyncServiceOrder `json:"serviceOrders"`
+}
+
+type PluginSyncServiceOrder struct {
+	PlatformServiceID string `json:"platformServiceId"`
+	OrderNo           string `json:"orderNo"`
+	ProductTitle      string `json:"productTitle"`
+	ProductImage      string `json:"productImage"`
+	ProductContent    string `json:"productContent"`
+	BuyerNick         string `json:"buyerNick"`
+	CreateSource      string `json:"createSource"`
+	BusinessType      string `json:"businessType"`
+	OrderType         string `json:"orderType"`
+	Tags              string `json:"tags"`
+	StatusTab         string `json:"statusTab"`
+	Status            string `json:"status"`
+	TimeoutText       string `json:"timeoutText"`
+	DelayEndTime      int64  `json:"delayEndTime"`
+	DelayTimeLeft     int64  `json:"delayTimeLeft"`
+	Detail            string `json:"detail"`
+	Solution          string `json:"solution"`
+	LastLog           string `json:"lastLog"`
+	LastLogTime       string `json:"lastLogTime"`
+	CreateTime        string `json:"createTime"`
+	RawJSON           string `json:"rawJson"`
 }
 
 type PluginSyncResult struct {
-	ShopID      uint64 `json:"shopId"`
-	CardCount   int    `json:"cardCount"`
-	TicketCount int    `json:"ticketCount"`
-	LastSyncAt  string `json:"lastSyncAt"`
+	ShopID            uint64 `json:"shopId"`
+	CardCount         int    `json:"cardCount"`
+	TicketCount       int    `json:"ticketCount"`
+	ServiceOrderCount int    `json:"serviceOrderCount"`
+	LastSyncAt        string `json:"lastSyncAt"`
 }

@@ -73,7 +73,8 @@ document.getElementById('syncBtn').addEventListener('click', () => {
   setStatus('同步中…', 'warn')
   chrome.runtime.sendMessage({ type: 'AFTERSALE_SYNC_NOW' }, (res) => {
     if (!res?.ok) setStatus(res?.error || '同步失败', 'bad')
-    else setStatus(`已同步 ${res.ticketCount || 0} 单 / ${res.cardCount || 0} 卡片`, 'ok')
+    else if (res.serviceError) setStatus(`已同步售后 ${res.ticketCount || 0}，工单采集失败：${res.serviceError}`, 'warn')
+    else setStatus(`已同步售后 ${res.ticketCount || 0} / 工单 ${res.serviceOrderCount || 0}`, 'ok')
     refresh()
   })
 })

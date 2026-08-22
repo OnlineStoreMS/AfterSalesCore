@@ -90,6 +90,9 @@ func (r *ShopRepo) Delete(id uint64) error {
 		if err := tx.Where("shop_id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.AftersaleFilterCard{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("shop_id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.ServiceOrder{}).Error; err != nil {
+			return err
+		}
 		return tx.Where("id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.MarketplaceShop{}).Error
 	})
 }
@@ -226,6 +229,119 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 			q = q.Where("ticket_id NOT IN ?", seenIDs)
 		}
 		return q.Delete(&model.AftersaleTicketCard{}).Error
+	})
+}
+
+func (r *ShopRepo) ListServiceOrders(f TicketListFilter) ([]model.ServiceOrder, int64, error) {
+	q := r.db.Model(&model.ServiceOrder{}).
+		Scopes(scopeTenant(r.tenantID)).
+		Where("shop_id = ?", f.ShopID)
+	if f.CardKey != "" {
+		q = q.Where("status_tab = ? OR status_tab LIKE ?", f.CardKey, "%"+f.CardKey+"%")
+	} else {
+		q = q.Where("status_tab IN ?", []string{"待处理", "处理中", "已逾期"})
+	}
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where(
+			"platform_service_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR buyer_nick ILIKE ? OR status ILIKE ?",
+			like, like, like, like, like,
+		)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 || f.PageSize > 200 {
+		f.PageSize = 20
+	}
+	var list []model.ServiceOrder
+	offset := (f.Page - 1) * f.PageSize
+	err := q.Order("CASE WHEN deadline_at IS NULL THEN 1 ELSE 0 END, deadline_at ASC, id DESC").Offset(offset).Limit(f.PageSize).Find(&list).Error
+	return list, total, err
+}
+
+func (r *ShopRepo) CountServiceTabs(shopID uint64) ([]struct {
+	StatusTab string
+	Count     int64
+}, error) {
+	var rows []struct {
+		StatusTab string
+		Count     int64
+	}
+	err := r.db.Model(&model.ServiceOrder{}).
+		Select("status_tab as status_tab, count(*) as count").
+		Where("shop_id = ? AND tenant_id = ? AND status_tab IN ?", shopID, r.tenantID, []string{"待处理", "处理中", "已逾期"}).
+		Group("status_tab").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *ShopRepo) UpsertServiceOrders(shop *model.MarketplaceShop, orders []model.ServiceOrder) error {
+	now := time.Now()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		seen := make([]string, 0, len(orders))
+		for i := range orders {
+			o := &orders[i]
+			o.TenantID = shop.TenantID
+			o.ShopID = shop.ID
+			o.SyncedAt = now
+			sid := o.PlatformServiceID
+			if sid == "" {
+				continue
+			}
+			seen = append(seen, sid)
+			var existing model.ServiceOrder
+			err := tx.Where("shop_id = ? AND platform_service_id = ?", shop.ID, sid).First(&existing).Error
+			if err == gorm.ErrRecordNotFound {
+				if err := tx.Create(o).Error; err != nil {
+					return err
+				}
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			var deadline any
+			if o.DeadlineAt != nil {
+				deadline = *o.DeadlineAt
+			}
+			if err := tx.Model(&existing).Updates(map[string]any{
+				"order_no":        o.OrderNo,
+				"product_title":   o.ProductTitle,
+				"product_image":   o.ProductImage,
+				"product_content": o.ProductContent,
+				"buyer_nick":      o.BuyerNick,
+				"create_source":   o.CreateSource,
+				"business_type":   o.BusinessType,
+				"order_type":      o.OrderType,
+				"tags":            o.Tags,
+				"status_tab":      o.StatusTab,
+				"status":          o.Status,
+				"timeout_text":    o.TimeoutText,
+				"timeout_action":  o.TimeoutAction,
+				"deadline_at":     deadline,
+				"delay_end_time":  o.DelayEndTime,
+				"detail":          o.Detail,
+				"solution":        o.Solution,
+				"last_log":        o.LastLog,
+				"last_log_time":   o.LastLogTime,
+				"create_time":     o.CreateTime,
+				"raw_json":        o.RawJSON,
+				"synced_at":       now,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		q := tx.Model(&model.ServiceOrder{}).
+			Where("shop_id = ? AND status_tab IN ?", shop.ID, []string{"待处理", "处理中", "已逾期"})
+		if len(seen) > 0 {
+			q = q.Where("platform_service_id NOT IN ?", seen)
+		}
+		return q.Update("status_tab", "已离开").Error
 	})
 }
 
