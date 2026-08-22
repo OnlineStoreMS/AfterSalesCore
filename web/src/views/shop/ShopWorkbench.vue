@@ -152,37 +152,48 @@ function urgentGroup(name: string) {
       </div>
 
       <el-table :data="tickets" stripe border>
-        <el-table-column label="商品信息" min-width="240">
+        <el-table-column label="商品信息" min-width="280">
           <template #default="{ row }">
             <div class="product">
-              <div class="title">{{ row.productTitle || '—' }}</div>
-              <div v-if="row.sku" class="sub">{{ row.sku }}</div>
-              <div class="sub">件数 {{ row.qty || 0 }} · 应付 {{ row.payAmount || '—' }}</div>
+              <img v-if="row.productImage" class="thumb" :src="row.productImage" alt="" />
+              <div class="product-meta">
+                <div class="title">{{ row.productTitle || '—' }}</div>
+                <div v-if="row.sku" class="sub">{{ row.sku }}</div>
+                <div v-if="row.productTags" class="tags">{{ row.productTags }}</div>
+              </div>
             </div>
           </template>
         </el-table-column>
         <el-table-column label="订单信息" min-width="200">
           <template #default="{ row }">
-            <div>订单 {{ row.orderNo || '—' }}</div>
+            <div>应付金额 ¥{{ row.payAmount || '—' }}</div>
+            <div class="sub">购买件数 {{ row.buyQty || row.qty || 0 }} 件</div>
+            <div class="sub">订单 {{ row.orderNo || '—' }}</div>
             <div class="sub">售后 {{ row.platformAftersaleId }}</div>
-            <div v-if="row.applyTime" class="sub">申请 {{ row.applyTime }}</div>
+            <div v-if="row.tags" class="sub">{{ row.tags }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="售后信息" min-width="160">
+        <el-table-column label="售后信息" min-width="180">
           <template #default="{ row }">
             <div>{{ row.aftersaleType || '—' }}</div>
-            <div class="sub">退款 {{ row.refundAmount || '—' }}</div>
-            <div v-if="row.reason" class="sub">{{ row.reason }}</div>
+            <div class="sub">售后退款 ¥{{ row.refundAmount || '—' }}</div>
+            <div class="sub">申请件数 {{ row.qty || 0 }} 件</div>
+            <div v-if="row.reason" class="sub">申请原因 {{ row.reason }}</div>
+            <div v-if="row.applyTime" class="sub">申请时间 {{ row.applyTime }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="售后状态" min-width="140">
+        <el-table-column label="售后状态" min-width="150">
           <template #default="{ row }">
             <div>{{ row.status || '—' }}</div>
             <div v-if="row.timeoutText" class="timeout">{{ row.timeoutText }}</div>
           </template>
         </el-table-column>
         <el-table-column prop="dispute" label="纠纷仲裁" width="120" />
-        <el-table-column prop="logistics" label="物流信息" min-width="140" show-overflow-tooltip />
+        <el-table-column label="物流信息" min-width="150">
+          <template #default="{ row }">
+            <pre class="logistics">{{ row.logistics || '—' }}</pre>
+          </template>
+        </el-table-column>
       </el-table>
 
       <div class="pager">
@@ -234,8 +245,13 @@ function urgentGroup(name: string) {
 .card-item.active .card-count { color: #409eff; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .total { margin-left: auto; color: #909399; font-size: 13px; }
-.product .title { font-weight: 600; }
+.product { display: flex; gap: 10px; align-items: flex-start; }
+.thumb { width: 48px; height: 48px; border-radius: 4px; object-fit: cover; flex-shrink: 0; background: #f5f7fa; }
+.product-meta { min-width: 0; }
+.product .title { font-weight: 600; line-height: 1.4; }
+.tags { color: #69718c; font-size: 12px; margin-top: 4px; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
 .timeout { color: #e6a23c; font-size: 12px; margin-top: 2px; }
+.logistics { margin: 0; font: inherit; white-space: pre-line; color: #303133; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

@@ -35,7 +35,10 @@ export interface AftersaleTicket {
   productTitle: string
   productImage?: string
   sku: string
+  productTags?: string
+  tags?: string
   qty: number
+  buyQty: number
   payAmount: string
   refundAmount: string
   aftersaleType: string

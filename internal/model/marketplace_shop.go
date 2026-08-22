@@ -54,9 +54,12 @@ type AftersaleTicket struct {
 	PlatformAftersaleID string                `gorm:"size:64;uniqueIndex:uk_shop_aftersale;not null" json:"platformAftersaleId"`
 	OrderNo             string                `gorm:"size:64;index" json:"orderNo"`
 	ProductTitle        string                `gorm:"size:512" json:"productTitle"`
-	ProductImage        string                `gorm:"size:1024" json:"productImage"`
+	ProductImage        string                `gorm:"size:2048" json:"productImage"`
 	SKU                 string                `gorm:"size:256" json:"sku"`
+	ProductTags         string                `gorm:"size:256" json:"productTags"`
+	Tags                string                `gorm:"size:256" json:"tags"`
 	Qty                 int                   `json:"qty"`
+	BuyQty              int                   `json:"buyQty"`
 	PayAmount           string                `gorm:"size:32" json:"payAmount"`
 	RefundAmount        string                `gorm:"size:32" json:"refundAmount"`
 	AftersaleType       string                `gorm:"size:64" json:"aftersaleType"`

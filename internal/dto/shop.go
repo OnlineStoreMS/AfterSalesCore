@@ -43,7 +43,10 @@ type TicketItem struct {
 	ProductTitle        string   `json:"productTitle"`
 	ProductImage        string   `json:"productImage,omitempty"`
 	SKU                 string   `json:"sku"`
+	ProductTags         string   `json:"productTags,omitempty"`
+	Tags                string   `json:"tags,omitempty"`
 	Qty                 int      `json:"qty"`
+	BuyQty              int      `json:"buyQty"`
 	PayAmount           string   `json:"payAmount"`
 	RefundAmount        string   `json:"refundAmount"`
 	AftersaleType       string   `json:"aftersaleType"`
@@ -104,7 +107,10 @@ type PluginSyncTicket struct {
 	ProductTitle        string   `json:"productTitle"`
 	ProductImage        string   `json:"productImage"`
 	SKU                 string   `json:"sku"`
+	ProductTags         string   `json:"productTags"`
+	Tags                string   `json:"tags"`
 	Qty                 int      `json:"qty"`
+	BuyQty              int      `json:"buyQty"`
 	PayAmount           string   `json:"payAmount"`
 	RefundAmount        string   `json:"refundAmount"`
 	AftersaleType       string   `json:"aftersaleType"`
