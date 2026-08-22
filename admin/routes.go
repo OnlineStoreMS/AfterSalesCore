@@ -9,7 +9,6 @@ func RegisterRoutes(
 	edgeDeviceH *EdgeDeviceHandler,
 	shopH *ShopHandler,
 	notifyH *NotificationHandler,
-	debugH *PluginDebugHandler,
 ) {
 	// legacy browser unboxing (kept for backward compatibility)
 	g.GET("/unboxing-records", unboxingH.List)
@@ -56,7 +55,4 @@ func RegisterRoutes(
 	g.POST("/notifications/test-barcode", notifyH.TestBarcode)
 	g.POST("/notifications/run", notifyH.Run)
 	g.POST("/notifications/reset-state", notifyH.ResetState)
-
-	g.GET("/plugin-debug-logs", debugH.List)
-	g.GET("/plugin-debug-logs/:name", debugH.Get)
 }

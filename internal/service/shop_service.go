@@ -443,7 +443,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 				BusinessType:      strings.TrimSpace(o.BusinessType),
 				OrderType:         strings.TrimSpace(o.OrderType),
 				Tags:              strings.TrimSpace(o.Tags),
-				StatusTab:         strings.TrimSpace(o.StatusTab),
+				StatusTab:         "待处理",
 				Status:            strings.TrimSpace(o.Status),
 				TimeoutText:       strings.TrimSpace(o.TimeoutText),
 				TimeoutAction:     action,

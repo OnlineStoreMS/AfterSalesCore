@@ -10,15 +10,11 @@ import (
 const (
 	ScenarioUrgent         = "urgent"
 	ScenarioServicePending = "service:待处理"
-	ScenarioServiceDoing   = "service:处理中"
-	ScenarioServiceOverdue = "service:已逾期"
 )
 
 var fixedScenarioOptions = []dto.ScenarioOption{
 	{Key: ScenarioUrgent, Label: "时效紧迫", Group: "时效"},
 	{Key: ScenarioServicePending, Label: "待处理", Group: "服务工单"},
-	{Key: ScenarioServiceDoing, Label: "处理中", Group: "服务工单"},
-	{Key: ScenarioServiceOverdue, Label: "已逾期", Group: "服务工单"},
 }
 
 func IsAggregateCard(label string) bool {

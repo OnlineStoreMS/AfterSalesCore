@@ -1,4 +1,4 @@
-/** 抖店服务工单采集：待处理 / 处理中 / 已逾期 */
+/** 抖店服务工单采集：近30天 · 待处理 / 处理中 */
 
 let pageDoc = document
 
@@ -69,13 +69,13 @@ function $(selector, root = pageDoc) {
   return (root || document).querySelector(selector)
 }
 
-const STATUS_TAB_RE =
-  /^(全部|待处理|处理中|已完结|已逾期)(?:工单)?\s*[（(]?\s*(\d+)\s*[)）]?/
+const STATUS_TAB_RE = /^(全部|待处理|处理中|已完结|已逾期)\s*[（(]?\s*(\d+)\s*[)）]?/
 const STATUS_LABEL_RE = /^(全部|待处理|处理中|已完结|已逾期)$/
 
 function parseTabEl(el) {
   const t = textOf(el)
   if (!t || t.length > 28) return null
+  if (/工单/.test(t)) return null
   let m = t.match(STATUS_TAB_RE)
   if (!m) {
     m = t.match(STATUS_LABEL_RE)
@@ -150,19 +150,38 @@ function findNextPage() {
   return btn
 }
 
-async function ensureAllTypeTab() {
-  for (const doc of [pageDoc, ...sameOriginDocs()]) {
-    const nodes = $all('.auxo-tabs-tab, [role="tab"]', doc)
-    for (const el of nodes) {
-      const t = textOf(el)
-      if (t !== '全部工单' && !/^全部工单/.test(t)) continue
-      if (!/active/.test(String(el.className || '')) && el.getAttribute('aria-selected') !== 'true') {
-        el.click()
-        await sleep(600)
-      }
-      return
-    }
+function isSelectedChip(el, siblings) {
+  if (/active/.test(String(el.className || '')) || el.getAttribute('aria-selected') === 'true') {
+    return true
   }
+  const n = String(el.className || '').split(/\s+/).filter(Boolean).length
+  const lens = siblings.map((s) => String(s.className || '').split(/\s+/).filter(Boolean).length)
+  const min = Math.min(...lens)
+  return n > min
+}
+
+async function ensureRecentDateRange() {
+  for (const doc of sameOriginDocs()) {
+    const chips = Array.from(doc.querySelectorAll('div, span, button')).filter(
+      (el) => /^(今天|近7天|近30天|近90天)$/.test(textOf(el)) && el.children.length <= 2,
+    )
+    const target = chips.find((el) => textOf(el) === '近30天')
+    if (!target) continue
+    if (isSelectedChip(target, chips)) return true
+    target.click()
+    await sleep(800)
+    return true
+  }
+  return false
+}
+
+async function waitStatusTabs(tries = 25) {
+  return waitUntil(() => {
+    const found = locateServicePage()
+    return found.some((t) => t.key === '待处理' || t.key === '处理中')
+      ? found
+      : null
+  }, tries, 200)
 }
 
 async function ensureFirstPage() {
@@ -332,41 +351,69 @@ async function collectTabOrders(tab) {
   return all
 }
 
+function startCollectJob() {
+  const prev = window.__osmsServiceJob
+  if (prev?.running && Date.now() - (prev.startedAt || 0) < 20000) {
+    return { started: true, already: true }
+  }
+  window.__osmsServiceJob = { running: true, startedAt: Date.now() }
+  collectAll()
+    .then((data) => {
+      window.__osmsServiceJob = { running: false, ok: true, data }
+    })
+    .catch((e) => {
+      window.__osmsServiceJob = {
+        running: false,
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      }
+    })
+  return { started: true }
+}
+
 async function collectAll() {
-  const tabs = await waitUntil(() => {
-    const found = locateServicePage()
-    return found.some((t) => t.key === '待处理' || t.key === '处理中' || t.key === '已逾期') ? found : null
-  }, 80, 400)
+  let tabs = await waitStatusTabs(25)
   if (!tabs?.length) {
     throw new Error('未找到服务工单状态页签，请确认已打开服务工单')
   }
-  await ensureAllTypeTab()
-  const latest = locateServicePage()
-  const useTabs = latest.length ? latest : tabs
-  await clearListViaZeroTab(useTabs)
-  const targets = useTabs.filter((t) => t.key !== '全部' && t.key !== '已完结' && t.count > 0)
+  await ensureRecentDateRange()
+  tabs = await waitStatusTabs(25)
+  if (!tabs?.length) {
+    throw new Error('切换近30天后未找到待处理页签')
+  }
+  const targets = tabs.filter((t) => t.key === '待处理' && t.count > 0)
   const orderMap = new Map()
   for (const tab of targets) {
-    const rows = await collectTabOrders(tab)
+    const fresh = locateServicePage().find((t) => t.key === tab.key) || tab
+    const rows = await collectTabOrders(fresh)
     for (const r of rows) {
       orderMap.set(r.platformServiceId, r)
     }
   }
   for (const tab of targets) {
     const got = Array.from(orderMap.values()).filter((o) => o.statusTab === tab.key).length
-    if (got === 0 || (tab.key === '待处理' && got < tab.count)) {
+    if (got === 0) {
       throw new Error(`${tab.key}应有${tab.count}条，实际采集${got}条`)
     }
   }
-  return {
-    ok: true,
-    tabs: useTabs.map(({ el, ...rest }) => rest),
-    orders: Array.from(orderMap.values()),
-  }
+  return JSON.parse(
+    JSON.stringify({
+      ok: true,
+      tabs: tabs.map(({ el, ...rest }) => rest),
+      orders: Array.from(orderMap.values()),
+    }),
+  )
 }
+
+window.__osmsCollectService = collectAll
+window.__osmsStartServiceCollect = startCollectJob
+window.__osmsServiceReady = servicePageReady
 
 if (!window.__osmsServiceOrderInjected) {
   window.__osmsServiceOrderInjected = true
+  window.addEventListener('osms-start-service-collect', () => {
+    startCollectJob()
+  })
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'AFTERSALE_PING_SERVICE') {
       sendResponse({ ok: true, ready: servicePageReady() })

@@ -200,6 +200,8 @@ async function clickMenu(key, force) {
   throw new Error(`已点击「${target.name}」，但页面未切换，请确认已登录抖店后台`)
 }
 
+window.__osmsClickMenu = clickMenu
+
 if (!window.__osmsDoudianMenu) {
   window.__osmsDoudianMenu = true
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

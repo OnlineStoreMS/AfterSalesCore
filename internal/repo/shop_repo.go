@@ -10,6 +10,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+var activeServiceTabs = []string{"待处理"}
+
 type ShopRepo struct {
 	db       *gorm.DB
 	tenantID uint64
@@ -239,7 +241,7 @@ func (r *ShopRepo) ListServiceOrders(f TicketListFilter) ([]model.ServiceOrder, 
 	if f.CardKey != "" {
 		q = q.Where("status_tab = ? OR status_tab LIKE ?", f.CardKey, "%"+f.CardKey+"%")
 	} else {
-		q = q.Where("status_tab IN ?", []string{"待处理", "处理中", "已逾期"})
+		q = q.Where("status_tab IN ?", activeServiceTabs)
 	}
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
 		like := "%" + kw + "%"
@@ -274,7 +276,7 @@ func (r *ShopRepo) CountServiceTabs(shopID uint64) ([]struct {
 	}
 	err := r.db.Model(&model.ServiceOrder{}).
 		Select("status_tab as status_tab, count(*) as count").
-		Where("shop_id = ? AND tenant_id = ? AND status_tab IN ?", shopID, r.tenantID, []string{"待处理", "处理中", "已逾期"}).
+		Where("shop_id = ? AND tenant_id = ? AND status_tab IN ?", shopID, r.tenantID, activeServiceTabs).
 		Group("status_tab").
 		Find(&rows).Error
 	return rows, err
@@ -337,7 +339,7 @@ func (r *ShopRepo) UpsertServiceOrders(shop *model.MarketplaceShop, orders []mod
 			}
 		}
 		q := tx.Model(&model.ServiceOrder{}).
-			Where("shop_id = ? AND status_tab IN ?", shop.ID, []string{"待处理", "处理中", "已逾期"})
+			Where("shop_id = ? AND status_tab IN ?", shop.ID, []string{"待处理", "处理中", "已逾期"}) // leftover tabs also leave
 		if len(seen) > 0 {
 			q = q.Where("platform_service_id NOT IN ?", seen)
 		}
@@ -394,7 +396,7 @@ func (r *ShopRepo) ListServiceOrdersByTab(shopID uint64, tab string) ([]model.Se
 	if tab != "" {
 		q = q.Where("status_tab = ?", tab)
 	} else {
-		q = q.Where("status_tab IN ?", []string{"待处理", "处理中", "已逾期"})
+		q = q.Where("status_tab IN ?", activeServiceTabs)
 	}
 	err := q.Limit(200).Find(&list).Error
 	return list, err
@@ -403,7 +405,7 @@ func (r *ShopRepo) ListServiceOrdersByTab(shopID uint64, tab string) ([]model.Se
 func (r *ShopRepo) ListServiceOrdersWithDeadline(shopID uint64) ([]model.ServiceOrder, error) {
 	var list []model.ServiceOrder
 	err := r.db.Scopes(scopeTenant(r.tenantID)).
-		Where("shop_id = ? AND deadline_at IS NOT NULL AND status_tab IN ?", shopID, []string{"待处理", "处理中", "已逾期"}).
+		Where("shop_id = ? AND deadline_at IS NOT NULL AND status_tab IN ?", shopID, activeServiceTabs).
 		Limit(200).Find(&list).Error
 	return list, err
 }

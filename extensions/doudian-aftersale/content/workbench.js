@@ -483,6 +483,9 @@ async function collectAll() {
   }
 }
 
+window.__osmsCollectWorkbench = collectAll
+window.__osmsWorkbenchReady = () => parseCards().length > 0
+
 if (!window.__osmsWorkbenchInjected) {
   window.__osmsWorkbenchInjected = true
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

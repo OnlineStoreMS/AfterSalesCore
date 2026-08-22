@@ -22,6 +22,200 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+function topFrame(tabId) {
+  return { tabId, frameIds: [0] }
+}
+
+async function injectFiles(tabId, files) {
+  try {
+    await chrome.scripting.executeScript({
+      target: topFrame(tabId),
+      files,
+    })
+  } catch {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files,
+    })
+  }
+}
+
+async function sendTop(tabId, msg) {
+  return chrome.tabs.sendMessage(tabId, msg, { frameId: 0 })
+}
+
+function inspectServiceTabsFn() {
+  const textOf = (el) => String(el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim()
+  const texts = []
+  const walk = (doc) => {
+    if (!doc) return
+    for (const el of doc.querySelectorAll('.auxo-tabs-tab, [role="tab"]')) {
+      const t = textOf(el)
+      if (t) texts.push(t)
+    }
+    for (const iframe of doc.querySelectorAll('iframe')) {
+      try {
+        walk(iframe.contentDocument)
+      } catch {
+        /* cross-origin */
+      }
+    }
+  }
+  walk(document)
+  const ready =
+    (texts.some((t) => /待处理/.test(t)) &&
+      texts.some((t) => /处理中|已逾期|已完结/.test(t))) ||
+    (/task-order\/service/.test(String(location.href || '')) &&
+      texts.some((t) => /全部工单|待处理|已逾期/.test(t)))
+  return { ready, href: String(location.href || ''), tabs: texts.slice(0, 40) }
+}
+
+async function pageHasServiceTabs(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: inspectServiceTabsFn,
+    })
+    return (results || []).map((r) => r.result).find((r) => r?.ready) || { ready: false }
+  } catch {
+    return { ready: false }
+  }
+}
+
+async function collectPendingInPage() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const textOf = (el) => String(el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim()
+  const chips = () =>
+    [...document.querySelectorAll('div, span, button')].filter(
+      (el) => /^(今天|近7天|近30天|近90天)$/.test(textOf(el)) && el.children.length <= 2,
+    )
+  const selectedChip = () => {
+    const cs = chips()
+    if (!cs.length) return ''
+    const min = Math.min(...cs.map((c) => String(c.className || '').split(/\s+/).filter(Boolean).length))
+    const sel = cs.find((c) => String(c.className || '').split(/\s+/).filter(Boolean).length > min)
+    return sel ? textOf(sel) : ''
+  }
+  const statusTabs = () => {
+    const out = []
+    const keys = new Set()
+    for (const el of document.querySelectorAll('.auxo-tabs-tab, [role="tab"]')) {
+      const t = textOf(el)
+      if (!t || /工单/.test(t)) continue
+      const m = t.match(/^(全部|待处理|处理中|已完结|已逾期)\s*[（(]?\s*(\d+)/)
+      if (!m || keys.has(m[1])) continue
+      keys.add(m[1])
+      out.push({
+        key: m[1],
+        count: Number(m[2]),
+        active: /active/.test(String(el.className || '')) || el.getAttribute('aria-selected') === 'true',
+        el,
+      })
+    }
+    return out
+  }
+  const parseRows = () => {
+    const table = document.querySelector('table')
+    if (!table) return []
+    const rows = []
+    for (const tr of table.querySelectorAll('tbody tr')) {
+      const cells = [...tr.children].map((td) => String(td.innerText || '').trim())
+      if (cells.length < 5) continue
+      const id = (String(cells[2] || '').match(/工单ID[:：]?\s*(\d+)/) || [])[1] || ''
+      if (!id) continue
+      const orderText = cells[0] || ''
+      const progressLines = String(cells[4] || '').split('\n').map((s) => s.trim()).filter(Boolean)
+      const lastLines = String(cells[6] || '').split('\n').map((s) => s.trim()).filter(Boolean)
+      rows.push({
+        platformServiceId: id,
+        orderNo: (orderText.match(/(\d{15,})/) || [])[1] || '',
+        productTitle:
+          orderText.split('\n').filter((l) => l && !/^\d{15,}$/.test(l) && l !== (orderText.match(/(\d{15,})/) || [])[1])[1] ||
+          '',
+        productImage: '',
+        productContent: (orderText.match(/总价.*/) || [])[0] || '',
+        buyerNick: cells[1] || '',
+        createSource: String(cells[2] || '').split('\n')[0] || '',
+        businessType: String(cells[3] || '').split('\n')[0] || '',
+        orderType: String(cells[3] || '').split('\n')[1] || '',
+        tags: orderText.split('\n').filter((l) => /进线|催|紧急|重复/.test(l)).join('、'),
+        status: progressLines[0] || '',
+        timeoutText: progressLines.slice(1).join(' '),
+        delayEndTime: 0,
+        delayTimeLeft: 0,
+        detail: '',
+        solution: cells[5] && cells[5] !== '_' ? cells[5] : '',
+        lastLog: lastLines[0] || '',
+        lastLogTime: lastLines[1] || '',
+        createTime: lastLines[1] || '',
+      })
+    }
+    return rows
+  }
+  if (!statusTabs().some((t) => t.key === '待处理')) {
+    return { ok: false, missing: true }
+  }
+  if (selectedChip() && selectedChip() !== '近30天') {
+    const el = chips().find((n) => textOf(n) === '近30天')
+    if (el) {
+      el.click()
+      for (let i = 0; i < 20; i++) {
+        await sleep(150)
+        if (selectedChip() === '近30天') break
+      }
+      await sleep(400)
+    }
+  }
+  const collectKey = async (key) => {
+    const tab = statusTabs().find((t) => t.key === key)
+    if (!tab || !tab.count) return []
+    if (!tab.active) {
+      tab.el.click()
+      for (let i = 0; i < 20; i++) {
+        await sleep(150)
+        if (statusTabs().find((x) => x.key === key)?.active) break
+      }
+      await sleep(400)
+    }
+    return parseRows().map((r) => ({ ...r, statusTab: key }))
+  }
+  const pending = await collectKey('待处理')
+  return JSON.parse(
+    JSON.stringify({
+      ok: true,
+      tabs: statusTabs().map(({ el, ...rest }) => rest),
+      orders: pending,
+    }),
+  )
+}
+
+async function runInAllFrames(tabId, func) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func,
+  })
+  const values = (results || []).map((r) => r.result).filter(Boolean)
+  return values.find((r) => r.ok) || values.find((r) => r.error) || values[0] || null
+}
+
+async function callPage(tabId, fnName, fnArgs = []) {
+  const [inj] = await chrome.scripting.executeScript({
+    target: topFrame(tabId),
+    func: async (name, args) => {
+      const fn = window[name]
+      if (typeof fn !== 'function') return { ok: false, missing: name }
+      try {
+        const data = await fn(...args)
+        return JSON.parse(JSON.stringify(data == null ? { ok: true } : data))
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    },
+    args: [fnName, fnArgs],
+  })
+  return inj?.result
+}
+
 function isFxgUsable(tab) {
   return !!(
     tab?.id &&
@@ -331,9 +525,19 @@ async function collectFromTab(tabId) {
   await installLogisticsExtractor(tabId)
   for (let i = 0; i < 20; i++) {
     try {
-      const ping = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_PING_WORKBENCH' })
-      if (!ping?.ready) throw new Error('工作台卡片未就绪')
-      const res = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_COLLECT' })
+      const ping = await callPage(tabId, '__osmsWorkbenchReady')
+      let ready = ping === true
+      if (ping?.missing) {
+        const msgPing = await sendTop(tabId, { type: 'AFTERSALE_PING_WORKBENCH' })
+        ready = !!msgPing?.ready
+      }
+      if (!ready) throw new Error(ping?.error || '工作台卡片未就绪')
+      const res = await callPage(tabId, '__osmsCollectWorkbench')
+      if (res?.missing) {
+        const viaMsg = await sendTop(tabId, { type: 'AFTERSALE_COLLECT' })
+        if (viaMsg?.ok) return viaMsg
+        throw new Error(viaMsg?.error || '采集失败')
+      }
       if (res?.ok) return res
       throw new Error(res?.error || '采集失败')
     } catch (e) {
@@ -352,24 +556,23 @@ async function collectFromTab(tabId) {
 }
 
 async function injectMenu(tabId) {
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    files: ['content/menu.js'],
-  })
+  await injectFiles(tabId, ['content/menu.js'])
 }
 
 async function injectWorkbench(tabId) {
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    files: ['content/workbench.js'],
-  })
+  await injectFiles(tabId, ['content/workbench.js'])
 }
 
 async function clickDoudianMenu(tabId, target, force = false) {
   for (let i = 0; i < 10; i++) {
     try {
       await injectMenu(tabId)
-      const res = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_CLICK_MENU', target, force })
+      const viaFn = await callPage(tabId, '__osmsClickMenu', [target, force])
+      if (viaFn && !viaFn.missing) {
+        if (viaFn.ok) return viaFn
+        throw new Error(viaFn.error || '未找到左侧菜单')
+      }
+      const res = await sendTop(tabId, { type: 'AFTERSALE_CLICK_MENU', target, force })
       if (res?.ok) return res
       throw new Error(res?.error || '未找到左侧菜单')
     } catch (e) {
@@ -384,8 +587,13 @@ async function clickDoudianMenu(tabId, target, force = false) {
 async function pingWorkbenchReady(tabId) {
   try {
     await injectWorkbench(tabId)
-    const ping = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_PING_WORKBENCH' })
-    return !!ping?.ready
+    const ping = await callPage(tabId, '__osmsWorkbenchReady')
+    if (ping === true) return true
+    if (ping?.missing) {
+      const msgPing = await sendTop(tabId, { type: 'AFTERSALE_PING_WORKBENCH' })
+      return !!msgPing?.ready
+    }
+    return false
   } catch {
     return false
   }
@@ -437,71 +645,51 @@ async function openWorkbenchTab() {
   }
 }
 
-async function injectServiceContent(tabId) {
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content/service-order.js'],
-    })
-  } catch (e) {
-    console.warn('inject service-order.js failed', e)
-  }
-  await installServiceExtractor(tabId)
-}
-
-async function waitServiceReady(tabId, tries = 75) {
+async function waitServiceReady(tabId, tries = 40) {
   for (let i = 0; i < tries; i++) {
     try {
-      await injectServiceContent(tabId)
-      const ping = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_PING_SERVICE' })
-      if (ping?.ready) return true
+      if ((await pageHasServiceTabs(tabId)).ready) return true
     } catch {
-      /* SPA 切换后脚本可能尚未注入 */
+      /* 切页过程中探测可能失败 */
     }
     await sleep(400)
   }
   return false
 }
 
-async function collectServiceOrders(tabId) {
+async function collectServiceOrders(tabId, { skipReturn } = {}) {
   try {
-    try {
-      await clickDoudianMenu(tabId, 'service', true)
-    } catch (e) {
-      console.warn('click service menu failed', e)
+    const already = await pageHasServiceTabs(tabId)
+    if (!already.ready) {
+      try {
+        await clickDoudianMenu(tabId, 'service')
+      } catch (e) {
+        console.warn('click service menu failed', e)
+      }
     }
-    let ready = await waitServiceReady(tabId, 50)
+    let ready = await waitServiceReady(tabId, 40)
     if (!ready) {
       const tab = await chrome.tabs.get(tabId)
       if (!String(tab.url || '').includes('/ffa/task-order/service')) {
         await chrome.tabs.update(tabId, { url: SERVICE_ORDER_URL })
         await sleep(2500)
       }
-      ready = await waitServiceReady(tabId, 60)
+      ready = await waitServiceReady(tabId, 40)
     }
     if (!ready) {
-      throw new Error('服务工单页面未就绪，请确认可点击左侧菜单「售后 → 服务工单」')
+      throw new Error('服务工单页面未就绪，请打开左侧「售后 → 服务工单」')
     }
-    await injectServiceContent(tabId)
-    for (let i = 0; i < 8; i++) {
-      try {
-        const res = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_COLLECT_SERVICE' })
-        if (res?.ok) return res
-        throw new Error(res?.error || '服务工单采集失败')
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        if (i === 7) throw new Error(msg)
-        await injectServiceContent(tabId)
-        await sleep(500)
-      }
-    }
-    throw new Error('服务工单采集失败')
+    const res = await runInAllFrames(tabId, collectPendingInPage)
+    if (res?.ok) return res
+    throw new Error(res?.error || '未读到待处理列表')
   } finally {
-    try {
-      await clickDoudianMenu(tabId, 'workbench', true)
-      await waitWorkbenchReady(tabId)
-    } catch (e) {
-      console.warn('return to workbench failed', e)
+    if (!skipReturn) {
+      try {
+        await clickDoudianMenu(tabId, 'workbench')
+        await waitWorkbenchReady(tabId)
+      } catch (e) {
+        console.warn('return to workbench failed', e)
+      }
     }
   }
 }
@@ -519,15 +707,27 @@ async function syncNow() {
     chrome.runtime.getPlatformInfo(() => {})
   }, 15000)
   try {
-    await prepareWorkbench(tab.id)
-    const collected = await collectFromTab(tab.id)
     let serviceOrders = []
     let serviceError = ''
-    try {
-      const service = await collectServiceOrders(tab.id)
-      serviceOrders = service.orders || []
-    } catch (e) {
-      serviceError = e instanceof Error ? e.message : String(e)
+    const alreadyService = await pageHasServiceTabs(tab.id)
+    if (alreadyService.ready) {
+      try {
+        const service = await collectServiceOrders(tab.id, { skipReturn: true })
+        serviceOrders = service.orders || []
+      } catch (e) {
+        serviceError = e instanceof Error ? e.message : String(e)
+      }
+    }
+    await prepareWorkbench(tab.id)
+    const collected = await collectFromTab(tab.id)
+    if (!alreadyService.ready || serviceError) {
+      try {
+        const service = await collectServiceOrders(tab.id)
+        serviceOrders = service.orders || []
+        serviceError = ''
+      } catch (e) {
+        serviceError = e instanceof Error ? e.message : String(e)
+      }
     }
     const payload = {
       platformShopId: collected.platformShopId || '',

@@ -9,7 +9,6 @@ import (
 	"aftersalescore/internal/model"
 	"aftersalescore/internal/pkg/httputil"
 	"aftersalescore/internal/pkg/response"
-	"aftersalescore/internal/plugindebug"
 	"aftersalescore/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -20,11 +19,10 @@ const contextShop = "plugin_shop"
 type Handler struct {
 	svc    *service.ShopService
 	notify *service.NotificationService
-	debug  *plugindebug.Store
 }
 
-func NewHandler(svc *service.ShopService, notify *service.NotificationService, debug *plugindebug.Store) *Handler {
-	return &Handler{svc: svc, notify: notify, debug: debug}
+func NewHandler(svc *service.ShopService, notify *service.NotificationService) *Handler {
+	return &Handler{svc: svc, notify: notify}
 }
 
 func (h *Handler) Bind(c *gin.Context) {

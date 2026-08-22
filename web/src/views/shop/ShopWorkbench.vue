@@ -11,7 +11,6 @@ import {
   type MarketplaceShop,
   type AftersaleTicket,
   type ServiceOrder,
-  type ServiceTabCount,
 } from '../../api/shop'
 
 const route = useRoute()
@@ -32,13 +31,11 @@ const nowTick = ref(Date.now())
 let tickTimer = 0
 
 const serviceOrders = ref<ServiceOrder[]>([])
-const serviceTabs = ref<ServiceTabCount[]>([])
 const serviceTotal = ref(0)
 const servicePage = ref(1)
 const servicePageSize = ref(20)
 const serviceKeyword = ref('')
 const activeServiceTab = ref('待处理')
-const serviceTabOrder = ['待处理', '处理中', '已逾期']
 
 const groupedCards = computed(() => {
   const groups: { name: string; items: FilterCard[] }[] = []
@@ -88,7 +85,6 @@ async function loadService() {
     pageSize: servicePageSize.value,
   })
   serviceOrders.value = data.list || []
-  serviceTabs.value = data.tabs || []
   serviceTotal.value = data.total || 0
 }
 
@@ -121,16 +117,6 @@ function selectCard(card?: FilterCard) {
 function handleSearch() {
   page.value = 1
   loadData()
-}
-
-function tabCount(name: string) {
-  return serviceTabs.value.find((t) => t.statusTab === name)?.count || 0
-}
-
-function selectServiceTab(name: string) {
-  activeServiceTab.value = activeServiceTab.value === name ? '' : name
-  servicePage.value = 1
-  loadService()
 }
 
 function handleServiceSearch() {
@@ -198,7 +184,7 @@ function remainClass(sec: number) {
     </div>
 
     <el-card class="filter-card">
-      <div class="filter-title">快捷筛选</div>
+      <div class="filter-title">售后工作台</div>
       <el-empty v-if="!groupedCards.length" description="暂无卡片数据，请在抖店工作台打开插件并同步" :image-size="72" />
       <div v-else class="groups">
         <div v-for="group in groupedCards" :key="group.name" class="group">
@@ -309,20 +295,7 @@ function remainClass(sec: number) {
     </el-card>
 
     <el-card class="filter-card">
-      <div class="filter-title">服务工单</div>
-      <div class="group-items">
-        <button
-          v-for="name in serviceTabOrder"
-          :key="name"
-          type="button"
-          class="card-item"
-          :class="{ active: activeServiceTab === name, hot: tabCount(name) > 0, danger: name === '已逾期' && tabCount(name) > 0 }"
-          @click="selectServiceTab(name)"
-        >
-          <span class="card-label">{{ name }}</span>
-          <span class="card-count">{{ tabCount(name) }}</span>
-        </button>
-      </div>
+      <div class="filter-title">服务工单（待处理）</div>
       <div class="toolbar" style="margin-top: 12px">
         <el-input
           v-model="serviceKeyword"

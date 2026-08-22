@@ -254,7 +254,7 @@ onMounted(load)
                 </el-checkbox>
               </el-checkbox-group>
             </div>
-            <div class="field-tip muted">工作台卡片来自插件采集的快捷筛选。「全部待收货/发货」是退货待收货与换货待收货/发货的合集，已去掉避免重复。</div>
+            <div class="field-tip muted">工作台卡片来自插件采集的售后工作台。「全部待收货/发货」是退货待收货与换货待收货/发货的合集，已去掉避免重复。</div>
           </div>
         </el-form-item>
       </el-form>
