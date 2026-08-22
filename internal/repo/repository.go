@@ -3,18 +3,20 @@ package repo
 import "gorm.io/gorm"
 
 type Repos struct {
-	Unboxing   *UnboxingRepo
-	EdgeRecord *EdgeRecordRepo
-	EdgeDevice *EdgeDeviceRepo
-	Shop       *ShopRepo
+	Unboxing     *UnboxingRepo
+	EdgeRecord   *EdgeRecordRepo
+	EdgeDevice   *EdgeDeviceRepo
+	Shop         *ShopRepo
+	Notification *NotificationRepo
 }
 
 func New(db *gorm.DB) *Repos {
 	return &Repos{
-		Unboxing:   NewUnboxingRepo(db),
-		EdgeRecord: NewEdgeRecordRepo(db),
-		EdgeDevice: NewEdgeDeviceRepo(db),
-		Shop:       NewShopRepo(db),
+		Unboxing:     NewUnboxingRepo(db),
+		EdgeRecord:   NewEdgeRecordRepo(db),
+		EdgeDevice:   NewEdgeDeviceRepo(db),
+		Shop:         NewShopRepo(db),
+		Notification: NewNotificationRepo(db),
 	}
 }
 

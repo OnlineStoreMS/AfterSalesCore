@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -16,11 +17,12 @@ import (
 const contextShop = "plugin_shop"
 
 type Handler struct {
-	svc *service.ShopService
+	svc    *service.ShopService
+	notify *service.NotificationService
 }
 
-func NewHandler(svc *service.ShopService) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *service.ShopService, notify *service.NotificationService) *Handler {
+	return &Handler{svc: svc, notify: notify}
 }
 
 func (h *Handler) Bind(c *gin.Context) {
@@ -82,6 +84,9 @@ func (h *Handler) Sync(c *gin.Context) {
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
+	}
+	if h.notify != nil {
+		go h.notify.NotifyShop(context.Background(), shop.TenantID, shop.ID)
 	}
 	response.OK(c, item)
 }

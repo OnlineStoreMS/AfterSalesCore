@@ -9,6 +9,7 @@ import (
 	"aftersalescore/internal/config"
 	jwtmgr "aftersalescore/internal/pkg/jwt"
 	"aftersalescore/internal/repo"
+	"aftersalescore/internal/scheduler"
 	"aftersalescore/internal/service"
 	"aftersalescore/internal/storage"
 	"aftersalescore/plugin"
@@ -48,13 +49,16 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	_ = edgeDeviceSvc.SyncFromRecords()
 
 	shopSvc := service.NewShopService(repos)
+	notifySvc := service.NewNotificationService(repos)
 	unboxingH := admin.NewUnboxingHandler(unboxingSvc)
 	edgeRecordH := admin.NewEdgeRecordHandler(edgeRecordSvc)
 	edgeDeviceH := admin.NewEdgeDeviceHandler(edgeDeviceSvc)
 	shopH := admin.NewShopHandler(shopSvc)
-	pluginH := plugin.NewHandler(shopSvc)
+	notifyH := admin.NewNotificationHandler(notifySvc)
+	pluginH := plugin.NewHandler(shopSvc, notifySvc)
 
 	go edgeDeviceSvc.StartHealthPoller(context.Background())
+	scheduler.NewNotificationScheduler(notifySvc).Start()
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "service": "aftersalescore"})
@@ -64,7 +68,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	adminGroup := v1.Group("/admin")
 	jwtMgr := jwtmgr.NewManager(cfg.Auth.JWTSecret)
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(adminGroup, unboxingH, edgeRecordH, edgeDeviceH, shopH)
+	admin.RegisterRoutes(adminGroup, unboxingH, edgeRecordH, edgeDeviceH, shopH, notifyH)
 
 	pluginGroup := v1.Group("/plugin")
 	pluginGroup.POST("/bind", pluginH.Bind)

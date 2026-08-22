@@ -74,6 +74,12 @@ const router = createRouter({
           meta: { title: '店铺售后工作台' },
         },
         {
+          path: 'notifications',
+          name: 'Notifications',
+          component: () => import('../views/notification/NotificationSettings.vue'),
+          meta: { title: '通知管理' },
+        },
+        {
           path: 'edge-devices',
           name: 'EdgeDevices',
           component: () => import('../views/edge/EdgeDeviceList.vue'),

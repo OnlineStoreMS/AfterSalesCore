@@ -361,3 +361,55 @@ func uniqueStrings(in []string) []string {
 	}
 	return out
 }
+
+func (r *ShopRepo) ListCardsForTenant() ([]model.AftersaleFilterCard, error) {
+	var list []model.AftersaleFilterCard
+	err := r.db.Scopes(scopeTenant(r.tenantID)).Order("sort_order ASC, id ASC").Find(&list).Error
+	return list, err
+}
+
+func (r *ShopRepo) ListTicketsByCard(shopID uint64, cardKey string) ([]model.AftersaleTicket, error) {
+	var list []model.AftersaleTicket
+	q := r.db.Scopes(scopeTenant(r.tenantID)).Where("shop_id = ?", shopID)
+	if cardKey != "" {
+		q = q.Where("id IN (?)",
+			r.db.Model(&model.AftersaleTicketCard{}).Select("ticket_id").Where("card_key = ?", cardKey),
+		)
+	}
+	err := q.Limit(200).Find(&list).Error
+	return list, err
+}
+
+func (r *ShopRepo) ListTicketsWithDeadline(shopID uint64) ([]model.AftersaleTicket, error) {
+	var list []model.AftersaleTicket
+	err := r.db.Scopes(scopeTenant(r.tenantID)).
+		Where("shop_id = ? AND deadline_at IS NOT NULL", shopID).
+		Limit(200).Find(&list).Error
+	return list, err
+}
+
+func (r *ShopRepo) ListServiceOrdersByTab(shopID uint64, tab string) ([]model.ServiceOrder, error) {
+	var list []model.ServiceOrder
+	q := r.db.Scopes(scopeTenant(r.tenantID)).Where("shop_id = ?", shopID)
+	if tab != "" {
+		q = q.Where("status_tab = ?", tab)
+	} else {
+		q = q.Where("status_tab IN ?", []string{"待处理", "处理中", "已逾期"})
+	}
+	err := q.Limit(200).Find(&list).Error
+	return list, err
+}
+
+func (r *ShopRepo) ListServiceOrdersWithDeadline(shopID uint64) ([]model.ServiceOrder, error) {
+	var list []model.ServiceOrder
+	err := r.db.Scopes(scopeTenant(r.tenantID)).
+		Where("shop_id = ? AND deadline_at IS NOT NULL AND status_tab IN ?", shopID, []string{"待处理", "处理中", "已逾期"}).
+		Limit(200).Find(&list).Error
+	return list, err
+}
+
+func (r *ShopRepo) ListTenantIDs() ([]uint64, error) {
+	var ids []uint64
+	err := r.db.Model(&model.MarketplaceShop{}).Distinct("tenant_id").Pluck("tenant_id", &ids).Error
+	return ids, err
+}
