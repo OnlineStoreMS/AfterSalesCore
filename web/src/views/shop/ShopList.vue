@@ -10,6 +10,7 @@ import {
   deleteShop,
   fetchShops,
   resetShopBind,
+  requestShopSync,
   updateShop,
   type MarketplaceShop,
   type ShopPlatform,
@@ -105,6 +106,16 @@ async function handleDelete(row: MarketplaceShop) {
 function openWorkbench(row: MarketplaceShop) {
   router.push(`/shops/${row.id}`)
 }
+
+async function handleRequestSync(row: MarketplaceShop) {
+  try {
+    await requestShopSync(row.id)
+    ElMessage.success('已请求同步，插件下次心跳（约 1 分钟内）会采集')
+    loadData()
+  } catch (e) {
+    ElMessage.error((e as Error).message || '请求失败')
+  }
+}
 </script>
 
 <template>
@@ -147,9 +158,17 @@ function openWorkbench(row: MarketplaceShop) {
         <el-table-column prop="lastSeenAt" label="最近在线" width="170">
           <template #default="{ row }">{{ row.lastSeenAt || '—' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openWorkbench(row)">工作台</el-button>
+            <el-button
+              v-if="row.pluginStatus !== 'unbound'"
+              type="primary"
+              link
+              @click="handleRequestSync(row)"
+            >
+              {{ row.syncRequested ? '已请求同步' : '请求同步' }}
+            </el-button>
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="primary" link @click="handleReset(row)">重置绑定</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>

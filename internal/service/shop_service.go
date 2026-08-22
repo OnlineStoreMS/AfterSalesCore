@@ -17,7 +17,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const pluginOnlineSkew = 90 * time.Second
+const (
+	pluginOnlineSkew          = 90 * time.Second
+	defaultPluginSyncInterval = 5 * time.Minute
+)
 
 var (
 	ErrPluginAuth      = errors.New("插件鉴权失败")
@@ -169,6 +172,7 @@ func (s *ShopService) ResetBind(id uint64) (*dto.ShopItem, error) {
 	shop.PluginSecretHash = ""
 	shop.PluginStatus = model.ShopPluginUnbound
 	shop.LastSeenAt = nil
+	shop.SyncRequestedAt = nil
 	if err := s.repo().Save(shop); err != nil {
 		return nil, err
 	}
@@ -323,7 +327,7 @@ func (s *ShopService) AuthenticatePlugin(key, secret string) (*model.Marketplace
 	return shop, nil
 }
 
-func (s *ShopService) Heartbeat(shop *model.MarketplaceShop, in *dto.PluginHeartbeatInput) (*dto.ShopItem, error) {
+func (s *ShopService) Heartbeat(shop *model.MarketplaceShop, in *dto.PluginHeartbeatInput) (*dto.PluginHeartbeatResult, error) {
 	now := time.Now()
 	shop.LastSeenAt = &now
 	shop.PluginStatus = model.ShopPluginBound
@@ -336,6 +340,30 @@ func (s *ShopService) Heartbeat(shop *model.MarketplaceShop, in *dto.PluginHeart
 	if err := s.repos.Shop.Save(shop); err != nil {
 		return nil, err
 	}
+	interval := defaultPluginSyncInterval
+	return &dto.PluginHeartbeatResult{
+		ShopItem:        s.toItem(shop),
+		SyncNow:         pluginShouldSync(shop, now, interval),
+		SyncIntervalSec: int(interval.Seconds()),
+	}, nil
+}
+
+func (s *ShopService) RequestSync(id uint64) (*dto.ShopItem, error) {
+	shop, err := s.repo().Get(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if shop.PluginKey == "" {
+		return nil, fmt.Errorf("%w: 店铺尚未绑定插件", ErrBadRequest)
+	}
+	now := time.Now()
+	shop.SyncRequestedAt = &now
+	if err := s.repo().Save(shop); err != nil {
+		return nil, err
+	}
 	item := s.toItem(shop)
 	return &item, nil
 }
@@ -344,6 +372,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 	now := time.Now()
 	shop.LastSeenAt = &now
 	shop.LastSyncAt = &now
+	shop.SyncRequestedAt = nil
 	shop.PluginStatus = model.ShopPluginBound
 	if v := strings.TrimSpace(in.PlatformShopID); v != "" {
 		shop.PlatformShopID = v
@@ -493,7 +522,21 @@ func (s *ShopService) toItem(shop *model.MarketplaceShop) dto.ShopItem {
 	if shop.LastSeenAt != nil {
 		item.LastSeenAt = formatTime(*shop.LastSeenAt)
 	}
+	item.SyncRequested = shop.SyncRequestedAt != nil
 	return item
+}
+
+func pluginShouldSync(shop *model.MarketplaceShop, now time.Time, interval time.Duration) bool {
+	if shop == nil {
+		return false
+	}
+	if shop.SyncRequestedAt != nil {
+		return true
+	}
+	if shop.LastSyncAt == nil {
+		return true
+	}
+	return now.Sub(*shop.LastSyncAt) >= interval
 }
 
 func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {

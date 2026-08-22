@@ -93,6 +93,20 @@ func (h *ShopHandler) Delete(c *gin.Context) {
 	response.OK(c, gin.H{"deleted": true})
 }
 
+func (h *ShopHandler) RequestSync(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	item, err := h.ss(c).RequestSync(id)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
 func (h *ShopHandler) ResetBind(c *gin.Context) {
 	id, err := httputil.ParseID(c)
 	if err != nil {

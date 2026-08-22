@@ -15,6 +15,7 @@ export interface MarketplaceShop {
   platformShopName?: string
   lastSyncAt?: string
   lastSeenAt?: string
+  syncRequested?: boolean
   remark?: string
   createdAt: string
   updatedAt: string
@@ -131,6 +132,10 @@ export async function deleteShop(id: number) {
 
 export async function resetShopBind(id: number) {
   return unwrap<MarketplaceShop>(await client.post(`/shops/${id}/reset-bind`))
+}
+
+export async function requestShopSync(id: number) {
+  return unwrap<MarketplaceShop>(await client.post(`/shops/${id}/request-sync`))
 }
 
 export async function fetchShopWorkbench(id: number, params?: {

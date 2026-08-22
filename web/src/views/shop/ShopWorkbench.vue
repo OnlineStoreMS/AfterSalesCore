@@ -7,6 +7,7 @@ import {
   PLUGIN_STATUS_MAP,
   fetchShopWorkbench,
   fetchShopServiceOrders,
+  requestShopSync,
   type FilterCard,
   type MarketplaceShop,
   type AftersaleTicket,
@@ -27,6 +28,7 @@ const pageSize = ref(20)
 const keyword = ref('')
 const activeCardKey = ref('')
 const lastSyncAt = ref('')
+const requestingSync = ref(false)
 const nowTick = ref(Date.now())
 let tickTimer = 0
 
@@ -164,6 +166,20 @@ function remainClass(sec: number) {
   if (sec < 24 * 3600) return 'warning'
   return ''
 }
+
+async function handleRequestSync() {
+  if (!shopId.value) return
+  requestingSync.value = true
+  try {
+    const item = await requestShopSync(shopId.value)
+    shop.value = item
+    ElMessage.success('已请求同步，插件下次心跳（约 1 分钟内）会采集')
+  } catch (e) {
+    ElMessage.error((e as Error).message || '请求失败')
+  } finally {
+    requestingSync.value = false
+  }
+}
 </script>
 
 <template>
@@ -178,9 +194,18 @@ function remainClass(sec: number) {
           <template v-if="lastSyncAt"> · 最近同步 {{ lastSyncAt }}</template>
         </p>
       </div>
-      <el-tag v-if="shop" :type="statusType(shop.pluginStatus)" size="large">
-        {{ statusLabel(shop.pluginStatus) }}
-      </el-tag>
+      <div class="head-actions">
+        <el-button
+          v-if="shop && shop.pluginStatus !== 'unbound'"
+          :loading="requestingSync"
+          @click="handleRequestSync"
+        >
+          {{ shop.syncRequested ? '已请求同步' : '请求插件同步' }}
+        </el-button>
+        <el-tag v-if="shop" :type="statusType(shop.pluginStatus)" size="large">
+          {{ statusLabel(shop.pluginStatus) }}
+        </el-tag>
+      </div>
     </div>
 
     <el-card class="filter-card">
@@ -392,6 +417,7 @@ function remainClass(sec: number) {
   align-items: flex-start;
   margin-bottom: 16px;
 }
+.head-actions { display: flex; align-items: center; gap: 10px; }
 .page-title { margin: 4px 0 6px; font-size: 22px; }
 .desc { color: #606266; margin: 0; }
 .filter-card { margin-bottom: 16px; }

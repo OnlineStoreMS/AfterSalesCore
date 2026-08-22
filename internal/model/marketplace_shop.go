@@ -26,6 +26,7 @@ type MarketplaceShop struct {
 	PlatformShopName string     `gorm:"size:128" json:"platformShopName"`
 	LastSyncAt       *time.Time `json:"lastSyncAt"`
 	LastSeenAt       *time.Time `json:"lastSeenAt"`
+	SyncRequestedAt  *time.Time `json:"syncRequestedAt"`
 	Remark           string     `gorm:"type:text" json:"remark"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	UpdatedAt        time.Time  `json:"updatedAt"`

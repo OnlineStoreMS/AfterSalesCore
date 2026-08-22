@@ -10,7 +10,6 @@ const STORAGE = {
 const DEFAULT_API_BASE = 'https://osms.zfcycle.com/apps/aftersales/api/v1'
 const HEARTBEAT_ALARM = 'aftersale-heartbeat'
 const AUTO_SYNC_ALARM = 'aftersale-autosync'
-const AUTO_SYNC_MINUTES = 5
 
 const WORKBENCH_URL = 'https://fxg.jinritemai.com/ffa/merchant-aftersale-workbench/aftersale/list'
 const SERVICE_ORDER_URL = 'https://fxg.jinritemai.com/ffa/task-order/service'
@@ -352,6 +351,9 @@ async function heartbeat() {
       },
     })
     await chrome.storage.local.set({ heartbeatError: '' })
+    if (data?.syncNow && !syncing) {
+      await syncNow()
+    }
     return { ok: true, data }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -778,7 +780,7 @@ async function bind(bindCode, apiBase) {
     pluginSecret: data.pluginSecret,
   })
   await chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 })
-  await chrome.alarms.create(AUTO_SYNC_ALARM, { periodInMinutes: AUTO_SYNC_MINUTES })
+  await chrome.alarms.clear(AUTO_SYNC_ALARM)
   await heartbeat()
   return data
 }
@@ -789,8 +791,8 @@ async function ensureAlarms() {
   if (!names.has(HEARTBEAT_ALARM)) {
     await chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 })
   }
-  if (!names.has(AUTO_SYNC_ALARM)) {
-    await chrome.alarms.create(AUTO_SYNC_ALARM, { periodInMinutes: AUTO_SYNC_MINUTES })
+  if (names.has(AUTO_SYNC_ALARM)) {
+    await chrome.alarms.clear(AUTO_SYNC_ALARM)
   }
 }
 
@@ -804,25 +806,12 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === HEARTBEAT_ALARM) heartbeat()
-  if (alarm.name === AUTO_SYNC_ALARM) maybeAutoSync(AUTO_SYNC_MINUTES * 60 * 1000 - 30000)
 })
-
-async function maybeAutoSync(minIntervalMs = 60000) {
-  const device = await getDevice()
-  if (!device || syncing || opening) return
-  const tab = await findFxgTab()
-  if (!tab?.id) return
-  const extra = await chrome.storage.local.get([STORAGE.lastSyncAt])
-  const last = Number(extra[STORAGE.lastSyncAt] || 0)
-  if (Date.now() - last < minIntervalMs) return
-  return syncNow()
-}
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.status !== 'complete') return
   if (!isFxgUsable(tab)) return
   rememberFxgTab(tabId)
-  setTimeout(() => maybeAutoSync(60000), 8000)
 })
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -880,7 +869,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       return
     }
     if (msg?.type === 'AFTERSALE_WORKBENCH_READY') {
-      maybeAutoSync(60000)
       reply({ ok: true })
     }
   })()

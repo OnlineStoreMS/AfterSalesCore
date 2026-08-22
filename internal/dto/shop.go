@@ -23,9 +23,16 @@ type ShopItem struct {
 	PlatformShopName string `json:"platformShopName,omitempty"`
 	LastSyncAt       string `json:"lastSyncAt,omitempty"`
 	LastSeenAt       string `json:"lastSeenAt,omitempty"`
+	SyncRequested    bool   `json:"syncRequested"`
 	Remark           string `json:"remark,omitempty"`
 	CreatedAt        string `json:"createdAt"`
 	UpdatedAt        string `json:"updatedAt"`
+}
+
+type PluginHeartbeatResult struct {
+	ShopItem
+	SyncNow         bool `json:"syncNow"`
+	SyncIntervalSec int  `json:"syncIntervalSec"`
 }
 
 type FilterCardItem struct {

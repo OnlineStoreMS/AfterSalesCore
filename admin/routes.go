@@ -45,6 +45,7 @@ func RegisterRoutes(
 	g.PUT("/shops/:id", shopH.Update)
 	g.DELETE("/shops/:id", shopH.Delete)
 	g.POST("/shops/:id/reset-bind", shopH.ResetBind)
+	g.POST("/shops/:id/request-sync", shopH.RequestSync)
 	g.GET("/shops/:id/workbench", shopH.Workbench)
 	g.GET("/shops/:id/tickets", shopH.Tickets)
 	g.GET("/shops/:id/service-orders", shopH.ServiceOrders)
