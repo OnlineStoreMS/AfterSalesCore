@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var timeoutRemainRe = regexp.MustCompile(`(?:(\d+)\s*天)?(?:(\d+)\s*小时)?(?:(\d+)\s*分)?后(.+)`)
+var timeoutRemainRe = regexp.MustCompile(`(?:(\d+)\s*天)?(?:(\d+)\s*小时)?(?:(\d+)\s*分)?(?:(\d+)\s*秒)?后(.+)`)
 
 // ParseTimeout 从「2天9小时16分后自动同意」解析截止时间和动作，供提醒使用。
 func ParseTimeout(text string, from time.Time) (deadline *time.Time, action string, remainSec int) {
@@ -22,9 +22,10 @@ func ParseTimeout(text string, from time.Time) (deadline *time.Time, action stri
 	days := atoiDefault(m[1])
 	hours := atoiDefault(m[2])
 	mins := atoiDefault(m[3])
-	action = strings.TrimSpace(m[4])
+	secs := atoiDefault(m[4])
+	action = strings.TrimSpace(m[5])
 	action = strings.TrimRight(action, "。.;；")
-	dur := time.Duration(days)*24*time.Hour + time.Duration(hours)*time.Hour + time.Duration(mins)*time.Minute
+	dur := time.Duration(days)*24*time.Hour + time.Duration(hours)*time.Hour + time.Duration(mins)*time.Minute + time.Duration(secs)*time.Second
 	if dur <= 0 {
 		return nil, action, 0
 	}

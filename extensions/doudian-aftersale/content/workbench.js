@@ -119,6 +119,29 @@ function parseHeaderRow(tr) {
   }
 }
 
+function reactFiber(el) {
+  if (!el) return null
+  const key = Object.keys(el).find((k) => k.startsWith('__reactFiber'))
+  return key ? el[key] : null
+}
+
+function findTableRecord(el) {
+  let n = reactFiber(el)
+  for (let i = 0; i < 20 && n; i++) {
+    const p = n.memoizedProps || n.pendingProps
+    if (p?.record) return p.record
+    n = n.return
+  }
+  return null
+}
+
+function returnLogisticsNoFromRecord(record, aftersaleId) {
+  const info = record?.parentRecord?.after_sale_info || record?.after_sale_info || {}
+  const id = String(info.after_sale_id || record?.parentRecord?.after_sale_id || '')
+  if (aftersaleId && id && id !== String(aftersaleId)) return ''
+  return String(info.return_logistics_code || record?.return_logistics_code || '').trim()
+}
+
 function parseDataRow(tr, headers, headerInfo) {
   const productCell = cellByName(tr, ['商品信息'], headers) || tr.children[1]
   const orderCell = cellByName(tr, ['订单信息'], headers)
@@ -150,6 +173,10 @@ function parseDataRow(tr, headers, headerInfo) {
 
   const applyQty = Number(pick(afterText, /申请件数\s*(\d+)/) || 0)
   const buyQty = Number(pick(orderText, /购买件数\s*(\d+)/) || 0)
+  const returnLogisticsNo = returnLogisticsNoFromRecord(
+    findTableRecord(logisticsCell) || findTableRecord(tr),
+    headerInfo.platformAftersaleId,
+  )
 
   return {
     platformAftersaleId: headerInfo.platformAftersaleId,
@@ -169,6 +196,7 @@ function parseDataRow(tr, headers, headerInfo) {
     timeoutText: statusLines.slice(1).join(' '),
     dispute: textOf(disputeCell),
     logistics: logisticsRaw,
+    returnLogisticsNo,
     applyTime: pick(afterText, /申请时间\s*([\d/]+(?:\s*[\d:]+)?)/),
     rawJson: JSON.stringify({
       headerTags: headerInfo.tags,
@@ -177,6 +205,7 @@ function parseDataRow(tr, headers, headerInfo) {
       after: afterText.slice(0, 300),
       status: statusText.slice(0, 120),
       logistics: logisticsRaw.slice(0, 200),
+      returnLogisticsNo,
     }),
   }
 }
@@ -209,52 +238,110 @@ function collectVisibleTickets() {
   return rows
 }
 
+function isCardSelected(el) {
+  return /selected/i.test(String(el?.className || ''))
+}
+
+function parseListTotal() {
+  const el = document.querySelector('.auxo-pagination-total-text')
+  const m = textOf(el).match(/共\s*(\d+)\s*条/)
+  return m ? Number(m[1]) : null
+}
+
+function currentPage() {
+  const el = document.querySelector('.auxo-pagination-item-active')
+  const n = Number(textOf(el))
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+
 function findNextPage() {
-  const nodes = Array.from(document.querySelectorAll('li, button, a, span, div'))
-  return nodes.find((el) => {
-    const t = textOf(el)
-    if (t !== '下一页') return false
-    const cls = String(el.className || '')
-    const parentCls = String(el.parentElement?.className || '')
-    const disabled =
-      el.getAttribute('aria-disabled') === 'true' ||
-      el.hasAttribute('disabled') ||
-      /disabled|is-disabled/.test(cls + parentCls)
-    return !disabled
-  })
+  const next = document.querySelector('.auxo-pagination-next')
+  if (!next) return null
+  const cls = String(next.className || '')
+  if (/disabled/i.test(cls) || next.getAttribute('aria-disabled') === 'true') return null
+  const btn = next.querySelector('button, a') || next
+  if (btn.disabled || btn.getAttribute('disabled') != null) return null
+  return btn
 }
 
-async function waitTickets(prevIds) {
-  const prev = new Set(prevIds || [])
-  for (let i = 0; i < 16; i++) {
-    await sleep(250)
-    const rows = collectVisibleTickets()
-    if (!rows.length) continue
-    const ids = rows.map((r) => r.platformAftersaleId).join(',')
-    const changed = !prev.size || rows.some((r) => !prev.has(r.platformAftersaleId))
-    if (i >= 2 && ids && (changed || i > 6)) return rows
+async function waitUntil(pred, tries = 30, gap = 200) {
+  let last = null
+  for (let i = 0; i < tries; i++) {
+    last = pred()
+    if (last) return last
+    await sleep(gap)
   }
-  return collectVisibleTickets()
+  return last
 }
 
-async function collectCardTickets(expectedCount) {
+async function ensureFirstPage() {
+  if (currentPage() <= 1) return
+  const first =
+    document.querySelector('.auxo-pagination-item-1') ||
+    document.querySelector('li.auxo-pagination-item[title="1"]')
+  if (!first || /active/.test(String(first.className || ''))) return
+  first.click()
+  await sleep(350)
+}
+
+function cardTableState(card) {
+  if (!isCardSelected(card.el)) return null
+  const total = parseListTotal()
+  const rows = collectVisibleTickets()
+  if (card.count === 0) {
+    if (total === 0 || rows.length === 0) return { rows, total: total ?? 0 }
+    return null
+  }
+  if (total != null && total !== card.count) return null
+  const maxFirst = Math.min(10, card.count)
+  if (rows.length === 0 || rows.length > maxFirst) return null
+  if (total == null && rows.length !== maxFirst) return null
+  return { rows, total: total ?? rows.length }
+}
+
+async function waitForCardTable(card) {
+  const ready = await waitUntil(() => cardTableState(card), 30, 200)
+  if (ready) return ready
+  const rows = collectVisibleTickets()
+  const maxFirst = Math.min(10, Math.max(card.count, 0))
+  if (card.count > 0 && rows.length > maxFirst) return { rows: [], total: 0 }
+  return { rows, total: parseListTotal() }
+}
+
+async function waitForPageChange(prevIds) {
+  const prev = new Set(prevIds || [])
+  const got = await waitUntil(() => {
+    const rows = collectVisibleTickets()
+    if (!rows.length) return null
+    if (rows.some((r) => !prev.has(r.platformAftersaleId))) return rows
+    return null
+  }, 20, 250)
+  return got || []
+}
+
+async function collectCardTickets(card) {
+  const first = await waitForCardTable(card)
+  await ensureFirstPage()
+  const start = currentPage() > 1 ? await waitForCardTable(card) : first
   const all = []
   const seen = new Set()
-  const maxPages = Math.max(1, Math.ceil((expectedCount || 10) / 10) + 2)
-  let prevIds = []
-  for (let p = 0; p < maxPages; p++) {
-    const rows = p === 0 ? await waitTickets([]) : await waitTickets(prevIds)
-    prevIds = rows.map((r) => r.platformAftersaleId)
-    for (const r of rows) {
-      if (seen.has(r.platformAftersaleId)) continue
+  const add = (rows) => {
+    for (const r of rows || []) {
+      if (!r.platformAftersaleId || seen.has(r.platformAftersaleId)) continue
       seen.add(r.platformAftersaleId)
       all.push(r)
     }
-    if (expectedCount && all.length >= expectedCount) break
+  }
+  add(start.rows)
+  const expected = card.count || 0
+  const maxPages = Math.max(1, Math.ceil((expected || 10) / 10) + 1)
+  for (let p = 1; p < maxPages; p++) {
+    if (expected && all.length >= expected) break
     const next = findNextPage()
     if (!next) break
+    const prevIds = all.slice(-10).map((r) => r.platformAftersaleId)
     next.click()
-    await sleep(400)
+    add(await waitForPageChange(prevIds))
   }
   return all
 }
@@ -273,7 +360,8 @@ async function collectAll() {
       /* ignore */
     }
     card.el.click()
-    const rows = await collectCardTickets(card.count)
+    await sleep(120)
+    const rows = await collectCardTickets(card)
     for (const t of rows) {
       const existing = ticketMap.get(t.platformAftersaleId)
       if (existing) {

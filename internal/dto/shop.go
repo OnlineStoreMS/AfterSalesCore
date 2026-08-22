@@ -58,6 +58,7 @@ type TicketItem struct {
 	RemainSeconds       int      `json:"remainSeconds"`
 	Dispute             string   `json:"dispute,omitempty"`
 	Logistics           string   `json:"logistics,omitempty"`
+	ReturnLogisticsNo   string   `json:"returnLogisticsNo,omitempty"`
 	ApplyTime           string   `json:"applyTime,omitempty"`
 	CardKeys            []string `json:"cardKeys"`
 	SyncedAt            string   `json:"syncedAt"`
@@ -122,6 +123,7 @@ type PluginSyncTicket struct {
 	TimeoutText         string   `json:"timeoutText"`
 	Dispute             string   `json:"dispute"`
 	Logistics           string   `json:"logistics"`
+	ReturnLogisticsNo   string   `json:"returnLogisticsNo"`
 	ApplyTime           string   `json:"applyTime"`
 	CardKeys            []string `json:"cardKeys"`
 	RawJSON             string   `json:"rawJson"`

@@ -133,8 +133,8 @@ func (r *ShopRepo) ListTickets(f TicketListFilter) ([]model.AftersaleTicket, int
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
 		like := "%" + kw + "%"
 		q = q.Where(
-			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR status ILIKE ?",
-			like, like, like, like,
+			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR status ILIKE ? OR return_logistics_no ILIKE ?",
+			like, like, like, like, like,
 		)
 	}
 	var total int64
@@ -156,6 +156,7 @@ func (r *ShopRepo) ListTickets(f TicketListFilter) ([]model.AftersaleTicket, int
 func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.AftersaleTicket, cardKeys map[string][]string) error {
 	now := time.Now()
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		seenIDs := make([]uint64, 0, len(tickets))
 		for i := range tickets {
 			t := &tickets[i]
 			t.TenantID = shop.TenantID
@@ -178,27 +179,28 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 					deadline = *t.DeadlineAt
 				}
 				if err := tx.Model(&existing).Updates(map[string]any{
-					"order_no":       t.OrderNo,
-					"product_title":  t.ProductTitle,
-					"product_image":  t.ProductImage,
-					"sku":            t.SKU,
-					"product_tags":   t.ProductTags,
-					"tags":           t.Tags,
-					"qty":            t.Qty,
-					"buy_qty":        t.BuyQty,
-					"pay_amount":     t.PayAmount,
-					"refund_amount":  t.RefundAmount,
-					"aftersale_type": t.AftersaleType,
-					"reason":         t.Reason,
-					"status":         t.Status,
-					"timeout_text":   t.TimeoutText,
-					"timeout_action": t.TimeoutAction,
-					"deadline_at":    deadline,
-					"dispute":        t.Dispute,
-					"logistics":      t.Logistics,
-					"apply_time":     t.ApplyTime,
-					"raw_json":       t.RawJSON,
-					"synced_at":      now,
+					"order_no":            t.OrderNo,
+					"product_title":       t.ProductTitle,
+					"product_image":       t.ProductImage,
+					"sku":                 t.SKU,
+					"product_tags":        t.ProductTags,
+					"tags":                t.Tags,
+					"qty":                 t.Qty,
+					"buy_qty":             t.BuyQty,
+					"pay_amount":          t.PayAmount,
+					"refund_amount":       t.RefundAmount,
+					"aftersale_type":      t.AftersaleType,
+					"reason":              t.Reason,
+					"status":              t.Status,
+					"timeout_text":        t.TimeoutText,
+					"timeout_action":      t.TimeoutAction,
+					"deadline_at":         deadline,
+					"dispute":             t.Dispute,
+					"logistics":           t.Logistics,
+					"return_logistics_no": t.ReturnLogisticsNo,
+					"apply_time":          t.ApplyTime,
+					"raw_json":            t.RawJSON,
+					"synced_at":           now,
 				}).Error; err != nil {
 					return err
 				}
@@ -207,6 +209,7 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 				return err
 			}
 			keys := uniqueStrings(cardKeys[t.PlatformAftersaleID])
+			seenIDs = append(seenIDs, t.ID)
 			if len(keys) == 0 {
 				continue
 			}
@@ -218,7 +221,11 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 				return err
 			}
 		}
-		return nil
+		q := tx.Where("ticket_id IN (?)", tx.Model(&model.AftersaleTicket{}).Select("id").Where("shop_id = ?", shop.ID))
+		if len(seenIDs) > 0 {
+			q = q.Where("ticket_id NOT IN ?", seenIDs)
+		}
+		return q.Delete(&model.AftersaleTicketCard{}).Error
 	})
 }
 

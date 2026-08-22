@@ -50,6 +50,7 @@ export interface AftersaleTicket {
   remainSeconds?: number
   dispute?: string
   logistics?: string
+  returnLogisticsNo?: string
   applyTime?: string
   cardKeys: string[]
   syncedAt: string

@@ -373,6 +373,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 			DeadlineAt:          deadline,
 			Dispute:             strings.TrimSpace(t.Dispute),
 			Logistics:           strings.TrimSpace(t.Logistics),
+			ReturnLogisticsNo:   strings.TrimSpace(t.ReturnLogisticsNo),
 			ApplyTime:           strings.TrimSpace(t.ApplyTime),
 			RawJSON:             t.RawJSON,
 		})
@@ -435,7 +436,7 @@ func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {
 		AftersaleType: t.AftersaleType, Reason: t.Reason, Status: t.Status,
 		TimeoutText: t.TimeoutText, TimeoutAction: t.TimeoutAction,
 		RemainSeconds: remainSeconds(t.DeadlineAt, time.Now()),
-		Dispute:       t.Dispute, Logistics: t.Logistics,
+		Dispute:       t.Dispute, Logistics: t.Logistics, ReturnLogisticsNo: t.ReturnLogisticsNo,
 		ApplyTime: t.ApplyTime, CardKeys: keys, SyncedAt: formatTime(t.SyncedAt),
 	}
 	if t.DeadlineAt != nil {

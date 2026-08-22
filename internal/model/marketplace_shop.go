@@ -70,6 +70,7 @@ type AftersaleTicket struct {
 	DeadlineAt          *time.Time            `gorm:"index" json:"deadlineAt"`
 	Dispute             string                `gorm:"size:128" json:"dispute"`
 	Logistics           string                `gorm:"size:256" json:"logistics"`
+	ReturnLogisticsNo   string                `gorm:"size:64;index" json:"returnLogisticsNo"`
 	ApplyTime           string                `gorm:"size:64" json:"applyTime"`
 	RawJSON             string                `gorm:"type:text" json:"rawJson"`
 	SyncedAt            time.Time             `json:"syncedAt"`

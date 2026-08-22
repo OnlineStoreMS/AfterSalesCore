@@ -181,7 +181,7 @@ function remainClass(sec: number) {
         <el-input
           v-model="keyword"
           clearable
-          placeholder="售后编号 / 订单号 / 商品 / 状态"
+          placeholder="售后编号 / 订单号 / 商品 / 状态 / 退货单号"
           style="width: 280px"
           @keyup.enter="handleSearch"
         />
@@ -243,9 +243,10 @@ function remainClass(sec: number) {
           </template>
         </el-table-column>
         <el-table-column prop="dispute" label="纠纷仲裁" width="120" />
-        <el-table-column label="物流信息" min-width="150">
+        <el-table-column label="物流信息" min-width="180">
           <template #default="{ row }">
             <pre class="logistics">{{ row.logistics || '—' }}</pre>
+            <div v-if="row.returnLogisticsNo" class="tracking">退货单号 {{ row.returnLogisticsNo }}</div>
           </template>
         </el-table-column>
       </el-table>
@@ -309,5 +310,6 @@ function remainClass(sec: number) {
 .timeout.warning { color: #e6a23c; font-weight: 600; }
 .timeout.danger { color: #f56c6c; font-weight: 700; }
 .logistics { margin: 0; font: inherit; white-space: pre-line; color: #303133; }
+.tracking { color: #409eff; font-size: 12px; margin-top: 4px; word-break: break-all; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>
