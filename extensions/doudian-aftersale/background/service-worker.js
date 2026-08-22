@@ -105,7 +105,75 @@ async function findWorkbenchTab() {
   return tabs.find((t) => t.id) || null
 }
 
+function installPageLogisticsExtractor() {
+  if (window.__osmsAftersaleLogisticsInstalled) return true
+  window.__osmsAftersaleLogisticsInstalled = true
+  const fiberOf = (el) => {
+    if (!el) return null
+    const key = Object.keys(el).find(
+      (k) => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'),
+    )
+    return key ? el[key] : null
+  }
+  const recordOf = (el) => {
+    let n = fiberOf(el)
+    for (let i = 0; i < 24 && n; i++) {
+      const p = n.memoizedProps || n.pendingProps
+      if (p && p.record) return p.record
+      n = n.return
+    }
+    return null
+  }
+  const fromRecord = (rec) => {
+    if (!rec) return null
+    const info = rec.parentRecord?.after_sale_info || rec.after_sale_info || {}
+    const id = String(info.after_sale_id || rec.parentRecord?.after_sale_id || '')
+    const code = String(info.return_logistics_code || rec.return_logistics_code || '').trim()
+    if (!id) return null
+    return { id, code }
+  }
+  const collectMap = () => {
+    const map = {}
+    const table = document.querySelector('table')
+    let n = fiberOf(table)
+    for (let i = 0; i < 40 && n; i++) {
+      const p = n.memoizedProps || n.pendingProps
+      const data = p?.data || p?.dataSource
+      if (Array.isArray(data) && data.length) {
+        for (const rec of data) {
+          const hit = fromRecord(rec)
+          if (hit?.code) map[hit.id] = hit.code
+        }
+        break
+      }
+      n = n.return
+    }
+    document.querySelectorAll('table tr').forEach((tr) => {
+      const hit = fromRecord(recordOf(tr))
+      if (hit?.code) map[hit.id] = hit.code
+    })
+    return map
+  }
+  document.addEventListener('osms-aftersale-need-logistics', () => {
+    document.dispatchEvent(new CustomEvent('osms-aftersale-logistics', { detail: collectMap() }))
+  })
+  return true
+}
+
+async function installLogisticsExtractor(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: installPageLogisticsExtractor,
+    })
+  } catch (e) {
+    console.warn('install logistics extractor failed', e)
+  }
+}
+
 async function collectFromTab(tabId) {
+  await installLogisticsExtractor(tabId)
   for (let i = 0; i < 8; i++) {
     try {
       const res = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_COLLECT' })

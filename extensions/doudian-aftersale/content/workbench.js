@@ -210,6 +210,44 @@ function parseDataRow(tr, headers, headerInfo) {
   }
 }
 
+let logisticsMap = {}
+
+function refreshLogisticsMap() {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      document.removeEventListener('osms-aftersale-logistics', onMsg)
+      resolve(logisticsMap)
+    }, 400)
+    function onMsg(e) {
+      clearTimeout(timer)
+      document.removeEventListener('osms-aftersale-logistics', onMsg)
+      logisticsMap = e.detail && typeof e.detail === 'object' ? e.detail : {}
+      resolve(logisticsMap)
+    }
+    document.addEventListener('osms-aftersale-logistics', onMsg)
+    document.dispatchEvent(new Event('osms-aftersale-need-logistics'))
+  })
+}
+
+function applyLogistics(ticket) {
+  const code = String(ticket.returnLogisticsNo || logisticsMap[ticket.platformAftersaleId] || '').trim()
+  if (!code) return ticket
+  let raw = ticket.rawJson
+  try {
+    const o = JSON.parse(raw || '{}')
+    o.returnLogisticsNo = code
+    raw = JSON.stringify(o)
+  } catch {
+    /* ignore */
+  }
+  return { ...ticket, returnLogisticsNo: code, rawJson: raw }
+}
+
+async function visibleTicketsWithLogistics() {
+  await refreshLogisticsMap()
+  return collectVisibleTickets().map(applyLogistics)
+}
+
 function collectVisibleTickets() {
   const table = document.querySelector('table')
   if (!table) return []
@@ -274,55 +312,76 @@ async function waitUntil(pred, tries = 30, gap = 200) {
   return last
 }
 
+async function clickCard(el) {
+  if (!el) return
+  try {
+    el.scrollIntoView({ block: 'nearest' })
+  } catch {
+    /* ignore */
+  }
+  el.click()
+  await sleep(80)
+}
+
+async function waitEmptyList() {
+  await waitUntil(() => {
+    const total = parseListTotal()
+    if (total === 0) return true
+    if (total == null && collectVisibleTickets().length === 0) return true
+    return null
+  }, 20, 150)
+}
+
 async function ensureFirstPage() {
   if (currentPage() <= 1) return
   const first =
     document.querySelector('.auxo-pagination-item-1') ||
     document.querySelector('li.auxo-pagination-item[title="1"]')
-  if (!first || /active/.test(String(first.className || ''))) return
+  if (!first) return
   first.click()
-  await sleep(350)
+  await waitUntil(() => (currentPage() <= 1 ? true : null), 15, 150)
 }
 
 function cardTableState(card) {
   if (!isCardSelected(card.el)) return null
+  if (currentPage() > 1) return null
   const total = parseListTotal()
   const rows = collectVisibleTickets()
   if (card.count === 0) {
     if (total === 0 || rows.length === 0) return { rows, total: total ?? 0 }
     return null
   }
-  if (total != null && total !== card.count) return null
+  if (total !== card.count) return null
   const maxFirst = Math.min(10, card.count)
   if (rows.length === 0 || rows.length > maxFirst) return null
-  if (total == null && rows.length !== maxFirst) return null
-  return { rows, total: total ?? rows.length }
-}
-
-async function waitForCardTable(card) {
-  const ready = await waitUntil(() => cardTableState(card), 30, 200)
-  if (ready) return ready
-  const rows = collectVisibleTickets()
-  const maxFirst = Math.min(10, Math.max(card.count, 0))
-  if (card.count > 0 && rows.length > maxFirst) return { rows: [], total: 0 }
-  return { rows, total: parseListTotal() }
+  return { rows, total }
 }
 
 async function waitForPageChange(prevIds) {
   const prev = new Set(prevIds || [])
-  const got = await waitUntil(() => {
-    const rows = collectVisibleTickets()
-    if (!rows.length) return null
-    if (rows.some((r) => !prev.has(r.platformAftersaleId))) return rows
-    return null
-  }, 20, 250)
-  return got || []
+  return (
+    (await waitUntil(() => {
+      const rows = collectVisibleTickets()
+      if (!rows.length) return null
+      if (rows.some((r) => !prev.has(r.platformAftersaleId))) return rows
+      return null
+    }, 20, 250)) || []
+  )
 }
 
-async function collectCardTickets(card) {
-  const first = await waitForCardTable(card)
+async function collectCardTickets(card, zeroCard) {
+  if (zeroCard?.el && zeroCard.el !== card.el) {
+    await clickCard(zeroCard.el)
+    await waitEmptyList()
+  }
+  await clickCard(card.el)
+  await waitUntil(() => {
+    if (!isCardSelected(card.el)) return null
+    if (parseListTotal() !== card.count) return null
+    return true
+  }, 30, 200)
   await ensureFirstPage()
-  const start = currentPage() > 1 ? await waitForCardTable(card) : first
+  await waitUntil(() => cardTableState(card), 25, 200)
   const all = []
   const seen = new Set()
   const add = (rows) => {
@@ -332,16 +391,17 @@ async function collectCardTickets(card) {
       all.push(r)
     }
   }
-  add(start.rows)
+  add(await visibleTicketsWithLogistics())
   const expected = card.count || 0
   const maxPages = Math.max(1, Math.ceil((expected || 10) / 10) + 1)
   for (let p = 1; p < maxPages; p++) {
     if (expected && all.length >= expected) break
     const next = findNextPage()
     if (!next) break
-    const prevIds = all.slice(-10).map((r) => r.platformAftersaleId)
+    const prevIds = collectVisibleTickets().map((r) => r.platformAftersaleId)
     next.click()
-    add(await waitForPageChange(prevIds))
+    await waitForPageChange(prevIds)
+    add(await visibleTicketsWithLogistics())
   }
   return all
 }
@@ -351,21 +411,18 @@ async function collectAll() {
   if (!cardRows.length) {
     throw new Error('未找到快捷筛选卡片，请确认当前是售后工作台列表页')
   }
+  const zeroCard = cardRows.find((c) => !c.count)
   const ticketMap = new Map()
   for (const card of cardRows) {
     if (!card.count) continue
-    try {
-      card.el.scrollIntoView({ block: 'nearest' })
-    } catch {
-      /* ignore */
-    }
-    card.el.click()
-    await sleep(120)
-    const rows = await collectCardTickets(card)
+    const rows = await collectCardTickets(card, zeroCard)
     for (const t of rows) {
       const existing = ticketMap.get(t.platformAftersaleId)
       if (existing) {
         if (!existing.cardKeys.includes(card.cardKey)) existing.cardKeys.push(card.cardKey)
+        if (!existing.returnLogisticsNo && t.returnLogisticsNo) {
+          existing.returnLogisticsNo = t.returnLogisticsNo
+        }
       } else {
         ticketMap.set(t.platformAftersaleId, { ...t, cardKeys: [card.cardKey] })
       }
