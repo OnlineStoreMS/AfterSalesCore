@@ -2,12 +2,14 @@ package router
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 
 	"aftersalescore/admin"
 	adminmw "aftersalescore/admin/middleware"
 	"aftersalescore/internal/config"
 	jwtmgr "aftersalescore/internal/pkg/jwt"
+	"aftersalescore/internal/plugindebug"
 	"aftersalescore/internal/repo"
 	"aftersalescore/internal/scheduler"
 	"aftersalescore/internal/service"
@@ -55,7 +57,12 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	edgeDeviceH := admin.NewEdgeDeviceHandler(edgeDeviceSvc)
 	shopH := admin.NewShopHandler(shopSvc)
 	notifyH := admin.NewNotificationHandler(notifySvc)
-	pluginH := plugin.NewHandler(shopSvc, notifySvc)
+	debugStore, err := plugindebug.NewStore(os.Getenv("PLUGIN_DEBUG_DIR"))
+	if err != nil {
+		panic(err)
+	}
+	debugH := admin.NewPluginDebugHandler(debugStore)
+	pluginH := plugin.NewHandler(shopSvc, notifySvc, debugStore)
 
 	go edgeDeviceSvc.StartHealthPoller(context.Background())
 	scheduler.NewNotificationScheduler(notifySvc).Start()
@@ -68,7 +75,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	adminGroup := v1.Group("/admin")
 	jwtMgr := jwtmgr.NewManager(cfg.Auth.JWTSecret)
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(adminGroup, unboxingH, edgeRecordH, edgeDeviceH, shopH, notifyH)
+	admin.RegisterRoutes(adminGroup, unboxingH, edgeRecordH, edgeDeviceH, shopH, notifyH, debugH)
 
 	pluginGroup := v1.Group("/plugin")
 	pluginGroup.POST("/bind", pluginH.Bind)
@@ -76,6 +83,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	authed.Use(pluginH.AuthRequired())
 	authed.POST("/heartbeat", pluginH.Heartbeat)
 	authed.POST("/sync", pluginH.Sync)
+	authed.POST("/debug-log", pluginH.UploadDebugLog)
 
 	return r
 }

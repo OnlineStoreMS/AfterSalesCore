@@ -1,4 +1,4 @@
-/** OSMS 抖店售后工作台 — 绑定、心跳、采集上报 */
+/** OSMS 抖店售后【诊断】— 仅手动执行，过程日志上报云端临时目录 */
 const STORAGE = {
   device: 'aftersalePlugin',
   apiBase: 'aftersaleApiBase',
@@ -8,18 +8,168 @@ const STORAGE = {
 }
 
 const DEFAULT_API_BASE = 'https://osms.zfcycle.com/apps/aftersales/api/v1'
-const HEARTBEAT_ALARM = 'aftersale-heartbeat'
-const AUTO_SYNC_ALARM = 'aftersale-autosync'
-const AUTO_SYNC_MINUTES = 5
-
 const WORKBENCH_URL = 'https://fxg.jinritemai.com/ffa/merchant-aftersale-workbench/aftersale/list'
 const SERVICE_ORDER_URL = 'https://fxg.jinritemai.com/ffa/task-order/service'
 
 let syncing = false
 let opening = false
+let currentRun = null
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
+}
+
+function clip(v) {
+  try {
+    const s = JSON.stringify(v)
+    if (s.length <= 8000) return JSON.parse(s)
+    return { _truncated: true, preview: s.slice(0, 8000) }
+  } catch {
+    return String(v).slice(0, 2000)
+  }
+}
+
+function startRun(kind) {
+  const run = {
+    runId: `${kind}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    kind,
+    t0: Date.now(),
+    events: [],
+    log(step, data, level = 'info') {
+      const ev = {
+        ms: Date.now() - run.t0,
+        at: new Date().toISOString(),
+        level,
+        step,
+        data: data == null ? undefined : clip(data),
+      }
+      run.events.push(ev)
+      console.log(`[diag ${run.runId}] ${level} ${step}`, data)
+    },
+    err(step, e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      run.log(
+        step,
+        { error: msg, stack: e instanceof Error ? String(e.stack || '').slice(0, 1500) : undefined },
+        'error',
+      )
+    },
+  }
+  currentRun = run
+  return run
+}
+
+function logStep(step, data, level) {
+  if (currentRun) currentRun.log(step, data, level || 'info')
+}
+
+function probePageFn() {
+  const textOf = (el) => String(el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim()
+  const nodes = Array.from(document.querySelectorAll('iframe'))
+  const iframes = nodes.map((f) => ({
+    src: String(f.src || '').slice(0, 220),
+    w: f.offsetWidth,
+    h: f.offsetHeight,
+    sameOrigin: false,
+  }))
+  for (let i = 0; i < nodes.length; i++) {
+    try {
+      const d = nodes[i].contentDocument
+      iframes[i].sameOrigin = !!d
+      if (d) {
+        iframes[i].childHref = String(d.location?.href || '').slice(0, 220)
+        iframes[i].childTabs = Array.from(d.querySelectorAll('.auxo-tabs-tab, [role="tab"]'))
+          .map(textOf)
+          .filter(Boolean)
+          .slice(0, 20)
+        iframes[i].childTitles = Array.from(d.querySelectorAll('[class*="groupTitle"]'))
+          .map(textOf)
+          .filter(Boolean)
+          .slice(0, 12)
+      }
+    } catch {
+      /* cross-origin */
+    }
+  }
+  return {
+    href: location.href,
+    title: document.title,
+    readyState: document.readyState,
+    iframeCount: iframes.length,
+    iframes,
+    tabs: Array.from(document.querySelectorAll('.auxo-tabs-tab, [role="tab"]'))
+      .map(textOf)
+      .filter(Boolean)
+      .slice(0, 30),
+    groupTitles: Array.from(document.querySelectorAll('[class*="groupTitle"]'))
+      .map(textOf)
+      .filter(Boolean)
+      .slice(0, 16),
+    menuLabels: Array.from(
+      document.querySelectorAll('.auxo-menu-item, .auxo-menu-submenu-title, [role="menuitem"]'),
+    )
+      .map(textOf)
+      .filter((t) => t && t.length <= 16)
+      .slice(0, 40),
+  }
+}
+
+async function probeTab(tabId, label) {
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    const injected = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: probePageFn,
+    })
+    const probe = {
+      tab: {
+        id: tab.id,
+        url: tab.url,
+        status: tab.status,
+        discarded: !!tab.discarded,
+        active: !!tab.active,
+        title: tab.title,
+      },
+      page: injected?.[0]?.result,
+    }
+    logStep(label || 'probe', probe)
+    return probe
+  } catch (e) {
+    if (currentRun) currentRun.err(label || 'probe', e)
+    return null
+  }
+}
+
+async function uploadRun(run, extra) {
+  const body = {
+    runId: run.runId,
+    kind: run.kind,
+    ok: !!extra.ok,
+    error: extra.error || '',
+    durationMs: Date.now() - run.t0,
+    version: chrome.runtime.getManifest().version,
+    meta: extra.meta || {},
+    events: run.events,
+  }
+  await chrome.storage.local.set({
+    lastDiagRunId: run.runId,
+    lastDiagUpload: '',
+    [STORAGE.lastError]: extra.error || '',
+  })
+  const device = await getDevice()
+  if (!device?.pluginKey) {
+    await chrome.storage.local.set({ lastDiagUpload: '未绑定，仅本地记录' })
+    return { uploaded: false }
+  }
+  try {
+    const data = await api('/plugin/debug-log', { auth: true, body })
+    await chrome.storage.local.set({ lastDiagUpload: data?.name || 'ok' })
+    return { uploaded: true, name: data?.name }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await chrome.storage.local.set({ lastDiagUpload: `上报失败: ${msg}` })
+    return { uploaded: false, error: msg }
+  }
 }
 
 function isFxgUsable(tab) {
@@ -144,26 +294,6 @@ async function api(path, { method = 'POST', body, auth = false } = {}) {
     throw new Error(json?.message || `请求失败 HTTP ${res.status}`)
   }
   return json.data
-}
-
-async function heartbeat() {
-  const device = await getDevice()
-  if (!device) return { ok: false, skipped: true }
-  try {
-    const data = await api('/plugin/heartbeat', {
-      auth: true,
-      body: {
-        platformShopId: device.platformShopId || '',
-        platformShopName: device.platformShopName || '',
-      },
-    })
-    await chrome.storage.local.set({ heartbeatError: '' })
-    return { ok: true, data }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    await chrome.storage.local.set({ heartbeatError: msg })
-    return { ok: false, error: msg }
-  }
 }
 
 function installPageLogisticsExtractor() {
@@ -327,18 +457,30 @@ async function installServiceExtractor(tabId) {
 }
 
 async function collectFromTab(tabId) {
+  logStep('collect.workbench.start', { tabId })
   await injectWorkbench(tabId)
   await installLogisticsExtractor(tabId)
   for (let i = 0; i < 20; i++) {
     try {
       const ping = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_PING_WORKBENCH' })
+      logStep('collect.workbench.ping', { try: i, ping })
       if (!ping?.ready) throw new Error('工作台卡片未就绪')
       const res = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_COLLECT' })
+      logStep('collect.workbench.result', {
+        try: i,
+        ok: !!res?.ok,
+        error: res?.error,
+        cardCount: res?.cards?.length,
+        ticketCount: res?.tickets?.length,
+        shop: { id: res?.platformShopId, name: res?.platformShopName },
+      })
       if (res?.ok) return res
       throw new Error(res?.error || '采集失败')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      if (i === 0 || i === 19) logStep('collect.workbench.retry', { try: i, error: msg }, 'warn')
       if (i === 19) {
+        await probeTab(tabId, 'collect.workbench.fail.probe')
         if (msg.includes('Receiving end')) {
           throw new Error('未进入售后工作台：页面脚本未就绪，请刷新当前抖店标签后再同步')
         }
@@ -364,17 +506,25 @@ async function injectWorkbench(tabId) {
     files: ['content/workbench.js'],
   })
 }
-
 async function clickDoudianMenu(tabId, target, force = false) {
+  logStep('menu.click', { tabId, target, force })
+  await probeTab(tabId, `menu.probe.before.${target}`)
   for (let i = 0; i < 10; i++) {
     try {
       await injectMenu(tabId)
       const res = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_CLICK_MENU', target, force })
-      if (res?.ok) return res
+      logStep('menu.click.result', { try: i, target, res })
+      if (res?.ok) {
+        await probeTab(tabId, `menu.probe.after.${target}`)
+        return res
+      }
       throw new Error(res?.error || '未找到左侧菜单')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      if (i === 9) throw new Error(msg.includes('Receiving end') ? '请刷新抖店页面后再同步' : msg)
+      if (i === 9) {
+        await probeTab(tabId, `menu.fail.probe.${target}`)
+        throw new Error(msg.includes('Receiving end') ? '请刷新抖店页面后再同步' : msg)
+      }
       await sleep(500)
     }
   }
@@ -385,8 +535,10 @@ async function pingWorkbenchReady(tabId) {
   try {
     await injectWorkbench(tabId)
     const ping = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_PING_WORKBENCH' })
+    logStep('workbench.ping', ping)
     return !!ping?.ready
-  } catch {
+  } catch (e) {
+    logStep('workbench.ping.error', { error: e instanceof Error ? e.message : String(e) }, 'warn')
     return false
   }
 }
@@ -396,42 +548,55 @@ async function waitWorkbenchReady(tabId, tries = 75) {
     if (await pingWorkbenchReady(tabId)) return
     await sleep(400)
   }
+  await probeTab(tabId, 'workbench.ready.timeout.probe')
   throw new Error('售后工作台未就绪，请确认左侧菜单可点击「售后 → 售后工作台」')
 }
 
 async function prepareWorkbench(tabId) {
+  logStep('prepare.workbench', { tabId })
   try {
     await injectMenu(tabId)
   } catch (e) {
-    console.warn('inject menu.js failed', e)
+    if (currentRun) currentRun.err('inject.menu', e)
   }
-  if (await pingWorkbenchReady(tabId)) return
+  if (await pingWorkbenchReady(tabId)) {
+    logStep('prepare.workbench.alreadyReady', { tabId })
+    return
+  }
   await clickDoudianMenu(tabId, 'workbench')
   await waitWorkbenchReady(tabId)
 }
 
 async function openWorkbenchTab() {
   if (opening) return { ok: false, error: '正在打开抖店工作台' }
+  const run = startRun('open')
   opening = true
   try {
     let tab = await findFxgTab()
+    logStep('open.findTab', tab ? { id: tab.id, url: tab.url, discarded: tab.discarded, active: tab.active } : null)
     if (tab?.id) {
       tab = await ensureTabAwake(tab)
       await chrome.tabs.update(tab.id, { active: true })
       try {
         await chrome.windows.update(tab.windowId, { focused: true })
-      } catch {
-        /* ignore */
+      } catch (e) {
+        logStep('open.focusWindow', { error: e instanceof Error ? e.message : String(e) }, 'warn')
       }
     } else {
+      logStep('open.createTab', { url: WORKBENCH_URL })
       tab = await chrome.tabs.create({ url: WORKBENCH_URL, active: true })
       tab = await waitTabComplete(tab.id)
     }
     await rememberFxgTab(tab.id)
+    await probeTab(tab.id, 'open.probe.afterFocus')
     await prepareWorkbench(tab.id)
+    await uploadRun(run, { ok: true, meta: { tabId: tab.id, url: tab.url } })
     return { ok: true }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    if (currentRun) currentRun.err('open.fail', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    await uploadRun(run, { ok: false, error: msg })
+    return { ok: false, error: msg }
   } finally {
     opening = false
   }
@@ -444,7 +609,7 @@ async function injectServiceContent(tabId) {
       files: ['content/service-order.js'],
     })
   } catch (e) {
-    console.warn('inject service-order.js failed', e)
+    if (currentRun) currentRun.err('inject.service', e)
   }
   await installServiceExtractor(tabId)
 }
@@ -454,9 +619,10 @@ async function waitServiceReady(tabId, tries = 75) {
     try {
       await injectServiceContent(tabId)
       const ping = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_PING_SERVICE' })
+      if (i === 0 || ping?.ready) logStep('service.ping', { try: i, ping })
       if (ping?.ready) return true
-    } catch {
-      /* SPA 切换后脚本可能尚未注入 */
+    } catch (e) {
+      if (i === 0) logStep('service.ping.error', { try: i, error: e instanceof Error ? e.message : String(e) }, 'warn')
     }
     await sleep(400)
   }
@@ -464,33 +630,49 @@ async function waitServiceReady(tabId, tries = 75) {
 }
 
 async function collectServiceOrders(tabId) {
+  logStep('service.start', { tabId })
   try {
     try {
       await clickDoudianMenu(tabId, 'service', true)
     } catch (e) {
-      console.warn('click service menu failed', e)
+      if (currentRun) currentRun.err('service.menu', e)
     }
     let ready = await waitServiceReady(tabId, 50)
+    logStep('service.ready.afterMenu', { ready })
     if (!ready) {
       const tab = await chrome.tabs.get(tabId)
+      logStep('service.fallback.nav', { url: tab.url })
       if (!String(tab.url || '').includes('/ffa/task-order/service')) {
         await chrome.tabs.update(tabId, { url: SERVICE_ORDER_URL })
         await sleep(2500)
       }
       ready = await waitServiceReady(tabId, 60)
+      logStep('service.ready.afterNav', { ready })
     }
     if (!ready) {
+      await probeTab(tabId, 'service.notReady.probe')
       throw new Error('服务工单页面未就绪，请确认可点击左侧菜单「售后 → 服务工单」')
     }
     await injectServiceContent(tabId)
     for (let i = 0; i < 8; i++) {
       try {
         const res = await chrome.tabs.sendMessage(tabId, { type: 'AFTERSALE_COLLECT_SERVICE' })
+        logStep('service.collect', {
+          try: i,
+          ok: !!res?.ok,
+          error: res?.error,
+          tabCount: res?.tabs?.length,
+          orderCount: res?.orders?.length,
+          tabs: res?.tabs,
+        })
         if (res?.ok) return res
         throw new Error(res?.error || '服务工单采集失败')
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        if (i === 7) throw new Error(msg)
+        if (i === 7) {
+          await probeTab(tabId, 'service.collect.fail.probe')
+          throw new Error(msg)
+        }
         await injectServiceContent(tabId)
         await sleep(500)
       }
@@ -501,17 +683,22 @@ async function collectServiceOrders(tabId) {
       await clickDoudianMenu(tabId, 'workbench', true)
       await waitWorkbenchReady(tabId)
     } catch (e) {
-      console.warn('return to workbench failed', e)
+      if (currentRun) currentRun.err('service.returnWorkbench', e)
     }
   }
 }
 
 async function syncNow() {
   if (syncing) return { ok: false, error: '正在同步' }
+  const run = startRun('sync')
   const device = await getDevice()
   if (!device) return { ok: false, error: '尚未绑定店铺' }
   let tab = await findFxgTab()
-  if (!tab?.id) return { ok: false, error: '请先打开抖店后台（点「打开抖店工作台」即可）' }
+  logStep('sync.findTab', tab ? { id: tab.id, url: tab.url, discarded: tab.discarded, active: tab.active } : null)
+  if (!tab?.id) {
+    await uploadRun(run, { ok: false, error: '请先打开抖店后台（点「打开抖店工作台」即可）' })
+    return { ok: false, error: '请先打开抖店后台（点「打开抖店工作台」即可）' }
+  }
   tab = await ensureTabAwake(tab)
   await rememberFxgTab(tab.id)
   syncing = true
@@ -519,6 +706,7 @@ async function syncNow() {
     chrome.runtime.getPlatformInfo(() => {})
   }, 15000)
   try {
+    await probeTab(tab.id, 'sync.probe.start')
     await prepareWorkbench(tab.id)
     const collected = await collectFromTab(tab.id)
     let serviceOrders = []
@@ -528,6 +716,7 @@ async function syncNow() {
       serviceOrders = service.orders || []
     } catch (e) {
       serviceError = e instanceof Error ? e.message : String(e)
+      if (currentRun) currentRun.err('sync.service', e)
     }
     const payload = {
       platformShopId: collected.platformShopId || '',
@@ -536,6 +725,12 @@ async function syncNow() {
       tickets: collected.tickets || [],
     }
     if (!serviceError) payload.serviceOrders = serviceOrders
+    logStep('sync.upload', {
+      cards: payload.cards.length,
+      tickets: payload.tickets.length,
+      serviceOrders: serviceOrders.length,
+      serviceError,
+    })
     const data = await api('/plugin/sync', { auth: true, body: payload })
     const patch = { ...device }
     if (payload.platformShopId) patch.platformShopId = payload.platformShopId
@@ -547,7 +742,7 @@ async function syncNow() {
       [STORAGE.lastError]: serviceError,
       [STORAGE.lastSyncAt]: Date.now(),
     })
-    return {
+    const out = {
       ok: true,
       cardCount: data?.cardCount ?? payload.cards.length,
       ticketCount: data?.ticketCount ?? payload.tickets.length,
@@ -555,9 +750,17 @@ async function syncNow() {
       serviceError,
       lastSyncAt: data?.lastSyncAt || now,
     }
+    await uploadRun(run, {
+      ok: !serviceError,
+      error: serviceError,
+      meta: { cardCount: out.cardCount, ticketCount: out.ticketCount, serviceOrderCount: out.serviceOrderCount },
+    })
+    return out
   } catch (e) {
+    if (currentRun) currentRun.err('sync.fail', e)
     const msg = e instanceof Error ? e.message : String(e)
     await chrome.storage.local.set({ [STORAGE.lastError]: msg })
+    await uploadRun(run, { ok: false, error: msg })
     return { ok: false, error: msg }
   } finally {
     clearInterval(keepAlive)
@@ -577,52 +780,13 @@ async function bind(bindCode, apiBase) {
     pluginKey: data.pluginKey,
     pluginSecret: data.pluginSecret,
   })
-  await chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 })
-  await chrome.alarms.create(AUTO_SYNC_ALARM, { periodInMinutes: AUTO_SYNC_MINUTES })
-  await heartbeat()
   return data
-}
-
-async function ensureAlarms() {
-  const existing = await chrome.alarms.getAll()
-  const names = new Set(existing.map((a) => a.name))
-  if (!names.has(HEARTBEAT_ALARM)) {
-    await chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 })
-  }
-  if (!names.has(AUTO_SYNC_ALARM)) {
-    await chrome.alarms.create(AUTO_SYNC_ALARM, { periodInMinutes: AUTO_SYNC_MINUTES })
-  }
-}
-
-chrome.runtime.onInstalled.addListener(() => {
-  ensureAlarms()
-})
-
-chrome.runtime.onStartup.addListener(() => {
-  ensureAlarms()
-})
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === HEARTBEAT_ALARM) heartbeat()
-  if (alarm.name === AUTO_SYNC_ALARM) maybeAutoSync(AUTO_SYNC_MINUTES * 60 * 1000 - 30000)
-})
-
-async function maybeAutoSync(minIntervalMs = 60000) {
-  const device = await getDevice()
-  if (!device || syncing || opening) return
-  const tab = await findFxgTab()
-  if (!tab?.id) return
-  const extra = await chrome.storage.local.get([STORAGE.lastSyncAt])
-  const last = Number(extra[STORAGE.lastSyncAt] || 0)
-  if (Date.now() - last < minIntervalMs) return
-  return syncNow()
 }
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.status !== 'complete') return
   if (!isFxgUsable(tab)) return
   rememberFxgTab(tabId)
-  setTimeout(() => maybeAutoSync(60000), 8000)
 })
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -632,19 +796,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const [device, apiBase, extra] = await Promise.all([
         getDevice(),
         getApiBase(),
-        chrome.storage.local.get(['heartbeatError', STORAGE.lastSync, STORAGE.lastError]),
+        chrome.storage.local.get([STORAGE.lastSync, STORAGE.lastError, 'lastDiagRunId', 'lastDiagUpload']),
       ])
-      if (device) await ensureAlarms()
       reply({
         ok: true,
+        diagnostic: true,
         version: chrome.runtime.getManifest().version,
         bound: !!device,
         shopName: device?.shopName || '',
         platform: device?.platform || '',
-        online: !!device && !extra.heartbeatError,
-        heartbeatError: extra.heartbeatError || '',
+        online: !!device,
+        heartbeatError: '',
         lastSync: extra[STORAGE.lastSync] || '',
         lastSyncError: extra[STORAGE.lastError] || '',
+        lastDiagRunId: extra.lastDiagRunId || '',
+        lastDiagUpload: extra.lastDiagUpload || '',
         apiBase,
         apiBaseDisplay: displayApiBase(apiBase),
       })
@@ -666,8 +832,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
     if (msg?.type === 'AFTERSALE_UNBIND') {
       await setDevice(null)
-      await chrome.alarms.clear(HEARTBEAT_ALARM)
-      await chrome.alarms.clear(AUTO_SYNC_ALARM)
       reply({ ok: true })
       return
     }
@@ -680,7 +844,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       return
     }
     if (msg?.type === 'AFTERSALE_WORKBENCH_READY') {
-      maybeAutoSync(60000)
       reply({ ok: true })
     }
   })()

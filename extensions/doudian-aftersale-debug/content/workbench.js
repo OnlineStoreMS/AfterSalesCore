@@ -487,7 +487,19 @@ if (!window.__osmsWorkbenchInjected) {
   window.__osmsWorkbenchInjected = true
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'AFTERSALE_PING_WORKBENCH') {
-      sendResponse({ ok: true, ready: parseCards().length > 0 })
+      locateWorkbenchPage()
+      const cards = parseCards()
+      sendResponse({
+        ok: true,
+        ready: cards.length > 0,
+        diag: {
+          href: location.href,
+          iframeCount: document.querySelectorAll('iframe').length,
+          pageIsTop: pageDoc === document,
+          cardCount: cards.length,
+          cards: cards.slice(0, 24).map((c) => ({ group: c.groupName, label: c.cardLabel, count: c.count })),
+        },
+      })
       return
     }
     if (msg?.type !== 'AFTERSALE_COLLECT') return

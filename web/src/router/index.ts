@@ -80,6 +80,12 @@ const router = createRouter({
           meta: { title: '通知管理' },
         },
         {
+          path: 'plugin-debug-logs',
+          name: 'PluginDebugLogs',
+          component: () => import('../views/debug/PluginDebugLogs.vue'),
+          meta: { title: '插件诊断日志' },
+        },
+        {
           path: 'edge-devices',
           name: 'EdgeDevices',
           component: () => import('../views/edge/EdgeDeviceList.vue'),

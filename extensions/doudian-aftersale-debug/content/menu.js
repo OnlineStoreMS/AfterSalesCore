@@ -175,11 +175,20 @@ function alreadyThere(target) {
   return target.readyNeedles.some((n) => href.includes(n))
 }
 
+function menuDiag() {
+  return {
+    href: location.href,
+    iframeCount: document.querySelectorAll('iframe').length,
+    hasCards: hasWorkbenchCards(),
+    hasServiceTabs: hasServiceStatusTabs(),
+  }
+}
+
 async function clickMenu(key, force) {
   const target = MENU_TARGETS[key]
   if (!target) throw new Error(`未知菜单 ${key}`)
   if (alreadyThere(target)) {
-    return { ok: true, already: true, url: location.href, name: target.name }
+    return { ok: true, already: true, url: location.href, name: target.name, ...menuDiag() }
   }
   let item = findMenuItem(target)
   if (!item || !visible(item)) {
@@ -193,7 +202,7 @@ async function clickMenu(key, force) {
   const tries = target.name === '服务工单' ? 80 : 40
   for (let i = 0; i < tries; i++) {
     if (alreadyThere(target)) {
-      return { ok: true, url: location.href, name: target.name }
+      return { ok: true, url: location.href, name: target.name, clicks: i + 1, ...menuDiag() }
     }
     await sleep(250)
   }

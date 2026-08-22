@@ -27,7 +27,9 @@ function refresh() {
       boundBlock.hidden = true
       shopEl.textContent = ''
       syncEl.textContent = ''
-      setStatus(`未绑定 · v${st.version}`, 'warn')
+      const diagEl = document.getElementById('diag')
+      if (diagEl) diagEl.textContent = ''
+      setStatus(`诊断版未绑定 · v${st.version}`, 'warn')
       return
     }
     bindBlock.hidden = true
@@ -36,8 +38,13 @@ function refresh() {
     syncEl.textContent = st.lastSync
       ? `最近同步：${st.lastSync}${st.lastSyncError ? ` · ${st.lastSyncError}` : ''}`
       : '尚未同步'
-    if (st.online) setStatus(`已绑定 · 在线 · v${st.version}`, 'ok')
-    else setStatus(`已绑定 · ${st.heartbeatError || '心跳异常'} · v${st.version}`, 'warn')
+    const diagEl = document.getElementById('diag')
+    if (diagEl) {
+      diagEl.textContent = st.lastDiagRunId
+        ? `日志：${st.lastDiagRunId} · ${st.lastDiagUpload || '未上报'}`
+        : '日志：尚未上报'
+    }
+    setStatus(`诊断版已绑定 · 仅手动 · v${st.version}`, 'ok')
   })
 }
 

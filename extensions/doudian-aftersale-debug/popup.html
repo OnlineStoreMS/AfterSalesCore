@@ -2,14 +2,14 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <title>OSMS 抖店售后</title>
+    <title>OSMS 抖店售后诊断</title>
     <style>
       body {
         margin: 0;
-        min-width: 340px;
+        min-width: 360px;
         font: 13px/1.45 system-ui, sans-serif;
         color: #0f172a;
-        background: #f8fafc;
+        background: #fff7ed;
       }
       main { padding: 12px 14px 16px; }
       h1 { font-size: 14px; margin: 0 0 8px; }
@@ -19,32 +19,41 @@
       .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
       input, button {
         border-radius: 8px;
-        border: 1px solid #cbd5e1;
+        border: 1px solid #fdba74;
         padding: 6px 10px;
         font: inherit;
       }
       input { flex: 1; min-width: 0; }
       button {
         border: 0;
-        background: #2563eb;
+        background: #c2410c;
         color: #fff;
         cursor: pointer;
         white-space: nowrap;
       }
       button.secondary { background: #64748b; }
       button.danger { background: #dc2626; }
-      .hint { color: #64748b; font-size: 12px; margin-top: 8px; }
-      .block { margin-top: 12px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
-      label { display: block; font-size: 12px; color: #475569; margin-bottom: 4px; }
-      .meta { color: #475569; font-size: 12px; margin-top: 6px; }
+      .hint { color: #9a3412; font-size: 12px; margin-top: 8px; }
+      .block { margin-top: 12px; padding-top: 10px; border-top: 1px solid #fed7aa; }
+      label { display: block; font-size: 12px; color: #9a3412; margin-bottom: 4px; }
+      .meta { color: #7c2d12; font-size: 12px; margin-top: 6px; }
+      .banner {
+        background: #9a3412;
+        color: #fff;
+        padding: 6px 10px;
+        font-size: 12px;
+        margin: -12px -14px 12px;
+      }
     </style>
   </head>
   <body>
     <main>
-      <h1>OSMS 抖店售后工作台</h1>
+      <div class="banner">诊断版 · 仅手动同步 · 过程日志会上报云端临时目录 · 无定时任务</div>
+      <h1>OSMS 抖店售后【诊断】</h1>
       <div id="status" class="warn">读取中…</div>
       <div id="shop" class="meta"></div>
       <div id="sync" class="meta"></div>
+      <div id="diag" class="meta"></div>
 
       <div class="block">
         <label for="apiBase">售后管理地址</label>
@@ -60,7 +69,7 @@
           <input id="bindCode" placeholder="在售后管理店铺详情复制" maxlength="16" />
           <button type="button" id="bindBtn">绑定</button>
         </div>
-        <div class="hint">在售后管理添加抖店店铺后，把绑定码填到这里。一个插件对应一个店铺。</div>
+        <div class="hint">请先关掉正式插件，只加载本诊断版。绑定码与正式版相同。</div>
       </div>
 
       <div id="boundBlock" class="block" hidden>
@@ -69,7 +78,7 @@
           <button type="button" class="secondary" id="openBtn">打开抖店工作台</button>
           <button type="button" class="danger" id="unbindBtn">解除绑定</button>
         </div>
-        <div class="hint">点「打开抖店工作台」会复用已有抖店标签并切到售后工作台。同步时请保持该标签不要关掉。</div>
+        <div class="hint">每次打开/同步都会把步骤、页面探测和错误传到售后管理「插件诊断日志」。没有心跳、没有自动同步。</div>
       </div>
     </main>
     <script src="popup.js"></script>

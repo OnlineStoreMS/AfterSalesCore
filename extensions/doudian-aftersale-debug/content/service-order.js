@@ -369,7 +369,17 @@ if (!window.__osmsServiceOrderInjected) {
   window.__osmsServiceOrderInjected = true
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'AFTERSALE_PING_SERVICE') {
-      sendResponse({ ok: true, ready: servicePageReady() })
+      const tabs = locateServicePage()
+      sendResponse({
+        ok: true,
+        ready: servicePageReady(),
+        diag: {
+          href: location.href,
+          iframeCount: document.querySelectorAll('iframe').length,
+          pageIsTop: pageDoc === document,
+          tabs: tabs.map(({ el, ...rest }) => rest),
+        },
+      })
       return
     }
     if (msg?.type !== 'AFTERSALE_COLLECT_SERVICE') return
