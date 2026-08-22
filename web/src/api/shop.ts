@@ -45,6 +45,9 @@ export interface AftersaleTicket {
   reason: string
   status: string
   timeoutText?: string
+  timeoutAction?: string
+  deadlineAt?: string
+  remainSeconds?: number
   dispute?: string
   logistics?: string
   applyTime?: string

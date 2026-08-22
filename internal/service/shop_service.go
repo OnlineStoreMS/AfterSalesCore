@@ -352,6 +352,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 		if aid == "" {
 			continue
 		}
+		deadline, action, _ := ParseTimeout(strings.TrimSpace(t.TimeoutText), now)
 		tickets = append(tickets, model.AftersaleTicket{
 			PlatformAftersaleID: aid,
 			OrderNo:             strings.TrimSpace(t.OrderNo),
@@ -368,6 +369,8 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 			Reason:              strings.TrimSpace(t.Reason),
 			Status:              strings.TrimSpace(t.Status),
 			TimeoutText:         strings.TrimSpace(t.TimeoutText),
+			TimeoutAction:       action,
+			DeadlineAt:          deadline,
 			Dispute:             strings.TrimSpace(t.Dispute),
 			Logistics:           strings.TrimSpace(t.Logistics),
 			ApplyTime:           strings.TrimSpace(t.ApplyTime),
@@ -424,15 +427,21 @@ func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {
 	for _, c := range t.CardKeys {
 		keys = append(keys, c.CardKey)
 	}
-	return dto.TicketItem{
+	item := dto.TicketItem{
 		ID: t.ID, PlatformAftersaleID: t.PlatformAftersaleID, OrderNo: t.OrderNo,
 		ProductTitle: t.ProductTitle, ProductImage: t.ProductImage, SKU: t.SKU,
 		ProductTags: t.ProductTags, Tags: t.Tags,
 		Qty: t.Qty, BuyQty: t.BuyQty, PayAmount: t.PayAmount, RefundAmount: t.RefundAmount,
 		AftersaleType: t.AftersaleType, Reason: t.Reason, Status: t.Status,
-		TimeoutText: t.TimeoutText, Dispute: t.Dispute, Logistics: t.Logistics,
+		TimeoutText: t.TimeoutText, TimeoutAction: t.TimeoutAction,
+		RemainSeconds: remainSeconds(t.DeadlineAt, time.Now()),
+		Dispute:       t.Dispute, Logistics: t.Logistics,
 		ApplyTime: t.ApplyTime, CardKeys: keys, SyncedAt: formatTime(t.SyncedAt),
 	}
+	if t.DeadlineAt != nil {
+		item.DeadlineAt = t.DeadlineAt.UTC().Format(time.RFC3339)
+	}
+	return item
 }
 
 func hashSecret(secret string) string {

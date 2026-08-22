@@ -4,14 +4,16 @@ const STORAGE = {
   apiBase: 'aftersaleApiBase',
   lastSync: 'aftersaleLastSync',
   lastError: 'aftersaleLastError',
+  lastSyncAt: 'aftersaleLastSyncAt',
 }
 
 const DEFAULT_API_BASE = 'https://osms.zfcycle.com/apps/aftersales/api/v1'
 const HEARTBEAT_ALARM = 'aftersale-heartbeat'
+const AUTO_SYNC_ALARM = 'aftersale-autosync'
+const AUTO_SYNC_MINUTES = 5
 const WORKBENCH_MATCH = 'https://fxg.jinritemai.com/ffa/merchant-aftersale-workbench/*'
 
 let syncing = false
-let lastAutoSyncAt = 0
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
@@ -145,6 +147,7 @@ async function syncNow() {
     await chrome.storage.local.set({
       [STORAGE.lastSync]: now,
       [STORAGE.lastError]: '',
+      [STORAGE.lastSyncAt]: Date.now(),
     })
     return {
       ok: true,
@@ -175,31 +178,50 @@ async function bind(bindCode, apiBase) {
     pluginSecret: data.pluginSecret,
   })
   await chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 })
+  await chrome.alarms.create(AUTO_SYNC_ALARM, { periodInMinutes: AUTO_SYNC_MINUTES })
   await heartbeat()
   return data
 }
 
+async function ensureAlarms() {
+  const existing = await chrome.alarms.getAll()
+  const names = new Set(existing.map((a) => a.name))
+  if (!names.has(HEARTBEAT_ALARM)) {
+    await chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 })
+  }
+  if (!names.has(AUTO_SYNC_ALARM)) {
+    await chrome.alarms.create(AUTO_SYNC_ALARM, { periodInMinutes: AUTO_SYNC_MINUTES })
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 })
+  ensureAlarms()
+})
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureAlarms()
 })
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === HEARTBEAT_ALARM) heartbeat()
+  if (alarm.name === AUTO_SYNC_ALARM) maybeAutoSync(AUTO_SYNC_MINUTES * 60 * 1000 - 30000)
 })
 
-function maybeAutoSync() {
-  const now = Date.now()
-  if (now - lastAutoSyncAt < 60000) return
-  lastAutoSyncAt = now
-  getDevice().then((d) => {
-    if (d) syncNow()
-  })
+async function maybeAutoSync(minIntervalMs = 60000) {
+  const device = await getDevice()
+  if (!device || syncing) return
+  const tab = await findWorkbenchTab()
+  if (!tab?.id) return
+  const extra = await chrome.storage.local.get([STORAGE.lastSyncAt])
+  const last = Number(extra[STORAGE.lastSyncAt] || 0)
+  if (Date.now() - last < minIntervalMs) return
+  return syncNow()
 }
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.status !== 'complete') return
   if (!tab.url || !tab.url.includes('/ffa/merchant-aftersale-workbench/')) return
-  setTimeout(maybeAutoSync, 2500)
+  setTimeout(() => maybeAutoSync(60000), 2500)
 })
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -211,6 +233,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         getApiBase(),
         chrome.storage.local.get(['heartbeatError', STORAGE.lastSync, STORAGE.lastError]),
       ])
+      if (device) await ensureAlarms()
       reply({
         ok: true,
         version: chrome.runtime.getManifest().version,
@@ -243,6 +266,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'AFTERSALE_UNBIND') {
       await setDevice(null)
       await chrome.alarms.clear(HEARTBEAT_ALARM)
+      await chrome.alarms.clear(AUTO_SYNC_ALARM)
       reply({ ok: true })
       return
     }
@@ -251,7 +275,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       return
     }
     if (msg?.type === 'AFTERSALE_WORKBENCH_READY') {
-      maybeAutoSync()
+      maybeAutoSync(60000)
       reply({ ok: true })
     }
   })()

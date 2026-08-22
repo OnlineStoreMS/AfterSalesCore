@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
@@ -25,6 +25,8 @@ const pageSize = ref(20)
 const keyword = ref('')
 const activeCardKey = ref('')
 const lastSyncAt = ref('')
+const nowTick = ref(Date.now())
+let tickTimer = 0
 
 const groupedCards = computed(() => {
   const groups: { name: string; items: FilterCard[] }[] = []
@@ -64,7 +66,15 @@ async function loadData() {
   }
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+  tickTimer = window.setInterval(() => {
+    nowTick.value = Date.now()
+  }, 1000)
+})
+onUnmounted(() => {
+  if (tickTimer) window.clearInterval(tickTimer)
+})
 watch(shopId, () => {
   activeCardKey.value = ''
   keyword.value = ''
@@ -94,6 +104,35 @@ function statusLabel(s: string) {
 
 function urgentGroup(name: string) {
   return name === '紧急'
+}
+
+function remainSecondsOf(row: AftersaleTicket) {
+  void nowTick.value
+  if (row.deadlineAt) {
+    const t = Date.parse(row.deadlineAt)
+    if (!Number.isNaN(t)) return Math.max(0, Math.floor((t - Date.now()) / 1000))
+  }
+  return Math.max(0, Number(row.remainSeconds || 0))
+}
+
+function formatRemain(sec: number) {
+  if (sec <= 0) return '已超时'
+  const d = Math.floor(sec / 86400)
+  const h = Math.floor((sec % 86400) / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  const parts: string[] = []
+  if (d) parts.push(`${d}天`)
+  if (h) parts.push(`${h}小时`)
+  if (d || h || m) parts.push(`${m}分`)
+  if (!d && h < 6) parts.push(`${s}秒`)
+  return parts.join('') || '不足1分'
+}
+
+function remainClass(sec: number) {
+  if (sec <= 0 || sec < 6 * 3600) return 'danger'
+  if (sec < 24 * 3600) return 'warning'
+  return ''
 }
 </script>
 
@@ -182,10 +221,25 @@ function urgentGroup(name: string) {
             <div v-if="row.applyTime" class="sub">申请时间 {{ row.applyTime }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="售后状态" min-width="150">
+        <el-table-column label="售后状态" min-width="190">
           <template #default="{ row }">
             <div>{{ row.status || '—' }}</div>
-            <div v-if="row.timeoutText" class="timeout">{{ row.timeoutText }}</div>
+            <div
+              v-if="row.deadlineAt || row.timeoutText"
+              class="timeout"
+              :class="remainClass(remainSecondsOf(row))"
+            >
+              <template v-if="row.deadlineAt || row.remainSeconds">
+                <template v-if="remainSecondsOf(row) <= 0">
+                  已超时<span v-if="row.timeoutAction"> · {{ row.timeoutAction }}</span>
+                </template>
+                <template v-else>
+                  剩余 {{ formatRemain(remainSecondsOf(row)) }}
+                  <span v-if="row.timeoutAction">后{{ row.timeoutAction }}</span>
+                </template>
+              </template>
+              <template v-else>{{ row.timeoutText }}</template>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="dispute" label="纠纷仲裁" width="120" />
@@ -251,7 +305,9 @@ function urgentGroup(name: string) {
 .product .title { font-weight: 600; line-height: 1.4; }
 .tags { color: #69718c; font-size: 12px; margin-top: 4px; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
-.timeout { color: #e6a23c; font-size: 12px; margin-top: 2px; }
+.timeout { color: #e6a23c; font-size: 12px; margin-top: 2px; line-height: 1.4; }
+.timeout.warning { color: #e6a23c; font-weight: 600; }
+.timeout.danger { color: #f56c6c; font-weight: 700; }
 .logistics { margin: 0; font: inherit; white-space: pre-line; color: #303133; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

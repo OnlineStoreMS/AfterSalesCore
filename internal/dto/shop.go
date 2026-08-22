@@ -53,6 +53,9 @@ type TicketItem struct {
 	Reason              string   `json:"reason"`
 	Status              string   `json:"status"`
 	TimeoutText         string   `json:"timeoutText,omitempty"`
+	TimeoutAction       string   `json:"timeoutAction,omitempty"`
+	DeadlineAt          string   `json:"deadlineAt,omitempty"`
+	RemainSeconds       int      `json:"remainSeconds"`
 	Dispute             string   `json:"dispute,omitempty"`
 	Logistics           string   `json:"logistics,omitempty"`
 	ApplyTime           string   `json:"applyTime,omitempty"`

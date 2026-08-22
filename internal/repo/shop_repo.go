@@ -173,6 +173,10 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 			} else {
 				t.ID = existing.ID
 				t.CreatedAt = existing.CreatedAt
+				var deadline any
+				if t.DeadlineAt != nil {
+					deadline = *t.DeadlineAt
+				}
 				if err := tx.Model(&existing).Updates(map[string]any{
 					"order_no":       t.OrderNo,
 					"product_title":  t.ProductTitle,
@@ -188,6 +192,8 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 					"reason":         t.Reason,
 					"status":         t.Status,
 					"timeout_text":   t.TimeoutText,
+					"timeout_action": t.TimeoutAction,
+					"deadline_at":    deadline,
 					"dispute":        t.Dispute,
 					"logistics":      t.Logistics,
 					"apply_time":     t.ApplyTime,
