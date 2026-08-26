@@ -108,5 +108,6 @@ export async function batchDeleteEdgeRecords(ids: number[]) {
 }
 
 export async function downloadEdgeRecordVideo(id: number) {
-  await downloadAuthenticated(`/api/v1/admin/edge-records/${id}/video/download`, `video-${id}.webm`)
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
+  await downloadAuthenticated(`${base}api/v1/admin/edge-records/${id}/video/download`, `video-${id}.webm`)
 }
