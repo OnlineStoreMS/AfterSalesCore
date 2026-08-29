@@ -132,6 +132,10 @@ func (r *ShopRepo) ListTickets(f TicketListFilter) ([]model.AftersaleTicket, int
 		q = q.Where("id IN (?)",
 			r.db.Model(&model.AftersaleTicketCard{}).Select("ticket_id").Where("card_key = ?", f.CardKey),
 		)
+	} else {
+		q = q.Where("id IN (?)",
+			r.db.Model(&model.AftersaleTicketCard{}).Select("ticket_id"),
+		)
 	}
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
 		like := "%" + kw + "%"
@@ -228,7 +232,14 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 		if len(seenIDs) > 0 {
 			q = q.Where("ticket_id NOT IN ?", seenIDs)
 		}
-		return q.Delete(&model.AftersaleTicketCard{}).Error
+		if err := q.Delete(&model.AftersaleTicketCard{}).Error; err != nil {
+			return err
+		}
+		left := tx.Where("shop_id = ?", shop.ID)
+		if len(seenIDs) > 0 {
+			left = left.Where("id NOT IN ?", seenIDs)
+		}
+		return left.Delete(&model.AftersaleTicket{}).Error
 	})
 }
 

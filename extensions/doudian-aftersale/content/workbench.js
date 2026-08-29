@@ -328,6 +328,10 @@ function isCardSelected(el) {
   return /selected/i.test(String(el?.className || ''))
 }
 
+function findPageItem(n) {
+  return $(`.auxo-pagination-item-${n}`) || $(`li.auxo-pagination-item[title="${n}"]`)
+}
+
 function parseListTotal() {
   const el = $('.auxo-pagination-total-text')
   const m = textOf(el).match(/共\s*(\d+)\s*条/)
@@ -380,12 +384,22 @@ async function waitEmptyList() {
   }, 20, 150)
 }
 
+async function goToPage(n) {
+  if (currentPage() === n) return true
+  const item = findPageItem(n)
+  if (item) {
+    item.click()
+  } else {
+    const next = findNextPage()
+    if (!next) return false
+    next.click()
+  }
+  return !!(await waitUntil(() => (currentPage() === n ? true : null), 40, 200))
+}
+
 async function ensureFirstPage() {
   if (currentPage() <= 1) return
-  const first = $('.auxo-pagination-item-1') || $('li.auxo-pagination-item[title="1"]')
-  if (!first) return
-  first.click()
-  await waitUntil(() => (currentPage() <= 1 ? true : null), 15, 150)
+  await goToPage(1)
 }
 
 function cardTableState(card) {
@@ -439,14 +453,24 @@ async function collectCardTickets(card, zeroCard) {
   }
   add(await visibleTicketsWithLogistics())
   const expected = card.count || 0
-  const maxPages = Math.max(1, Math.ceil((expected || 10) / 10) + 1)
-  for (let p = 1; p < maxPages; p++) {
+  const pageSize = Math.max(all.length, 10)
+  const pages = Math.max(1, Math.ceil((expected || all.length || 10) / pageSize))
+  for (let p = 2; p <= pages; p++) {
     if (expected && all.length >= expected) break
-    const next = findNextPage()
-    if (!next) break
-    const prevIds = collectVisibleTickets().map((r) => r.platformAftersaleId)
-    next.click()
-    await waitForPageChange(prevIds)
+    const prevIds = all.map((r) => r.platformAftersaleId)
+    if (!(await goToPage(p))) {
+      const next = findNextPage()
+      if (!next) break
+      next.click()
+      await waitForPageChange(prevIds)
+    } else {
+      await waitUntil(() => {
+        const rows = collectVisibleTickets()
+        if (rows.some((r) => r.platformAftersaleId && !prevIds.includes(r.platformAftersaleId))) return true
+        if (p === pages && rows.length > 0) return true
+        return null
+      }, 25, 200)
+    }
     add(await visibleTicketsWithLogistics())
   }
   return all
