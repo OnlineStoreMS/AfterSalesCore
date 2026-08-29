@@ -305,7 +305,7 @@ func (s *NotificationService) RunPoll(ctx context.Context, onlyShopID uint64) (*
 		}
 		shopName := shopDisplayName(shop)
 		for _, scenario := range cfg.Scenarios {
-			if IsAggregateCard(scenario) {
+			if !scenarioAllowed(scenario, cards) {
 				continue
 			}
 			nSent, nSkip, nBar, barErr, err := s.sendScenario(ctx, cfg, shop, shopName, scenario, cards, notified, now)
@@ -369,48 +369,6 @@ func (s *NotificationService) sendScenario(
 				barcodeWarnings++
 				lastBarcodeError = err.Error()
 			}
-			if err := s.feishu.SendInteractiveCard(ctx, cfg.WebhookURL, cfg.Secret, card); err != nil {
-				return sent, skipped, barcodeWarnings, lastBarcodeError, err
-			}
-			sent++
-			s.markNotified(notified, key)
-		}
-		orders, err := s.shopRepo().ListServiceOrdersWithDeadline(shop.ID)
-		if err != nil {
-			return sent, skipped, barcodeWarnings, lastBarcodeError, err
-		}
-		for _, o := range orders {
-			urgency := urgencyOf(o.DeadlineAt, now)
-			if urgency == "" {
-				continue
-			}
-			key := notificationKey(shop.ID, "service", o.PlatformServiceID, scenario, urgency)
-			if notified[key] != "" {
-				skipped++
-				continue
-			}
-			card := buildServiceOrderCard(shopName, "时效紧迫", o, now)
-			if err := s.feishu.SendInteractiveCard(ctx, cfg.WebhookURL, cfg.Secret, card); err != nil {
-				return sent, skipped, barcodeWarnings, lastBarcodeError, err
-			}
-			sent++
-			s.markNotified(notified, key)
-		}
-		return sent, skipped, barcodeWarnings, lastBarcodeError, nil
-	}
-
-	if tab := serviceTabOf(scenario); tab != "" {
-		orders, err := s.shopRepo().ListServiceOrdersByTab(shop.ID, tab)
-		if err != nil {
-			return 0, 0, 0, "", err
-		}
-		for _, o := range orders {
-			key := notificationKey(shop.ID, "service", o.PlatformServiceID, scenario, "")
-			if notified[key] != "" {
-				skipped++
-				continue
-			}
-			card := buildServiceOrderCard(shopName, label, o, now)
 			if err := s.feishu.SendInteractiveCard(ctx, cfg.WebhookURL, cfg.Secret, card); err != nil {
 				return sent, skipped, barcodeWarnings, lastBarcodeError, err
 			}

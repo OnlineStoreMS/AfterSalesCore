@@ -1,4 +1,4 @@
-/** 抖店左侧菜单：售后 → 服务工单 / 售后工作台 */
+/** 抖店左侧菜单：售后 → 售后工作台 */
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
@@ -28,12 +28,6 @@ function siderRoot() {
 }
 
 const MENU_TARGETS = {
-  service: {
-    name: '服务工单',
-    hrefNeedles: ['/ffa/task-order/service'],
-    readyNeedles: ['/ffa/task-order/service'],
-    parent: '售后',
-  },
   workbench: {
     name: '售后工作台',
     hrefNeedles: ['/ffa/merchant-aftersale-workbench'],
@@ -146,28 +140,7 @@ function hasWorkbenchCards() {
   return false
 }
 
-function tabTexts() {
-  const texts = []
-  for (const doc of sameOriginDocs()) {
-    const nodes = doc.querySelectorAll('.auxo-tabs-tab, [role="tab"], [class*="tabs-tab"]')
-    for (const el of nodes) texts.push(textOf(el))
-  }
-  return texts
-}
-
-function hasServiceStatusTabs() {
-  const tabs = tabTexts()
-  const hit = (re) => tabs.some((t) => re.test(t))
-  return (
-    hit(/待处理/) &&
-    (hit(/处理中/) || hit(/已逾期/) || hit(/已完结/))
-  )
-}
-
 function alreadyThere(target) {
-  if (target.name === '服务工单') {
-    return hasServiceStatusTabs()
-  }
   if (target.name === '售后工作台') {
     return hasWorkbenchCards()
   }
@@ -190,7 +163,7 @@ async function clickMenu(key, force) {
     throw new Error(`未找到左侧菜单「${target.parent} → ${target.name}」`)
   }
   clickEl(item)
-  const tries = target.name === '服务工单' ? 80 : 40
+  const tries = 40
   for (let i = 0; i < tries; i++) {
     if (alreadyThere(target)) {
       return { ok: true, url: location.href, name: target.name }

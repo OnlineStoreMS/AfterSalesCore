@@ -54,48 +54,6 @@ func buildTicketCard(shopName, scenarioLabel, group string, t model.AftersaleTic
 	}
 }
 
-func buildServiceOrderCard(shopName, scenarioLabel string, o model.ServiceOrder, now time.Time) feishu.InteractiveCard {
-	urgency := urgencyOf(o.DeadlineAt, now)
-	var lines []string
-	if line := mdLine("店铺", shopName, "blue"); line != "" {
-		lines = append(lines, line)
-	}
-	if line := mdLine("订单号", o.OrderNo, ""); line != "" {
-		lines = append(lines, line)
-	}
-	if line := mdLine("工单", o.PlatformServiceID, ""); line != "" {
-		lines = append(lines, line)
-	}
-	if line := mdLine("类型", firstNonEmpty(o.BusinessType, o.OrderType), "purple"); line != "" {
-		lines = append(lines, line)
-	}
-	if line := mdLine("状态", firstNonEmpty(o.Status, o.StatusTab), ""); line != "" {
-		lines = append(lines, line)
-	}
-	if line := mdLine("买家", o.BuyerNick, ""); line != "" {
-		lines = append(lines, line)
-	}
-	if line := mdLine("商品", o.ProductTitle, ""); line != "" {
-		lines = append(lines, line)
-	}
-	if remain := formatRemainText(o.DeadlineAt, o.TimeoutText, o.TimeoutAction, now); remain != "" {
-		if line := mdLine("时效", remain, urgencyColor(urgency)); line != "" {
-			lines = append(lines, line)
-		}
-	}
-	if line := mdLine("说明", firstNonEmpty(o.Detail, o.TimeoutText), "grey"); line != "" {
-		lines = append(lines, line)
-	}
-	if line := mdLine("最近更新", firstNonEmpty(o.LastLog, o.LastLogTime), "grey"); line != "" {
-		lines = append(lines, line)
-	}
-	return feishu.InteractiveCard{
-		Title:    "售后通知 · " + scenarioLabel,
-		Template: scenarioCardTemplate(scenarioLabel, "服务工单", urgency),
-		Markdown: strings.Join(lines, "\n"),
-	}
-}
-
 func urgencyOf(deadline *time.Time, now time.Time) string {
 	if deadline == nil {
 		return ""
@@ -145,9 +103,6 @@ func scenarioCardTemplate(label, group, urgency string) string {
 	}
 	if strings.Contains(label, "待处理") || strings.Contains(label, "待商家") {
 		return "orange"
-	}
-	if group == "服务工单" {
-		return "wathet"
 	}
 	return "blue"
 }

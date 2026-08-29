@@ -187,7 +187,7 @@ onMounted(load)
         :closable="false"
         show-icon
         class="hint"
-        title="通过飞书群机器人 Webhook 推送售后工作台与服务工单提醒。配置按租户隔离；插件同步后会立即检查，同时按设定间隔定时复查时效升级。"
+        title="通过飞书群机器人 Webhook 推送售后工作台提醒。配置按租户隔离；插件同步后会立即检查，同时按设定间隔定时复查时效升级。"
       />
 
       <el-alert

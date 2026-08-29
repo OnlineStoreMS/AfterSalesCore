@@ -5,6 +5,7 @@ const STORAGE = {
   lastSync: 'aftersaleLastSync',
   lastError: 'aftersaleLastError',
   lastSyncAt: 'aftersaleLastSyncAt',
+  workLogs: 'aftersaleWorkLogs',
 }
 
 const DEFAULT_API_BASE = 'https://osms.zfcycle.com/apps/aftersales/api/v1'
@@ -12,10 +13,11 @@ const HEARTBEAT_ALARM = 'aftersale-heartbeat'
 const AUTO_SYNC_ALARM = 'aftersale-autosync'
 
 const WORKBENCH_URL = 'https://fxg.jinritemai.com/ffa/merchant-aftersale-workbench/aftersale/list'
-const SERVICE_ORDER_URL = 'https://fxg.jinritemai.com/ffa/task-order/service'
 
 let syncing = false
 let opening = false
+let lastHeartbeatError = ''
+let lastHeartbeatErrorAt = 0
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
@@ -41,160 +43,6 @@ async function injectFiles(tabId, files) {
 
 async function sendTop(tabId, msg) {
   return chrome.tabs.sendMessage(tabId, msg, { frameId: 0 })
-}
-
-function inspectServiceTabsFn() {
-  const textOf = (el) => String(el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim()
-  const texts = []
-  const walk = (doc) => {
-    if (!doc) return
-    for (const el of doc.querySelectorAll('.auxo-tabs-tab, [role="tab"]')) {
-      const t = textOf(el)
-      if (t) texts.push(t)
-    }
-    for (const iframe of doc.querySelectorAll('iframe')) {
-      try {
-        walk(iframe.contentDocument)
-      } catch {
-        /* cross-origin */
-      }
-    }
-  }
-  walk(document)
-  const ready =
-    (texts.some((t) => /待处理/.test(t)) &&
-      texts.some((t) => /处理中|已逾期|已完结/.test(t))) ||
-    (/task-order\/service/.test(String(location.href || '')) &&
-      texts.some((t) => /全部工单|待处理|已逾期/.test(t)))
-  return { ready, href: String(location.href || ''), tabs: texts.slice(0, 40) }
-}
-
-async function pageHasServiceTabs(tabId) {
-  try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      func: inspectServiceTabsFn,
-    })
-    return (results || []).map((r) => r.result).find((r) => r?.ready) || { ready: false }
-  } catch {
-    return { ready: false }
-  }
-}
-
-async function collectPendingInPage() {
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-  const textOf = (el) => String(el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim()
-  const chips = () =>
-    [...document.querySelectorAll('div, span, button')].filter(
-      (el) => /^(今天|近7天|近30天|近90天)$/.test(textOf(el)) && el.children.length <= 2,
-    )
-  const selectedChip = () => {
-    const cs = chips()
-    if (!cs.length) return ''
-    const min = Math.min(...cs.map((c) => String(c.className || '').split(/\s+/).filter(Boolean).length))
-    const sel = cs.find((c) => String(c.className || '').split(/\s+/).filter(Boolean).length > min)
-    return sel ? textOf(sel) : ''
-  }
-  const statusTabs = () => {
-    const out = []
-    const keys = new Set()
-    for (const el of document.querySelectorAll('.auxo-tabs-tab, [role="tab"]')) {
-      const t = textOf(el)
-      if (!t || /工单/.test(t)) continue
-      const m = t.match(/^(全部|待处理|处理中|已完结|已逾期)\s*[（(]?\s*(\d+)/)
-      if (!m || keys.has(m[1])) continue
-      keys.add(m[1])
-      out.push({
-        key: m[1],
-        count: Number(m[2]),
-        active: /active/.test(String(el.className || '')) || el.getAttribute('aria-selected') === 'true',
-        el,
-      })
-    }
-    return out
-  }
-  const parseRows = () => {
-    const table = document.querySelector('table')
-    if (!table) return []
-    const rows = []
-    for (const tr of table.querySelectorAll('tbody tr')) {
-      const cells = [...tr.children].map((td) => String(td.innerText || '').trim())
-      if (cells.length < 5) continue
-      const id = (String(cells[2] || '').match(/工单ID[:：]?\s*(\d+)/) || [])[1] || ''
-      if (!id) continue
-      const orderText = cells[0] || ''
-      const progressLines = String(cells[4] || '').split('\n').map((s) => s.trim()).filter(Boolean)
-      const lastLines = String(cells[6] || '').split('\n').map((s) => s.trim()).filter(Boolean)
-      rows.push({
-        platformServiceId: id,
-        orderNo: (orderText.match(/(\d{15,})/) || [])[1] || '',
-        productTitle:
-          orderText.split('\n').filter((l) => l && !/^\d{15,}$/.test(l) && l !== (orderText.match(/(\d{15,})/) || [])[1])[1] ||
-          '',
-        productImage: '',
-        productContent: (orderText.match(/总价.*/) || [])[0] || '',
-        buyerNick: cells[1] || '',
-        createSource: String(cells[2] || '').split('\n')[0] || '',
-        businessType: String(cells[3] || '').split('\n')[0] || '',
-        orderType: String(cells[3] || '').split('\n')[1] || '',
-        tags: orderText.split('\n').filter((l) => /进线|催|紧急|重复/.test(l)).join('、'),
-        status: progressLines[0] || '',
-        timeoutText: progressLines.slice(1).join(' '),
-        delayEndTime: 0,
-        delayTimeLeft: 0,
-        detail: '',
-        solution: cells[5] && cells[5] !== '_' ? cells[5] : '',
-        lastLog: lastLines[0] || '',
-        lastLogTime: lastLines[1] || '',
-        createTime: lastLines[1] || '',
-      })
-    }
-    return rows
-  }
-  if (!statusTabs().some((t) => t.key === '待处理')) {
-    return { ok: false, missing: true }
-  }
-  if (selectedChip() && selectedChip() !== '近30天') {
-    const el = chips().find((n) => textOf(n) === '近30天')
-    if (el) {
-      el.click()
-      for (let i = 0; i < 20; i++) {
-        await sleep(150)
-        if (selectedChip() === '近30天') break
-      }
-      await sleep(400)
-    }
-  }
-  const collectKey = async (key) => {
-    const tab = statusTabs().find((t) => t.key === key)
-    if (!tab || !tab.count) return []
-    if (!tab.active) {
-      tab.el.click()
-      for (let i = 0; i < 20; i++) {
-        await sleep(150)
-        if (statusTabs().find((x) => x.key === key)?.active) break
-      }
-      await sleep(400)
-    }
-    return parseRows().map((r) => ({ ...r, statusTab: key }))
-  }
-  const pending = await collectKey('待处理')
-  return JSON.parse(
-    JSON.stringify({
-      ok: true,
-      tabs: statusTabs().map(({ el, ...rest }) => rest),
-      orders: pending,
-    }),
-  )
-}
-
-async function runInAllFrames(tabId, func) {
-  const results = await chrome.scripting.executeScript({
-    target: { tabId, allFrames: true },
-    func,
-  })
-  const values = (results || []).map((r) => r.result).filter(Boolean)
-  return values.find((r) => r.ok) || values.find((r) => r.error) || values[0] || null
 }
 
 async function callPage(tabId, fnName, fnArgs = []) {
@@ -311,6 +159,57 @@ async function setDevice(device) {
   else await chrome.storage.local.set({ [STORAGE.device]: device })
 }
 
+async function readWorkLogs() {
+  const data = await chrome.storage.local.get([STORAGE.workLogs])
+  return Array.isArray(data[STORAGE.workLogs]) ? data[STORAGE.workLogs] : []
+}
+
+async function workSnapshot() {
+  const [device, extra, logs] = await Promise.all([
+    getDevice(),
+    chrome.storage.local.get(['heartbeatError', STORAGE.lastSync, STORAGE.lastError]),
+    readWorkLogs(),
+  ])
+  return {
+    bound: !!device,
+    shopName: device?.shopName || '',
+    online: !!device && !extra.heartbeatError,
+    syncing,
+    lastSync: extra[STORAGE.lastSync] || '',
+    lastSyncError: extra[STORAGE.lastError] || '',
+    logs,
+  }
+}
+
+async function broadcastWork(extra = {}) {
+  const snap = await workSnapshot()
+  const msg = { type: 'AFTERSALE_WORK_LOG', ...snap, ...extra }
+  const tabs = await chrome.tabs.query({ url: ['https://fxg.jinritemai.com/*'] })
+  for (const tab of tabs) {
+    if (!tab.id) continue
+    try {
+      await chrome.tabs.sendMessage(tab.id, msg)
+    } catch {
+      /* 页面尚未注入面板 */
+    }
+  }
+}
+
+async function workLog(msg, level = 'info') {
+  const line = { t: Date.now(), level, msg: String(msg || '') }
+  const logs = [...(await readWorkLogs()).slice(-39), line]
+  await chrome.storage.local.set({ [STORAGE.workLogs]: logs })
+  await broadcastWork({ logs })
+}
+
+async function injectPanel(tabId) {
+  try {
+    await injectFiles(tabId, ['content/panel.js'])
+  } catch (e) {
+    console.warn('inject panel failed', e)
+  }
+}
+
 async function api(path, { method = 'POST', body, auth = false } = {}) {
   const apiBase = await getApiBase()
   const headers = { 'Content-Type': 'application/json' }
@@ -351,13 +250,23 @@ async function heartbeat() {
       },
     })
     await chrome.storage.local.set({ heartbeatError: '' })
+    if (lastHeartbeatError) {
+      lastHeartbeatError = ''
+      await workLog('心跳已恢复', 'ok')
+    }
     if (data?.syncNow && !syncing) {
+      await workLog('服务端请求同步')
       await syncNow()
     }
     return { ok: true, data }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     await chrome.storage.local.set({ heartbeatError: msg })
+    if (msg !== lastHeartbeatError || Date.now() - lastHeartbeatErrorAt > 5 * 60 * 1000) {
+      lastHeartbeatError = msg
+      lastHeartbeatErrorAt = Date.now()
+      await workLog(`心跳失败：${msg}`, 'error')
+    }
     return { ok: false, error: msg }
   }
 }
@@ -426,99 +335,6 @@ async function installLogisticsExtractor(tabId) {
     })
   } catch (e) {
     console.warn('install logistics extractor failed', e)
-  }
-}
-
-function installPageServiceExtractor() {
-  if (window.__osmsServiceExtractorInstalled) return true
-  window.__osmsServiceExtractorInstalled = true
-  const fiberOf = (el) => {
-    if (!el) return null
-    const key = Object.keys(el).find(
-      (k) => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'),
-    )
-    return key ? el[key] : null
-  }
-  const recordOf = (el) => {
-    let n = fiberOf(el)
-    for (let i = 0; i < 24 && n; i++) {
-      const p = n.memoizedProps || n.pendingProps
-      if (p && p.record) return p.record
-      n = n.return
-    }
-    return null
-  }
-  const serialize = (rec) => {
-    if (!rec) return null
-    const os = rec.orderService || {}
-    const oi = rec.orderInfo || {}
-    const ui = rec.userInfo || {}
-    const log = rec.lastLogInfo || {}
-    const id = String(os.service_id || rec.mixTaskOrderId || '')
-    if (!id) return null
-    const tags = Array.isArray(rec.tagList)
-      ? rec.tagList.map((t) => t?.tagName).filter(Boolean).join('、')
-      : ''
-    return {
-      platformServiceId: id,
-      orderNo: String(os.order_id || oi.orderId || ''),
-      productTitle: String(oi.orderTitle || ''),
-      productImage: String(oi.img || ''),
-      productContent: String(oi.orderContent || ''),
-      buyerNick: String(ui.userName || ''),
-      createSource: String(rec.createSourceDesc || ''),
-      businessType: String(rec.taskOrderBusinessTypeDesc || ''),
-      orderType: String(rec.mixTaskOrderTypeDesc || ''),
-      tags,
-      status: String(os.service_type_desc || ''),
-      timeoutText: '',
-      delayEndTime: Number(os.delay_end_time || 0),
-      delayTimeLeft: Number(os.delay_time_left || 0),
-      detail: String(os.detail || ''),
-      solution: String(os.deal_suggest || ''),
-      lastLog: String(log.lastLogContent || ''),
-      lastLogTime: String(log.lastLogTime || ''),
-      createTime: String(rec.createTimeDesc || ''),
-      rawJson: JSON.stringify({
-        service_id: id,
-        delay_end_time: os.delay_end_time,
-        delay_time_left: os.delay_time_left,
-        service_status: os.service_status,
-        service_type: os.service_type,
-      }),
-    }
-  }
-  const collectRows = () => {
-    const rows = []
-    document.querySelectorAll('table tbody tr').forEach((tr) => {
-      const rec = serialize(recordOf(tr))
-      if (!rec) return
-      const cells = Array.from(tr.children).map((td) => String(td.innerText || '').trim())
-      if (cells.length >= 5) {
-        const progressLines = String(cells[4] || '').split('\n').map((s) => s.trim()).filter(Boolean)
-        if (!rec.status) rec.status = progressLines[0] || rec.status
-        if (!rec.timeoutText) rec.timeoutText = progressLines.slice(1).join(' ')
-        if ((!rec.solution || rec.solution === '_') && cells[5] && cells[5] !== '_') rec.solution = cells[5]
-      }
-      rows.push(rec)
-    })
-    return rows
-  }
-  document.addEventListener('osms-service-need-rows', () => {
-    document.dispatchEvent(new CustomEvent('osms-service-rows', { detail: collectRows() }))
-  })
-  return true
-}
-
-async function installServiceExtractor(tabId) {
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      world: 'MAIN',
-      func: installPageServiceExtractor,
-    })
-  } catch (e) {
-    console.warn('install service extractor failed', e)
   }
 }
 
@@ -612,6 +428,7 @@ async function waitWorkbenchReady(tabId, tries = 75) {
 async function prepareWorkbench(tabId) {
   try {
     await injectMenu(tabId)
+    await injectPanel(tabId)
   } catch (e) {
     console.warn('inject menu.js failed', e)
   }
@@ -638,106 +455,50 @@ async function openWorkbenchTab() {
       tab = await waitTabComplete(tab.id)
     }
     await rememberFxgTab(tab.id)
+    await workLog('正在打开售后工作台')
     await prepareWorkbench(tab.id)
+    await workLog('已打开售后工作台', 'ok')
     return { ok: true }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    const msg = e instanceof Error ? e.message : String(e)
+    await workLog(`打开工作台失败：${msg}`, 'error')
+    return { ok: false, error: msg }
   } finally {
     opening = false
-  }
-}
-
-async function waitServiceReady(tabId, tries = 40) {
-  for (let i = 0; i < tries; i++) {
-    try {
-      if ((await pageHasServiceTabs(tabId)).ready) return true
-    } catch {
-      /* 切页过程中探测可能失败 */
-    }
-    await sleep(400)
-  }
-  return false
-}
-
-async function collectServiceOrders(tabId, { skipReturn } = {}) {
-  try {
-    const already = await pageHasServiceTabs(tabId)
-    if (!already.ready) {
-      try {
-        await clickDoudianMenu(tabId, 'service')
-      } catch (e) {
-        console.warn('click service menu failed', e)
-      }
-    }
-    let ready = await waitServiceReady(tabId, 40)
-    if (!ready) {
-      const tab = await chrome.tabs.get(tabId)
-      if (!String(tab.url || '').includes('/ffa/task-order/service')) {
-        await chrome.tabs.update(tabId, { url: SERVICE_ORDER_URL })
-        await sleep(2500)
-      }
-      ready = await waitServiceReady(tabId, 40)
-    }
-    if (!ready) {
-      throw new Error('服务工单页面未就绪，请打开左侧「售后 → 服务工单」')
-    }
-    const res = await runInAllFrames(tabId, collectPendingInPage)
-    if (res?.ok) return res
-    throw new Error(res?.error || '未读到待处理列表')
-  } finally {
-    if (!skipReturn) {
-      try {
-        await clickDoudianMenu(tabId, 'workbench')
-        await waitWorkbenchReady(tabId)
-      } catch (e) {
-        console.warn('return to workbench failed', e)
-      }
-    }
   }
 }
 
 async function syncNow() {
   if (syncing) return { ok: false, error: '正在同步' }
   const device = await getDevice()
-  if (!device) return { ok: false, error: '尚未绑定店铺' }
+  if (!device) {
+    await workLog('尚未绑定店铺', 'error')
+    return { ok: false, error: '尚未绑定店铺' }
+  }
   let tab = await findFxgTab()
-  if (!tab?.id) return { ok: false, error: '请先打开抖店后台（点「打开抖店工作台」即可）' }
+  if (!tab?.id) {
+    await workLog('未找到抖店标签，请先打开抖店工作台', 'error')
+    return { ok: false, error: '请先打开抖店后台（点「打开抖店工作台」即可）' }
+  }
   tab = await ensureTabAwake(tab)
   await rememberFxgTab(tab.id)
   syncing = true
+  await broadcastWork()
   const keepAlive = setInterval(() => {
     chrome.runtime.getPlatformInfo(() => {})
   }, 15000)
   try {
-    let serviceOrders = []
-    let serviceError = ''
-    const alreadyService = await pageHasServiceTabs(tab.id)
-    if (alreadyService.ready) {
-      try {
-        const service = await collectServiceOrders(tab.id, { skipReturn: true })
-        serviceOrders = service.orders || []
-      } catch (e) {
-        serviceError = e instanceof Error ? e.message : String(e)
-      }
-    }
+    await workLog('开始同步售后工作台')
     await prepareWorkbench(tab.id)
+    await workLog('正在采集卡片与售后单')
     const collected = await collectFromTab(tab.id)
-    if (!alreadyService.ready || serviceError) {
-      try {
-        const service = await collectServiceOrders(tab.id)
-        serviceOrders = service.orders || []
-        serviceError = ''
-      } catch (e) {
-        serviceError = e instanceof Error ? e.message : String(e)
-      }
-    }
     const payload = {
       platformShopId: collected.platformShopId || '',
       platformShopName: collected.platformShopName || '',
       cards: collected.cards || [],
       tickets: collected.tickets || [],
     }
-    if (!serviceError) payload.serviceOrders = serviceOrders
+    await workLog(`已采集 ${payload.cards.length} 张卡片、${payload.tickets.length} 条售后单，正在上报`)
     const data = await api('/plugin/sync', { auth: true, body: payload })
     const patch = { ...device }
     if (payload.platformShopId) patch.platformShopId = payload.platformShopId
@@ -746,24 +507,27 @@ async function syncNow() {
     const now = new Date().toLocaleString()
     await chrome.storage.local.set({
       [STORAGE.lastSync]: now,
-      [STORAGE.lastError]: serviceError,
+      [STORAGE.lastError]: '',
       [STORAGE.lastSyncAt]: Date.now(),
     })
+    const cardCount = data?.cardCount ?? payload.cards.length
+    const ticketCount = data?.ticketCount ?? payload.tickets.length
+    await workLog(`同步完成：卡片 ${cardCount} / 售后单 ${ticketCount}`, 'ok')
     return {
       ok: true,
-      cardCount: data?.cardCount ?? payload.cards.length,
-      ticketCount: data?.ticketCount ?? payload.tickets.length,
-      serviceOrderCount: data?.serviceOrderCount ?? serviceOrders.length,
-      serviceError,
+      cardCount,
+      ticketCount,
       lastSyncAt: data?.lastSyncAt || now,
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     await chrome.storage.local.set({ [STORAGE.lastError]: msg })
+    await workLog(`同步失败：${msg}`, 'error')
     return { ok: false, error: msg }
   } finally {
     clearInterval(keepAlive)
     syncing = false
+    await broadcastWork()
   }
 }
 
@@ -781,6 +545,7 @@ async function bind(bindCode, apiBase) {
   })
   await chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 })
   await chrome.alarms.clear(AUTO_SYNC_ALARM)
+  await workLog(`已绑定店铺：${data.shopName || data.shopId}`, 'ok')
   await heartbeat()
   return data
 }
@@ -812,6 +577,7 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.status !== 'complete') return
   if (!isFxgUsable(tab)) return
   rememberFxgTab(tabId)
+  injectPanel(tabId)
 })
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -824,16 +590,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         chrome.storage.local.get(['heartbeatError', STORAGE.lastSync, STORAGE.lastError]),
       ])
       if (device) await ensureAlarms()
+      const snap = await workSnapshot()
       reply({
         ok: true,
         version: chrome.runtime.getManifest().version,
-        bound: !!device,
-        shopName: device?.shopName || '',
+        bound: snap.bound,
+        shopName: snap.shopName,
         platform: device?.platform || '',
-        online: !!device && !extra.heartbeatError,
+        online: snap.online,
         heartbeatError: extra.heartbeatError || '',
-        lastSync: extra[STORAGE.lastSync] || '',
-        lastSyncError: extra[STORAGE.lastError] || '',
+        lastSync: snap.lastSync,
+        lastSyncError: snap.lastSyncError,
+        syncing: snap.syncing,
+        logs: snap.logs,
         apiBase,
         apiBaseDisplay: displayApiBase(apiBase),
       })
@@ -857,6 +626,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       await setDevice(null)
       await chrome.alarms.clear(HEARTBEAT_ALARM)
       await chrome.alarms.clear(AUTO_SYNC_ALARM)
+      await workLog('已解除绑定')
+      reply({ ok: true })
+      return
+    }
+    if (msg?.type === 'AFTERSALE_CLEAR_WORKLOG') {
+      await chrome.storage.local.set({ [STORAGE.workLogs]: [] })
+      await workLog('已清除工作记录')
       reply({ ok: true })
       return
     }

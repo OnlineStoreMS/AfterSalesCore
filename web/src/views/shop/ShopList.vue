@@ -129,7 +129,7 @@ async function handleRequestSync(row: MarketplaceShop) {
       </template>
 
       <p class="hint">
-        新增店铺后生成绑定码。抖店插件安装后填入售后管理地址和绑定码，即可把售后工作台卡片、售后单与待处理服务工单同步到这里。
+        新增店铺后生成绑定码。抖店插件安装后填入售后管理地址和绑定码，即可把售后工作台卡片与售后单同步到这里。
       </p>
 
       <el-table :data="tableData" stripe border>

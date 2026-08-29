@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "OSMS 抖店售后工作台",
-  "version": "1.2.13",
-  "description": "采集抖店售后工作台与服务工单，同步到售后管理。",
+  "version": "1.2.15",
+  "description": "采集抖店售后工作台，同步到售后管理。",
   "permissions": ["storage", "tabs", "alarms", "scripting"],
   "host_permissions": [
     "https://fxg.jinritemai.com/*",
@@ -26,7 +26,7 @@
       "matches": [
         "https://fxg.jinritemai.com/ffa/*"
       ],
-      "js": ["content/menu.js"],
+      "js": ["content/menu.js", "content/panel.js"],
       "run_at": "document_idle"
     },
     {
@@ -34,13 +34,6 @@
         "https://fxg.jinritemai.com/ffa/merchant-aftersale-workbench/*"
       ],
       "js": ["content/workbench.js"],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://fxg.jinritemai.com/ffa/task-order/service*"
-      ],
-      "js": ["content/service-order.js"],
       "run_at": "document_idle"
     }
   ]

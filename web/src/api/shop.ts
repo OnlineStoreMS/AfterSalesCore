@@ -57,37 +57,6 @@ export interface AftersaleTicket {
   syncedAt: string
 }
 
-export interface ServiceOrder {
-  id: number
-  platformServiceId: string
-  orderNo: string
-  productTitle: string
-  productImage?: string
-  productContent?: string
-  buyerNick?: string
-  createSource?: string
-  businessType?: string
-  orderType?: string
-  tags?: string
-  statusTab: string
-  status: string
-  timeoutText?: string
-  timeoutAction?: string
-  deadlineAt?: string
-  remainSeconds?: number
-  detail?: string
-  solution?: string
-  lastLog?: string
-  lastLogTime?: string
-  createTime?: string
-  syncedAt: string
-}
-
-export interface ServiceTabCount {
-  statusTab: string
-  count: number
-}
-
 export interface ShopWorkbench {
   shop: MarketplaceShop
   cards: FilterCard[]
@@ -154,19 +123,4 @@ export async function fetchShopTickets(id: number, params?: {
   pageSize?: number
 }) {
   return unwrap<PageData<AftersaleTicket>>(await client.get(`/shops/${id}/tickets`, { params }))
-}
-
-export async function fetchShopServiceOrders(id: number, params?: {
-  statusTab?: string
-  keyword?: string
-  page?: number
-  pageSize?: number
-}) {
-  return unwrap<{
-    list: ServiceOrder[]
-    tabs: ServiceTabCount[]
-    total: number
-    page: number
-    pageSize: number
-  }>(await client.get(`/shops/${id}/service-orders`, { params }))
 }

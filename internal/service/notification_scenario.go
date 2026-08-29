@@ -8,13 +8,11 @@ import (
 )
 
 const (
-	ScenarioUrgent         = "urgent"
-	ScenarioServicePending = "service:待处理"
+	ScenarioUrgent = "urgent"
 )
 
 var fixedScenarioOptions = []dto.ScenarioOption{
 	{Key: ScenarioUrgent, Label: "时效紧迫", Group: "时效"},
-	{Key: ScenarioServicePending, Label: "待处理", Group: "服务工单"},
 }
 
 func IsAggregateCard(label string) bool {
@@ -106,13 +104,6 @@ func scenarioGroup(key string, cards []model.AftersaleFilterCard) string {
 		if c.CardKey == key {
 			return c.GroupName
 		}
-	}
-	return ""
-}
-
-func serviceTabOf(scenario string) string {
-	if strings.HasPrefix(scenario, "service:") {
-		return strings.TrimPrefix(scenario, "service:")
 	}
 	return ""
 }
