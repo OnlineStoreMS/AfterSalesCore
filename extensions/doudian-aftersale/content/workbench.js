@@ -269,11 +269,16 @@ function parseDataRow(tr, headers, headerInfo) {
   const afterText = textOf(afterCell)
   const statusText = (statusCell?.innerText || '').trim()
   const statusLines = statusText.split('\n').map((s) => s.trim()).filter(Boolean)
-  const logisticsRaw = (logisticsCell?.innerText || '')
+  let logisticsRaw = (logisticsCell?.innerText || '')
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)
     .join('\n')
+  const rowText = tr.innerText || ''
+  if (!logisticsRaw.includes('已退回') && rowText.includes('已退回')) {
+    const extra = pick(rowText, /(订单发货[^\n]*已退回|[^\n]*已退回)/) || '已退回'
+    logisticsRaw = [logisticsRaw, extra].filter(Boolean).join('\n')
+  }
 
   const applyQty = Number(pick(afterText, /申请件数\s*(\d+)/) || 0)
   const buyQty = Number(pick(orderText, /购买件数\s*(\d+)/) || 0)
@@ -720,6 +725,73 @@ function isReturnedOutbound(ticket) {
   return String(ticket?.logistics || '').includes('已退回')
 }
 
+function hasShipStatus(text) {
+  return /\d+\s*\/\s*\d+\s*已/.test(String(text || ''))
+}
+
+function logisticsFilledCount() {
+  return collectVisibleTickets().filter((t) => hasShipStatus(t.logistics)).length
+}
+
+function tableScroller() {
+  const table = workbenchTable()
+  if (!table) return null
+  return (
+    table.closest('.aurora-table-body, .auxo-table-body') ||
+    table.parentElement?.querySelector('.aurora-table-body, .auxo-table-body') ||
+    table.closest('[class*="table-body"]') ||
+    table.parentElement
+  )
+}
+
+async function scrollWorkbenchTable() {
+  const scroller = tableScroller()
+  if (!scroller) return
+  const view = scroller.clientHeight || 400
+  const max = Math.max(scroller.scrollHeight || 0, workbenchTable()?.scrollHeight || 0)
+  for (let y = 0; y <= max + view; y += Math.max(180, Math.floor(view * 0.65))) {
+    scroller.scrollTop = y
+    await sleep(400)
+  }
+  scroller.scrollTop = 0
+  await sleep(600)
+}
+
+function returnedVisibleCount() {
+  return Math.max(
+    collectVisibleTickets().filter(isReturnedOutbound).length,
+    countVisibleReturnedRows(),
+  )
+}
+
+async function waitReturnListReady(expected) {
+  const pageSize = currentPageSize() || 10
+  const needRows = expected > 0 ? Math.min(expected, pageSize) : 0
+  await waitUntil(() => {
+    const rows = collectVisibleTickets()
+    if (needRows && rows.length < needRows) return null
+    const filled = logisticsFilledCount()
+    if (rows.length && filled < Math.ceil(rows.length * 0.85)) return null
+    return true
+  }, 50, 500)
+  await sleep(800)
+  await scrollWorkbenchTable()
+  const deadline = Date.now() + 22000
+  let last = -1
+  let stable = 0
+  while (Date.now() < deadline) {
+    const n = returnedVisibleCount()
+    if (n > 0) {
+      if (n === last) stable += 1
+      else stable = 0
+      last = n
+      if (stable >= 2) return n
+    }
+    await sleep(700)
+  }
+  return returnedVisibleCount()
+}
+
 function ticketListFingerprint() {
   const rows = collectVisibleTickets()
   return {
@@ -746,8 +818,8 @@ function closeOpenSelects() {
 
 async function waitListSettled() {
   let last = `${parseListTotal()}|${visibleHeaderCount()}`
-  for (let i = 0; i < 10; i++) {
-    await sleep(220)
+  for (let i = 0; i < 12; i++) {
+    await sleep(400)
     const cur = `${parseListTotal()}|${visibleHeaderCount()}`
     if (cur === last && visibleHeaderCount() >= 0) return parseListTotal()
     last = cur
@@ -917,11 +989,20 @@ async function readReturnLogistics(ticket) {
 }
 
 async function resetAftersaleFilters() {
+  const prevTotal = parseListTotal()
+  const hadCard = parseCards().some((c) => isCardSelected(c.el))
   const reset = findButton(/重\s*置/)
   if (reset) {
     fireClick(reset)
-    await waitUntil(() => (parseCards().some((c) => isCardSelected(c.el)) ? null : true), 20, 150)
+    await waitUntil(() => {
+      if (parseCards().some((c) => isCardSelected(c.el))) return null
+      const t = parseListTotal()
+      if (t == null) return null
+      if (hadCard && prevTotal != null && t === prevTotal) return null
+      return true
+    }, 40, 200)
     await waitListSettled()
+    await sleep(800)
     return
   }
   await pickSelectByLabel('售后类型', '全部')
@@ -934,11 +1015,15 @@ async function resetAftersaleFilters() {
 
 async function applyReturnFilters() {
   await resetAftersaleFilters()
+  await sleep(1200)
   await clearSelectedCards()
   await waitListSettled()
+  await sleep(800)
   const before = ticketListFingerprint()
   const typeOk = await pickSelectByLabel('售后类型', '已发货退款')
+  await sleep(400)
   const statusOk = await pickSelectByLabel('售后状态', '退款成功')
+  await sleep(400)
   if (!typeOk || !statusOk) {
     throw new Error('无法设置售后类型/售后状态筛选')
   }
@@ -946,10 +1031,12 @@ async function applyReturnFilters() {
   await waitUntil(() => {
     const open = queryAnyAll('.auxo-select-dropdown, .aurora-select-dropdown').some(isShown)
     return open ? null : true
-  }, 15, 100)
+  }, 15, 150)
+  await sleep(500)
   const query = findButton(/查\s*询/)
   if (!query) throw new Error('未找到查询按钮')
   fireClick(query)
+  await sleep(1500)
   const ready = await waitUntil(() => {
     const type = currentSelectValue('售后类型')
     const status = currentSelectValue('售后状态')
@@ -1026,12 +1113,14 @@ async function collectVisibleReturnItems(seen) {
 async function collectReturnPackages() {
   locateWorkbenchPage()
   closeLogisticsDrawer()
+  await sleep(3000)
   await applyReturnFilters()
   const expected = parseListTotal() ?? 0
   if (expected > 0) {
-    await setLargestPageSize(expected)
     await ensureFirstPage()
     await waitListSettled()
+    await waitReturnListReady(expected)
+    await sleep(800)
   }
   const pageSize = currentPageSize() || 10
   const pageCount = expected > 0 ? Math.max(1, Math.ceil(expected / pageSize)) : 1
@@ -1039,6 +1128,14 @@ async function collectReturnPackages() {
   const seenTickets = new Set()
   const items = []
   let pages = 0
+
+  async function collectCurrentPage() {
+    for (const t of collectVisibleTickets()) {
+      if (t.platformAftersaleId) seenTickets.add(t.platformAftersaleId)
+    }
+    items.push(...(await collectVisibleReturnItems(seenReturned)))
+  }
+
   for (let p = 1; p <= Math.min(pageCount, 30); p++) {
     if (p > 1) {
       const prevIds = collectVisibleTickets().map((r) => r.platformAftersaleId)
@@ -1050,12 +1147,10 @@ async function collectReturnPackages() {
         await waitForPageChange(prevIds)
       }
       await waitListSettled()
+      await waitReturnListReady(expected)
     }
     pages++
-    for (const t of collectVisibleTickets()) {
-      if (t.platformAftersaleId) seenTickets.add(t.platformAftersaleId)
-    }
-    items.push(...(await collectVisibleReturnItems(seenReturned)))
+    await collectCurrentPage()
     if (!findNextPage()) break
   }
   while (expected && seenTickets.size < expected && findNextPage() && pages < 30) {
@@ -1064,15 +1159,21 @@ async function collectReturnPackages() {
     fireClick(next)
     await waitForPageChange(prevIds)
     await waitListSettled()
+    await waitReturnListReady(expected)
     pages++
-    for (const t of collectVisibleTickets()) {
-      if (t.platformAftersaleId) seenTickets.add(t.platformAftersaleId)
-    }
-    items.push(...(await collectVisibleReturnItems(seenReturned)))
+    await collectCurrentPage()
+  }
+  if (!items.length && expected >= 5) {
+    await scrollWorkbenchTable()
+    await sleep(1500)
+    await collectCurrentPage()
   }
   const leftoverReturned = countVisibleReturnedRows()
   if (!items.length && leftoverReturned) {
     throw new Error(`页面有 ${leftoverReturned} 条已退回，但未解析到售后单`)
+  }
+  if (!items.length && expected >= 10) {
+    throw new Error(`已发货退款/退款成功 ${expected} 条已出现，但物流列未见已退回，疑似未加载完`)
   }
   await resetAftersaleFilters()
   return {

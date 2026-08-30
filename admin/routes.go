@@ -39,6 +39,8 @@ func RegisterRoutes(
 	g.DELETE("/edge-devices/:id", edgeDeviceH.Delete)
 	g.POST("/edge-devices/:id/probe", edgeDeviceH.Probe)
 
+	g.GET("/plugin-settings", shopH.GetPluginSetting)
+	g.PUT("/plugin-settings", shopH.SavePluginSetting)
 	g.GET("/shops", shopH.List)
 	g.POST("/shops", shopH.Create)
 	g.GET("/shops/:id", shopH.Get)

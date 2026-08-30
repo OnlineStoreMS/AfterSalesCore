@@ -6,11 +6,14 @@ import { CopyDocument, Plus, Shop } from '@element-plus/icons-vue'
 import {
   PLATFORM_OPTIONS,
   PLUGIN_STATUS_MAP,
+  PLUGIN_SYNC_OPTIONS,
   createShop,
   deleteShop,
+  fetchPluginSetting,
   fetchShops,
   resetShopBind,
   requestShopSync,
+  savePluginSetting,
   updateShop,
   type MarketplaceShop,
   type ShopPlatform,
@@ -22,15 +25,32 @@ const tableData = ref<MarketplaceShop[]>([])
 const dialogVisible = ref(false)
 const editing = ref<MarketplaceShop | null>(null)
 const form = ref({ name: '', platform: 'doudian' as ShopPlatform, remark: '' })
+const syncMinutes = ref(30)
+const savingSync = ref(false)
 
 async function loadData() {
   loading.value = true
   try {
-    tableData.value = await fetchShops()
+    const [shops, setting] = await Promise.all([fetchShops(), fetchPluginSetting()])
+    tableData.value = shops
+    syncMinutes.value = setting.pluginSyncIntervalMin || 30
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function saveSyncInterval() {
+  savingSync.value = true
+  try {
+    const setting = await savePluginSetting({ pluginSyncIntervalMin: syncMinutes.value })
+    syncMinutes.value = setting.pluginSyncIntervalMin
+    ElMessage.success('已保存，插件下次心跳后按新间隔自动同步')
+  } catch (e) {
+    ElMessage.error((e as Error).message || '保存失败')
+  } finally {
+    savingSync.value = false
   }
 }
 
@@ -131,6 +151,19 @@ async function handleRequestSync(row: MarketplaceShop) {
       <p class="hint">
         新增店铺后生成绑定码。抖店插件安装后填入售后管理地址和绑定码，即可把售后工作台卡片与售后单同步到这里。
       </p>
+      <div class="sync-setting">
+        <span class="sync-label">插件自动同步</span>
+        <el-select v-model="syncMinutes" style="width: 160px">
+          <el-option
+            v-for="opt in PLUGIN_SYNC_OPTIONS"
+            :key="opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
+        <el-button type="primary" plain :loading="savingSync" @click="saveSyncInterval">保存间隔</el-button>
+        <span class="sync-tip">到点由插件心跳触发；店铺上的「请求同步」仍会马上采一次。</span>
+      </div>
 
       <el-table :data="tableData" stripe border>
         <el-table-column prop="name" label="店铺" min-width="180">
@@ -216,7 +249,10 @@ async function handleRequestSync(row: MarketplaceShop) {
 
 <style scoped>
 .header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.hint { color: #909399; margin: 0 0 16px; font-size: 13px; line-height: 1.6; }
+.hint { color: #909399; margin: 0 0 12px; font-size: 13px; line-height: 1.6; }
+.sync-setting { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; flex-wrap: wrap; }
+.sync-label { color: #303133; font-size: 13px; white-space: nowrap; }
+.sync-tip { color: #909399; font-size: 12px; }
 .bind-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.08em;

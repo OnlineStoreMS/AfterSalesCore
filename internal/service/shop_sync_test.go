@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"aftersalescore/internal/model"
+	"aftersalescore/internal/repo"
 )
 
 func TestPluginShouldSync(t *testing.T) {
@@ -29,5 +30,20 @@ func TestPluginShouldSync(t *testing.T) {
 		if got := pluginShouldSync(tc.shop, now, interval); got != tc.want {
 			t.Fatalf("%s: got %v want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestClampPluginSyncMinutes(t *testing.T) {
+	if repo.ClampPluginSyncMinutes(0) != 30 {
+		t.Fatal("unset should default to 30")
+	}
+	if repo.ClampPluginSyncMinutes(2) != 5 {
+		t.Fatal("below min should be 5")
+	}
+	if repo.ClampPluginSyncMinutes(2000) != 1440 {
+		t.Fatal("above max should be 1440")
+	}
+	if repo.ClampPluginSyncMinutes(60) != 60 {
+		t.Fatal("60 should stay 60")
 	}
 }

@@ -36,6 +36,10 @@ type PluginHeartbeatResult struct {
 	SyncIntervalSec int  `json:"syncIntervalSec"`
 }
 
+type PluginSetting struct {
+	PluginSyncIntervalMin int `json:"pluginSyncIntervalMin"`
+}
+
 type FilterCardItem struct {
 	GroupName string `json:"groupName"`
 	CardKey   string `json:"cardKey"`

@@ -418,6 +418,51 @@ func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.Retu
 	})
 }
 
+const defaultPluginSyncMinutes = 30
+
+func ClampPluginSyncMinutes(n int) int {
+	if n <= 0 {
+		return defaultPluginSyncMinutes
+	}
+	if n < 5 {
+		return 5
+	}
+	if n > 1440 {
+		return 1440
+	}
+	return n
+}
+
+func (r *ShopRepo) PluginSyncMinutes() int {
+	var item model.TenantSetting
+	err := r.db.Where("tenant_id = ?", r.tenantID).First(&item).Error
+	if err != nil || item.PluginSyncIntervalMin <= 0 {
+		return defaultPluginSyncMinutes
+	}
+	return ClampPluginSyncMinutes(item.PluginSyncIntervalMin)
+}
+
+func (r *ShopRepo) SavePluginSyncMinutes(minutes int) (*model.TenantSetting, error) {
+	minutes = ClampPluginSyncMinutes(minutes)
+	var item model.TenantSetting
+	err := r.db.Where("tenant_id = ?", r.tenantID).First(&item).Error
+	if err == gorm.ErrRecordNotFound {
+		item = model.TenantSetting{TenantID: r.tenantID, PluginSyncIntervalMin: minutes}
+		if err := r.db.Create(&item).Error; err != nil {
+			return nil, err
+		}
+		return &item, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	item.PluginSyncIntervalMin = minutes
+	if err := r.db.Save(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (r *ShopRepo) ListTenantIDs() ([]uint64, error) {
 	var ids []uint64
 	err := r.db.Model(&model.MarketplaceShop{}).Distinct("tenant_id").Pluck("tenant_id", &ids).Error

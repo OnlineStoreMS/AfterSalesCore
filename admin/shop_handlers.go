@@ -94,6 +94,24 @@ func (h *ShopHandler) Delete(c *gin.Context) {
 	response.OK(c, gin.H{"deleted": true})
 }
 
+func (h *ShopHandler) GetPluginSetting(c *gin.Context) {
+	response.OK(c, h.ss(c).GetPluginSetting())
+}
+
+func (h *ShopHandler) SavePluginSetting(c *gin.Context) {
+	var in dto.PluginSetting
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	item, err := h.ss(c).SavePluginSetting(in)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
 func (h *ShopHandler) RequestSync(c *gin.Context) {
 	id, err := httputil.ParseID(c)
 	if err != nil {

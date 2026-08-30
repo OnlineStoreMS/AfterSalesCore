@@ -18,8 +18,7 @@ import (
 )
 
 const (
-	pluginOnlineSkew          = 90 * time.Second
-	defaultPluginSyncInterval = 5 * time.Minute
+	pluginOnlineSkew = 90 * time.Second
 )
 
 var (
@@ -359,12 +358,29 @@ func (s *ShopService) Heartbeat(shop *model.MarketplaceShop, in *dto.PluginHeart
 	if err := s.repos.Shop.Save(shop); err != nil {
 		return nil, err
 	}
-	interval := defaultPluginSyncInterval
+	interval := s.pluginSyncInterval(shop.TenantID)
 	return &dto.PluginHeartbeatResult{
 		ShopItem:        s.toItem(shop),
 		SyncNow:         pluginShouldSync(shop, now, interval),
 		SyncIntervalSec: int(interval.Seconds()),
 	}, nil
+}
+
+func (s *ShopService) GetPluginSetting() dto.PluginSetting {
+	return dto.PluginSetting{PluginSyncIntervalMin: s.repo().PluginSyncMinutes()}
+}
+
+func (s *ShopService) SavePluginSetting(in dto.PluginSetting) (dto.PluginSetting, error) {
+	item, err := s.repo().SavePluginSyncMinutes(in.PluginSyncIntervalMin)
+	if err != nil {
+		return dto.PluginSetting{}, err
+	}
+	return dto.PluginSetting{PluginSyncIntervalMin: item.PluginSyncIntervalMin}, nil
+}
+
+func (s *ShopService) pluginSyncInterval(tenantID uint64) time.Duration {
+	minutes := s.repos.Shop.ForTenant(tenantID).PluginSyncMinutes()
+	return time.Duration(minutes) * time.Minute
 }
 
 func (s *ShopService) RequestSync(id uint64) (*dto.ShopItem, error) {

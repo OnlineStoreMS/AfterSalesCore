@@ -34,6 +34,16 @@ type MarketplaceShop struct {
 
 func (MarketplaceShop) TableName() string { return "marketplace_shops" }
 
+type TenantSetting struct {
+	ID                      uint64    `gorm:"primaryKey" json:"id"`
+	TenantID                uint64    `gorm:"uniqueIndex;not null" json:"tenantId"`
+	PluginSyncIntervalMin   int       `gorm:"not null;default:30" json:"pluginSyncIntervalMin"`
+	CreatedAt               time.Time `json:"createdAt"`
+	UpdatedAt               time.Time `json:"updatedAt"`
+}
+
+func (TenantSetting) TableName() string { return "tenant_settings" }
+
 type AftersaleFilterCard struct {
 	ID        uint64    `gorm:"primaryKey" json:"id"`
 	TenantID  uint64    `gorm:"index;not null" json:"tenantId"`
