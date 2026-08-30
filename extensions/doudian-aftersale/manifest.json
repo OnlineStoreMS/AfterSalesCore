@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "OSMS 抖店售后工作台",
-  "version": "1.2.16",
+  "version": "1.2.21",
   "description": "采集抖店售后工作台，同步到售后管理。",
   "permissions": ["storage", "tabs", "alarms", "scripting"],
   "host_permissions": [

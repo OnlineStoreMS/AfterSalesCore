@@ -37,7 +37,68 @@ func (s *NotificationService) GetView() (*dto.NotificationView, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := s.dropLegacyServiceNotification(data); err != nil {
+		return nil, err
+	}
 	return s.buildView(data)
+}
+
+func (s *NotificationService) dropLegacyServiceNotification(data dto.NotificationData) error {
+	cards, err := s.shopRepo().ListCardsForTenant()
+	if err != nil {
+		return err
+	}
+	cleaned := sanitizeScenarios(data.Config.Scenarios, cards)
+	if !stringSlicesEqual(data.Config.Scenarios, cleaned) {
+		data.Config.Scenarios = cleaned
+		if _, err := s.repos.Notification.SaveConfig(s.tenantID, data.Config); err != nil {
+			return err
+		}
+	}
+	if pruneServiceNotified(data.State.Notified) {
+		return s.repos.Notification.UpdateState(s.tenantID, func(st *dto.NotificationState) error {
+			if st.Notified == nil {
+				return nil
+			}
+			pruneServiceNotified(st.Notified)
+			return nil
+		})
+	}
+	return nil
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func pruneServiceNotified(notified map[string]string) bool {
+	if len(notified) == 0 {
+		return false
+	}
+	changed := false
+	for key := range notified {
+		if isLegacyServiceNotificationKey(key) {
+			delete(notified, key)
+			changed = true
+		}
+	}
+	return changed
+}
+
+func isLegacyServiceNotificationKey(key string) bool {
+	parts := strings.Split(key, ":")
+	if len(parts) >= 2 && parts[1] == "service" {
+		return true
+	}
+	return strings.Contains(key, ":service:")
 }
 
 func (s *NotificationService) ResetState() (*dto.NotificationView, int, error) {
@@ -54,11 +115,7 @@ func (s *NotificationService) SaveConfig(in dto.NotificationConfig) (*dto.Notifi
 	if err != nil {
 		return nil, err
 	}
-	for _, sc := range in.Scenarios {
-		if !scenarioAllowed(sc, cards) {
-			return nil, fmt.Errorf("%w: 不支持的通知场景 %s", ErrBadRequest, sc)
-		}
-	}
+	in.Scenarios = sanitizeScenarios(in.Scenarios, cards)
 	ids, err := s.resolveShopIDs(in.ShopIDs)
 	if err != nil {
 		return nil, err
@@ -89,6 +146,7 @@ func (s *NotificationService) buildView(data dto.NotificationData) (*dto.Notific
 			Name: shopDisplayName(&shop),
 		})
 	}
+	data.Config.Scenarios = sanitizeScenarios(data.Config.Scenarios, cards)
 	state := data.State
 	state.Notified = nil
 	return &dto.NotificationView{

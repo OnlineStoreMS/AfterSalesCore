@@ -47,16 +47,20 @@ const groupedScenarios = computed(() => {
   return groups
 })
 
+function applyView(data: { config: NotificationConfig; state?: NotificationState; scenarios?: NotificationScenarioOption[]; shops?: NotificationShopOption[] }) {
+  Object.assign(form, data.config)
+  scenarioOptions.value = data.scenarios || []
+  shopOptions.value = data.shops || []
+  const allowed = new Set(scenarioOptions.value.map((s) => s.key))
+  form.scenarios = (data.config.scenarios || []).filter((k) => allowed.has(k))
+  form.shopIds = [...(data.config.shopIds || [])]
+  state.value = data.state || {}
+}
+
 async function load() {
   loading.load = true
   try {
-    const data = await getNotification()
-    Object.assign(form, data.config)
-    form.scenarios = [...(data.config.scenarios || [])]
-    form.shopIds = [...(data.config.shopIds || [])]
-    state.value = data.state || {}
-    scenarioOptions.value = data.scenarios || []
-    shopOptions.value = data.shops || []
+    applyView(await getNotification())
     secretInput.value = ''
     appSecretInput.value = ''
   } catch (e) {
@@ -75,10 +79,7 @@ async function onSave() {
       appSecret: appSecretInput.value || undefined,
     }
     const data = await saveNotification(payload)
-    Object.assign(form, data.config)
-    form.scenarios = [...(data.config.scenarios || [])]
-    form.shopIds = [...(data.config.shopIds || [])]
-    state.value = data.state || {}
+    applyView(data)
     secretInput.value = ''
     appSecretInput.value = ''
     ElMessage.success('已保存')
@@ -136,7 +137,7 @@ async function onRunNow() {
 async function onResetState() {
   try {
     await ElMessageBox.confirm(
-      '将清空已推送去重记录与运行状态，之后「立即检查」或定时任务会重新推送符合条件的售后/工单通知。通知配置不会改动。',
+      '将清空已推送去重记录与运行状态，之后「立即检查」或定时任务会重新推送符合条件的售后通知。通知配置不会改动。',
       '重置通知记录',
       { type: 'warning', confirmButtonText: '确认重置', cancelButtonText: '取消' },
     )
@@ -147,10 +148,7 @@ async function onResetState() {
   try {
     const data = await resetNotificationState()
     if (data.view) {
-      Object.assign(form, data.view.config)
-      form.scenarios = [...(data.view.config.scenarios || [])]
-      form.shopIds = [...(data.view.config.shopIds || [])]
-      state.value = data.view.state || {}
+      applyView(data.view)
     }
     ElMessage.success(`已重置，清除 ${data.cleared} 条去重记录`)
   } catch (e) {
@@ -288,7 +286,7 @@ onMounted(load)
       </el-descriptions>
       <div class="status-tip muted">
         <el-icon><Promotion /></el-icon>
-        同一店铺下同一场景的同一售后单/工单只推送一次；「时效紧迫」在 urgency 升级时会再次提醒（warning → critical 4h → imminent 30m → expired）。有物流单号且配置了飞书应用凭证时，卡片底部会显示条形码。
+        同一店铺下同一场景的同一售后单只推送一次；「时效紧迫」在 urgency 升级时会再次提醒（warning → critical 4h → imminent 30m → expired）。有物流单号且配置了飞书应用凭证时，卡片底部会显示条形码。
       </div>
     </el-card>
   </div>

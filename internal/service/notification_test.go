@@ -42,6 +42,40 @@ func TestUniqueCardScenariosSkipsAggregate(t *testing.T) {
 	}
 }
 
+func TestSanitizeScenariosDropsServiceAndAggregate(t *testing.T) {
+	cards := []model.AftersaleFilterCard{
+		{GroupName: "待商家收/发货", CardKey: "待商家收/发货:退货待收货", CardLabel: "退货待收货"},
+		{GroupName: "待商家收/发货", CardKey: "待商家收/发货:全部待收货/发货", CardLabel: "全部待收货/发货"},
+	}
+	got := sanitizeScenarios([]string{
+		"service:待处理",
+		"待商家收/发货:退货待收货",
+		"待商家收/发货:全部待收货/发货",
+		"urgent",
+		"urgent",
+	}, cards)
+	if len(got) != 2 || got[0] != "待商家收/发货:退货待收货" || got[1] != "urgent" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestPruneServiceNotified(t *testing.T) {
+	m := map[string]string{
+		"2:service:SO1:service:待处理": "2026-08-01T00:00:00Z",
+		"2:ticket:147:service:待处理":  "2026-08-01T00:00:00Z",
+		"2:ticket:147:urgent:warning": "2026-08-01T00:00:00Z",
+	}
+	if !pruneServiceNotified(m) {
+		t.Fatal("expected prune")
+	}
+	if _, ok := m["2:ticket:147:urgent:warning"]; !ok {
+		t.Fatal("ticket urgent key should stay")
+	}
+	if len(m) != 1 {
+		t.Fatalf("got %+v", m)
+	}
+}
+
 func TestNotificationKeyUrgentEscalation(t *testing.T) {
 	k1 := notificationKey(2, "ticket", "147", ScenarioUrgent, "warning")
 	k2 := notificationKey(2, "ticket", "147", ScenarioUrgent, "critical")

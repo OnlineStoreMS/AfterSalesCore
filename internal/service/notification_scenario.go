@@ -56,9 +56,30 @@ func scenarioOptions(cards []model.AftersaleFilterCard) []dto.ScenarioOption {
 	return out
 }
 
+func sanitizeScenarios(keys []string, cards []model.AftersaleFilterCard) []string {
+	out := make([]string, 0, len(keys))
+	seen := map[string]struct{}{}
+	for _, key := range keys {
+		key = strings.TrimSpace(key)
+		if key == "" || !scenarioAllowed(key, cards) {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, key)
+	}
+	return out
+}
+
+func isLegacyServiceScenario(key string) bool {
+	return strings.HasPrefix(strings.TrimSpace(key), "service:")
+}
+
 func scenarioAllowed(key string, cards []model.AftersaleFilterCard) bool {
 	key = strings.TrimSpace(key)
-	if key == "" {
+	if key == "" || isLegacyServiceScenario(key) {
 		return false
 	}
 	if IsAggregateCard(key) {

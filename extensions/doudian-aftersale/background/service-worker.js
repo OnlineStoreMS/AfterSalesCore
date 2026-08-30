@@ -27,17 +27,15 @@ function topFrame(tabId) {
   return { tabId, frameIds: [0] }
 }
 
-async function injectFiles(tabId, files) {
+async function injectFiles(tabId, files, world) {
+  const opts = { target: topFrame(tabId), files }
+  if (world) opts.world = world
   try {
-    await chrome.scripting.executeScript({
-      target: topFrame(tabId),
-      files,
-    })
+    await chrome.scripting.executeScript(opts)
   } catch {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files,
-    })
+    const fallback = { target: { tabId }, files }
+    if (world) fallback.world = world
+    await chrome.scripting.executeScript(fallback)
   }
 }
 
@@ -45,8 +43,8 @@ async function sendTop(tabId, msg) {
   return chrome.tabs.sendMessage(tabId, msg, { frameId: 0 })
 }
 
-async function callPage(tabId, fnName, fnArgs = []) {
-  const [inj] = await chrome.scripting.executeScript({
+async function callPage(tabId, fnName, fnArgs = [], world) {
+  const opts = {
     target: topFrame(tabId),
     func: async (name, args) => {
       const fn = window[name]
@@ -59,7 +57,9 @@ async function callPage(tabId, fnName, fnArgs = []) {
       }
     },
     args: [fnName, fnArgs],
-  })
+  }
+  if (world) opts.world = world
+  const [inj] = await chrome.scripting.executeScript(opts)
   return inj?.result
 }
 
@@ -272,7 +272,8 @@ async function heartbeat() {
 }
 
 function installPageLogisticsExtractor() {
-  if (window.__osmsAftersaleLogisticsInstalled) return true
+  if (window.__osmsAftersaleDriverV20) return true
+  window.__osmsAftersaleDriverV20 = true
   window.__osmsAftersaleLogisticsInstalled = true
   const fiberOf = (el) => {
     if (!el) return null
@@ -281,6 +282,61 @@ function installPageLogisticsExtractor() {
     )
     return key ? el[key] : null
   }
+  const ui = (name) =>
+    document.querySelector(`.aurora-${name}`) || document.querySelector(`.auxo-${name}`)
+  const propsOf = (el, pred) => {
+    let n = fiberOf(el)
+    for (let i = 0; i < 30 && n; i++) {
+      const p = n.memoizedProps || n.pendingProps
+      if (p && pred(p)) return p
+      n = n.return
+    }
+    return null
+  }
+  const setPageSize = (size) => {
+    const changer = ui('pagination-options-size-changer')
+    const pager = ui('pagination')
+    const change = propsOf(changer, (p) => typeof p.changeSize === 'function')
+    if (change?.changeSize) {
+      change.changeSize(size)
+      return { ok: true, via: 'changeSize' }
+    }
+    const pagerP = propsOf(
+      pager,
+      (p) => typeof p.onChange === 'function' && ('pageSize' in p || 'total' in p),
+    )
+    if (typeof pagerP?.onShowSizeChange === 'function') {
+      pagerP.onShowSizeChange(1, size)
+      return { ok: true, via: 'onShowSizeChange' }
+    }
+    if (typeof pagerP?.onChange === 'function') {
+      pagerP.onChange(1, size)
+      return { ok: true, via: 'onChange' }
+    }
+    return { ok: false }
+  }
+  const goPage = (page, size) => {
+    const pagerP = propsOf(
+      ui('pagination'),
+      (p) => typeof p.onChange === 'function' && ('pageSize' in p || 'total' in p),
+    )
+    if (typeof pagerP?.onChange === 'function') {
+      pagerP.onChange(page, size || pagerP.pageSize || 10)
+      return { ok: true, via: 'onChange' }
+    }
+    return { ok: false }
+  }
+  document.addEventListener('osms-aftersale-drive', (e) => {
+    const d = e.detail || {}
+    let result = { ok: false }
+    try {
+      if (d.action === 'setPageSize') result = setPageSize(Number(d.size) || 100)
+      else if (d.action === 'goPage') result = goPage(Number(d.page) || 1, Number(d.size) || 10)
+    } catch (err) {
+      result = { ok: false, error: String(err) }
+    }
+    document.dispatchEvent(new CustomEvent('osms-aftersale-drive-done', { detail: result }))
+  })
   const recordOf = (el) => {
     let n = fiberOf(el)
     for (let i = 0; i < 24 && n; i++) {
@@ -343,14 +399,19 @@ async function collectFromTab(tabId) {
   await installLogisticsExtractor(tabId)
   for (let i = 0; i < 20; i++) {
     try {
-      const ping = await callPage(tabId, '__osmsWorkbenchReady')
+      const ping = await callPage(tabId, '__osmsWorkbenchReady', [], 'MAIN')
       let ready = ping === true
       if (ping?.missing) {
+        const isoPing = await callPage(tabId, '__osmsWorkbenchReady')
+        ready = isoPing === true
+      }
+      if (ping?.missing && !ready) {
         const msgPing = await sendTop(tabId, { type: 'AFTERSALE_PING_WORKBENCH' })
         ready = !!msgPing?.ready
       }
       if (!ready) throw new Error(ping?.error || '工作台卡片未就绪')
-      const res = await callPage(tabId, '__osmsCollectWorkbench')
+      let res = await callPage(tabId, '__osmsCollectWorkbench', [], 'MAIN')
+      if (res?.missing) res = await callPage(tabId, '__osmsCollectWorkbench')
       if (res?.missing) {
         const viaMsg = await sendTop(tabId, { type: 'AFTERSALE_COLLECT' })
         if (viaMsg?.ok) return viaMsg
@@ -379,6 +440,11 @@ async function injectMenu(tabId) {
 
 async function injectWorkbench(tabId) {
   await injectFiles(tabId, ['content/workbench.js'])
+  try {
+    await injectFiles(tabId, ['content/workbench.js'], 'MAIN')
+  } catch (e) {
+    console.warn('inject workbench MAIN failed', e)
+  }
 }
 
 async function clickDoudianMenu(tabId, target, force = false) {
@@ -497,6 +563,14 @@ async function syncNow() {
       platformShopName: collected.platformShopName || '',
       cards: collected.cards || [],
       tickets: collected.tickets || [],
+    }
+    const short = (collected.cardStats || []).filter((s) => s.expected && s.got < s.expected)
+    for (const s of short) {
+      await workLog(
+        `${s.label} 只采到 ${s.got}/${s.expected}` +
+          (s.pageSize != null ? `（页大小${s.pageSize} 可见${s.visible}）` : ''),
+        'error',
+      )
     }
     await workLog(`已采集 ${payload.cards.length} 张卡片、${payload.tickets.length} 条售后单，正在上报`)
     const data = await api('/plugin/sync', { auth: true, body: payload })
