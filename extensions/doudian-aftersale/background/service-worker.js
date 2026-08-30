@@ -577,11 +577,13 @@ async function syncNow() {
       await workLog(`退回件采集失败：${collected.returnStats.error}`, 'error')
     } else if (Array.isArray(payload.returns)) {
       const withNo = collected.returnStats?.withNo ?? payload.returns.filter((x) => x.logisticsNo).length
+      const st = collected.returnStats || {}
       await workLog(
         `退回件 ${payload.returns.length} 条` +
-          (collected.returnStats?.filteredTotal != null
-            ? `（已发货退款/退款成功 ${collected.returnStats.filteredTotal}）`
-            : '') +
+          (st.filteredTotal != null ? `（已发货退款/退款成功 ${st.filteredTotal}` : '') +
+          (st.pages != null ? `，已扫 ${st.pages}/${st.pageCount || st.pages} 页` : '') +
+          (st.scanned != null ? `、看过 ${st.scanned} 单` : '') +
+          (st.filteredTotal != null ? '）' : '') +
           `，其中 ${withNo} 条已取到单号`,
       )
     }
