@@ -92,6 +92,45 @@ func IsLogisticsAlert(status string) bool {
 	return status == LogisticsAwaitPickup || status == LogisticsSigned || status == LogisticsInTransit
 }
 
+type TicketLogisticsView struct {
+	HasBuyer    bool
+	BuyerStatus string
+	HasShip     bool
+	ShipStatus  string
+	Intercept   bool
+}
+
+func chunkAfterLabel(raw, label string, stops ...string) string {
+	idx := strings.Index(raw, label)
+	if idx < 0 {
+		return ""
+	}
+	rest := raw[idx+len(label):]
+	cut := len(rest)
+	for _, stop := range stops {
+		if i := strings.Index(rest, stop); i >= 0 && i < cut {
+			cut = i
+		}
+	}
+	return rest[:cut]
+}
+
+func ParseTicketLogistics(raw string) TicketLogisticsView {
+	text := strings.TrimSpace(raw)
+	view := TicketLogisticsView{
+		HasBuyer:  strings.Contains(text, "买家退货"),
+		HasShip:   strings.Contains(text, "订单发货"),
+		Intercept: strings.Contains(text, "订单发货") && strings.Contains(text, "需商家拦截快递"),
+	}
+	if view.HasBuyer {
+		view.BuyerStatus = matchLogisticsKeyword(chunkAfterLabel(text, "买家退货", "订单发货", "需商家拦截快递"))
+	}
+	if view.HasShip {
+		view.ShipStatus = matchLogisticsKeyword(chunkAfterLabel(text, "订单发货", "买家退货", "需商家拦截快递"))
+	}
+	return view
+}
+
 func LimitLogisticsTracksJSON(raw string) string {
 	tracks := ParseLogisticsTracks(raw)
 	if len(tracks) == 0 {

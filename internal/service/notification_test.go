@@ -61,8 +61,8 @@ func TestSanitizeScenariosDropsServiceAndAggregate(t *testing.T) {
 
 func TestPruneServiceNotified(t *testing.T) {
 	m := map[string]string{
-		"2:service:SO1:service:待处理": "2026-08-01T00:00:00Z",
-		"2:ticket:147:service:待处理":  "2026-08-01T00:00:00Z",
+		"2:service:SO1:service:待处理":   "2026-08-01T00:00:00Z",
+		"2:ticket:147:service:待处理":    "2026-08-01T00:00:00Z",
 		"2:ticket:147:urgent:warning": "2026-08-01T00:00:00Z",
 	}
 	if !pruneServiceNotified(m) {
@@ -154,6 +154,23 @@ func TestClassifyLogisticsStatus(t *testing.T) {
 	got = ClassifyLogisticsWithTracks("订单发货 已取消\n1/1已发货", `[{"title":"已发货","text":"已发货"}]`)
 	if got != LogisticsCancelled {
 		t.Fatalf("list cancelled should win leftover shipped: %s", got)
+	}
+}
+
+func TestParseTicketLogistics(t *testing.T) {
+	got := ParseTicketLogistics("买家退货 1/1 已签收\n订单发货 1/1 已发货\n需商家拦截快递")
+	if !got.HasBuyer || got.BuyerStatus != LogisticsSigned {
+		t.Fatalf("buyer: %+v", got)
+	}
+	if !got.HasShip || got.ShipStatus != LogisticsShipped {
+		t.Fatalf("ship: %+v", got)
+	}
+	if !got.Intercept {
+		t.Fatal("intercept")
+	}
+	plain := ParseTicketLogistics("买家退货 运输中")
+	if plain.Intercept || plain.ShipStatus != "" || plain.BuyerStatus != LogisticsInTransit {
+		t.Fatalf("plain: %+v", plain)
 	}
 }
 

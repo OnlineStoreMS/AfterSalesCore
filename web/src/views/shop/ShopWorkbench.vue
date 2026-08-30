@@ -131,6 +131,43 @@ function formatRemain(sec: number) {
   return parts.join('') || '不足1分'
 }
 
+const LOGISTICS_STATUS_RE = /已退回|已取消|待取件|已签收|运输中|已发货/
+
+function chunkAfter(text: string, label: string, stops: string[]) {
+  const i = text.indexOf(label)
+  if (i < 0) return ''
+  let rest = text.slice(i + label.length)
+  let cut = rest.length
+  for (const stop of stops) {
+    const j = rest.indexOf(stop)
+    if (j >= 0 && j < cut) cut = j
+  }
+  return rest.slice(0, cut)
+}
+
+function ticketLogistics(row: AftersaleTicket) {
+  const text = row.logistics || ''
+  const hasBuyer = text.includes('买家退货')
+  const hasShip = text.includes('订单发货')
+  const buyerStatus =
+    row.logisticsBuyerStatus ||
+    (hasBuyer ? chunkAfter(text, '买家退货', ['订单发货', '需商家拦截快递']).match(LOGISTICS_STATUS_RE)?.[0] || '' : '')
+  const shipStatus =
+    row.logisticsShipStatus ||
+    (hasShip ? chunkAfter(text, '订单发货', ['买家退货', '需商家拦截快递']).match(LOGISTICS_STATUS_RE)?.[0] || '' : '')
+  const intercept = row.needIntercept || (hasShip && text.includes('需商家拦截快递'))
+  const lines: { label: string; status?: string; danger?: boolean }[] = []
+  if (hasBuyer) lines.push({ label: '买家退货', status: buyerStatus, danger: buyerStatus === '已签收' })
+  if (hasShip) lines.push({ label: '订单发货', status: shipStatus })
+  if (intercept) lines.push({ label: '需商家拦截快递', danger: true })
+  return {
+    lines,
+    shipNo: row.shipLogisticsNo || '',
+    returnNo: row.returnLogisticsNo || '',
+    fallback: !lines.length,
+  }
+}
+
 function remainClass(sec: number) {
   if (sec <= 0 || sec < 6 * 3600) return 'danger'
   if (sec < 24 * 3600) return 'warning'
@@ -269,10 +306,20 @@ async function handleRequestSync() {
           </template>
         </el-table-column>
         <el-table-column prop="dispute" label="纠纷仲裁" width="120" />
-        <el-table-column label="物流信息" min-width="180">
+        <el-table-column label="物流信息" min-width="200">
           <template #default="{ row }">
-            <pre class="logistics">{{ row.logistics || '—' }}</pre>
-            <div v-if="row.returnLogisticsNo" class="tracking">退货单号 {{ row.returnLogisticsNo }}</div>
+            <template v-if="!ticketLogistics(row).fallback">
+              <div v-for="(line, i) in ticketLogistics(row).lines" :key="i" class="logistics-line">
+                <template v-if="line.status">
+                  {{ line.label }}
+                  <span :class="{ danger: line.danger }">{{ line.status }}</span>
+                </template>
+                <span v-else :class="{ danger: line.danger }">{{ line.label }}</span>
+              </div>
+            </template>
+            <pre v-else class="logistics">{{ row.logistics || '—' }}</pre>
+            <div v-if="ticketLogistics(row).shipNo" class="tracking">发货单号 {{ ticketLogistics(row).shipNo }}</div>
+            <div v-if="ticketLogistics(row).returnNo" class="tracking">退货单号 {{ ticketLogistics(row).returnNo }}</div>
           </template>
         </el-table-column>
       </el-table>
@@ -338,6 +385,8 @@ async function handleRequestSync() {
 .timeout.warning { color: #e6a23c; font-weight: 600; }
 .timeout.danger { color: #f56c6c; font-weight: 700; }
 .logistics { margin: 0; font: inherit; white-space: pre-line; color: #303133; }
+.logistics-line { line-height: 1.5; color: #303133; }
+.logistics-line .danger { color: #f56c6c; font-weight: 600; }
 .tracking { color: #409eff; font-size: 12px; margin-top: 4px; word-break: break-all; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

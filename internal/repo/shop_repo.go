@@ -165,8 +165,8 @@ func (r *ShopRepo) ListTickets(f TicketListFilter) ([]model.AftersaleTicket, int
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
 		like := "%" + kw + "%"
 		q = q.Where(
-			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR status ILIKE ? OR return_logistics_no ILIKE ?",
-			like, like, like, like, like,
+			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR status ILIKE ? OR return_logistics_no ILIKE ? OR ship_logistics_no ILIKE ?",
+			like, like, like, like, like, like,
 		)
 	}
 	var total int64
@@ -212,30 +212,36 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 				if t.DeadlineAt != nil {
 					deadline = *t.DeadlineAt
 				}
-				if err := tx.Model(&existing).Updates(map[string]any{
-					"order_no":            t.OrderNo,
-					"product_title":       t.ProductTitle,
-					"product_image":       t.ProductImage,
-					"sku":                 t.SKU,
-					"product_tags":        t.ProductTags,
-					"tags":                t.Tags,
-					"qty":                 t.Qty,
-					"buy_qty":             t.BuyQty,
-					"pay_amount":          t.PayAmount,
-					"refund_amount":       t.RefundAmount,
-					"aftersale_type":      t.AftersaleType,
-					"reason":              t.Reason,
-					"status":              t.Status,
-					"timeout_text":        t.TimeoutText,
-					"timeout_action":      t.TimeoutAction,
-					"deadline_at":         deadline,
-					"dispute":             t.Dispute,
-					"logistics":           t.Logistics,
-					"return_logistics_no": t.ReturnLogisticsNo,
-					"apply_time":          t.ApplyTime,
-					"raw_json":            t.RawJSON,
-					"synced_at":           now,
-				}).Error; err != nil {
+				updates := map[string]any{
+					"order_no":       t.OrderNo,
+					"product_title":  t.ProductTitle,
+					"product_image":  t.ProductImage,
+					"sku":            t.SKU,
+					"product_tags":   t.ProductTags,
+					"tags":           t.Tags,
+					"qty":            t.Qty,
+					"buy_qty":        t.BuyQty,
+					"pay_amount":     t.PayAmount,
+					"refund_amount":  t.RefundAmount,
+					"aftersale_type": t.AftersaleType,
+					"reason":         t.Reason,
+					"status":         t.Status,
+					"timeout_text":   t.TimeoutText,
+					"timeout_action": t.TimeoutAction,
+					"deadline_at":    deadline,
+					"dispute":        t.Dispute,
+					"logistics":      t.Logistics,
+					"apply_time":     t.ApplyTime,
+					"raw_json":       t.RawJSON,
+					"synced_at":      now,
+				}
+				if t.ReturnLogisticsNo != "" {
+					updates["return_logistics_no"] = t.ReturnLogisticsNo
+				}
+				if t.ShipLogisticsNo != "" {
+					updates["ship_logistics_no"] = t.ShipLogisticsNo
+				}
+				if err := tx.Model(&existing).Updates(updates).Error; err != nil {
 					return err
 				}
 			}

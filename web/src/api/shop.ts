@@ -52,7 +52,11 @@ export interface AftersaleTicket {
   remainSeconds?: number
   dispute?: string
   logistics?: string
+  logisticsBuyerStatus?: string
+  logisticsShipStatus?: string
+  needIntercept?: boolean
   returnLogisticsNo?: string
+  shipLogisticsNo?: string
   applyTime?: string
   cardKeys: string[]
   syncedAt: string

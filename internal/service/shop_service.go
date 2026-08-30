@@ -504,6 +504,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 			Dispute:             strings.TrimSpace(t.Dispute),
 			Logistics:           strings.TrimSpace(t.Logistics),
 			ReturnLogisticsNo:   strings.TrimSpace(t.ReturnLogisticsNo),
+			ShipLogisticsNo:     strings.TrimSpace(t.ShipLogisticsNo),
 			ApplyTime:           strings.TrimSpace(t.ApplyTime),
 			RawJSON:             t.RawJSON,
 		})
@@ -682,9 +683,20 @@ func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {
 		Qty: t.Qty, BuyQty: t.BuyQty, PayAmount: t.PayAmount, RefundAmount: t.RefundAmount,
 		AftersaleType: t.AftersaleType, Reason: t.Reason, Status: t.Status,
 		TimeoutText: t.TimeoutText, TimeoutAction: t.TimeoutAction,
-		RemainSeconds: remainSeconds(t.DeadlineAt, time.Now()),
-		Dispute:       t.Dispute, Logistics: t.Logistics, ReturnLogisticsNo: t.ReturnLogisticsNo,
-		ApplyTime: t.ApplyTime, CardKeys: keys, SyncedAt: formatTime(t.SyncedAt),
+		RemainSeconds:     remainSeconds(t.DeadlineAt, time.Now()),
+		Dispute:           t.Dispute,
+		Logistics:         t.Logistics,
+		ReturnLogisticsNo: t.ReturnLogisticsNo,
+		ShipLogisticsNo:   t.ShipLogisticsNo,
+		ApplyTime:         t.ApplyTime, CardKeys: keys, SyncedAt: formatTime(t.SyncedAt),
+	}
+	view := ParseTicketLogistics(t.Logistics)
+	item.NeedIntercept = view.Intercept
+	if view.HasBuyer {
+		item.LogisticsBuyerStatus = view.BuyerStatus
+	}
+	if view.HasShip {
+		item.LogisticsShipStatus = view.ShipStatus
 	}
 	if t.DeadlineAt != nil {
 		item.DeadlineAt = t.DeadlineAt.UTC().Format(time.RFC3339)

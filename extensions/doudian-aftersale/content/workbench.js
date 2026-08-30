@@ -304,8 +304,11 @@ function parseDataRow(tr, headers, headerInfo) {
     status: statusLines[0] || '',
     timeoutText: statusLines.slice(1).join(' '),
     dispute: textOf(disputeCell),
-    logistics: logisticsRaw,
+    logistics: formatTicketLogistics(logisticsRaw),
     returnLogisticsNo,
+    shipLogisticsNo: needsIntercept(logisticsRaw)
+      ? shipLogisticsNoFromRecord(findTableRecord(logisticsCell) || findTableRecord(tr))
+      : '',
     applyTime: pick(afterText, /申请时间\s*([\d/]+(?:\s*[\d:]+)?)/),
     orderInfo: orderText,
     aftersaleInfo: afterText,
@@ -315,8 +318,11 @@ function parseDataRow(tr, headers, headerInfo) {
       order: orderText.slice(0, 800),
       after: afterText.slice(0, 800),
       status: statusText.slice(0, 120),
-      logistics: logisticsRaw.slice(0, 200),
+      logistics: formatTicketLogistics(logisticsRaw).slice(0, 200),
       returnLogisticsNo,
+      shipLogisticsNo: needsIntercept(logisticsRaw)
+        ? shipLogisticsNoFromRecord(findTableRecord(logisticsCell) || findTableRecord(tr))
+        : '',
     }),
   }
 }
@@ -371,12 +377,13 @@ function workbenchTable() {
 }
 
 function nextDataRow(trs, headerIndex) {
-  for (let j = headerIndex + 1; j < trs.length && j <= headerIndex + 3; j++) {
+  for (let j = headerIndex + 1; j < trs.length && j <= headerIndex + 5; j++) {
     const tr = trs[j]
     const txt = tr.innerText || ''
     if (/empty/i.test(tr.className) || !txt.trim()) continue
     if (txt.includes('售后编号') && txt.includes('订单编号')) break
     if (tr.children.length >= 5 && /应付金额|售后退款|商品/.test(txt)) return tr
+    if (tr.children.length >= 5 && !txt.includes('售后编号')) return tr
   }
   return null
 }
@@ -399,9 +406,37 @@ function collectVisibleTickets() {
     const headerInfo = parseHeaderRow(tr)
     if (!headerInfo.platformAftersaleId || seen.has(headerInfo.platformAftersaleId)) continue
     const data = nextDataRow(trs, i)
-    if (!data || data.children.length < 5) continue
-    if (!/应付金额|售后退款|商品/.test(data.innerText || '')) continue
-    const parsed = parseDataRow(data, headers, headerInfo)
+    let parsed = null
+    if (data && data.children.length >= 5) {
+      parsed = parseDataRow(data, headers, headerInfo)
+    }
+    if (!parsed?.platformAftersaleId) {
+      parsed = {
+        platformAftersaleId: headerInfo.platformAftersaleId,
+        orderNo: headerInfo.orderNo,
+        aftersaleType: headerInfo.aftersaleType,
+        tags: headerInfo.tags,
+        productTitle: '',
+        productImage: '',
+        sku: '',
+        productTags: '',
+        qty: 0,
+        buyQty: 0,
+        payAmount: '',
+        refundAmount: '',
+        reason: '',
+        status: '',
+        timeoutText: '',
+        dispute: '',
+        logistics: '',
+        returnLogisticsNo: '',
+        shipLogisticsNo: '',
+        applyTime: '',
+        orderInfo: '',
+        aftersaleInfo: '',
+        rawJson: JSON.stringify({ headerOnly: true, tags: headerInfo.tags }),
+      }
+    }
     if (!parsed.platformAftersaleId) continue
     seen.add(parsed.platformAftersaleId)
     rows.push(parsed)
@@ -649,6 +684,10 @@ function cardTypeAliases(type) {
   return [type]
 }
 
+function rowTypeBlob(row) {
+  return `${row?.aftersaleType || ''} ${row?.tags || ''} ${row?.aftersaleInfo || ''}`
+}
+
 function rowConflictsCardType(blob, type) {
   if (type === '已发货退款') return /换货|补寄|维修|未发货退款/.test(blob)
   if (type === '未发货退款') return /换货|补寄|维修|已发货退款|退货退款/.test(blob)
@@ -657,10 +696,10 @@ function rowConflictsCardType(blob, type) {
 }
 
 function rowMatchesCardType(row, type) {
-  const blob = `${row?.aftersaleType || ''} ${row?.tags || ''}`
-  if (cardTypeAliases(type).some((a) => blob.includes(a))) return true
+  const blob = rowTypeBlob(row)
   if (rowConflictsCardType(blob, type)) return false
-  return false
+  if (cardTypeAliases(type).some((a) => blob.includes(a))) return true
+  return type === '已发货退款' || type === '未发货退款'
 }
 
 function rowsMatchCardType(card, rows) {
@@ -757,10 +796,10 @@ async function collectCardTickets(card) {
       all.push(r)
     }
   }
-  add(await visibleTicketsWithLogistics())
+  add(await enrichInterceptTickets(await visibleTicketsWithLogistics()))
   if (expected && all.length < expected) {
     await setLargestPageSize(expected)
-    if (listBelongsToCard(card)) add(await visibleTicketsWithLogistics())
+    if (listBelongsToCard(card)) add(await enrichInterceptTickets(await visibleTicketsWithLogistics()))
   }
   for (let p = 2; expected && all.length < expected && p <= 20; p++) {
     if (!listBelongsToCard(card)) break
@@ -772,7 +811,7 @@ async function collectCardTickets(card) {
       fireClick(next)
       await waitForPageChange(prevIds)
     }
-    add(await visibleTicketsWithLogistics())
+    add(await enrichInterceptTickets(await visibleTicketsWithLogistics()))
   }
   all.pageSize = currentPageSize()
   all.visible = visibleHeaderCount()
@@ -792,6 +831,39 @@ function matchLogisticsKeyword(s) {
   if (t.includes('运输中')) return '运输中'
   if (t.includes('已发货')) return '已发货'
   return ''
+}
+
+function needsIntercept(text) {
+  const t = String(text || '')
+  return t.includes('订单发货') && t.includes('需商家拦截快递')
+}
+
+function chunkAfterLabel(text, label, stops) {
+  const src = String(text || '')
+  const i = src.indexOf(label)
+  if (i < 0) return ''
+  let rest = src.slice(i + label.length)
+  let cut = rest.length
+  for (const stop of stops || []) {
+    const j = rest.indexOf(stop)
+    if (j >= 0 && j < cut) cut = j
+  }
+  return rest.slice(0, cut)
+}
+
+function formatTicketLogistics(raw) {
+  const text = String(raw || '')
+  const lines = []
+  if (text.includes('买家退货')) {
+    const st = matchLogisticsKeyword(chunkAfterLabel(text, '买家退货', ['订单发货', '需商家拦截快递']))
+    lines.push(st ? `买家退货 ${st}` : '买家退货')
+  }
+  if (text.includes('订单发货')) {
+    const st = matchLogisticsKeyword(chunkAfterLabel(text, '订单发货', ['买家退货', '需商家拦截快递']))
+    lines.push(st ? `订单发货 ${st}` : '订单发货')
+  }
+  if (text.includes('需商家拦截快递')) lines.push('需商家拦截快递')
+  return lines.join('\n') || text
 }
 
 function logisticsStatusOf(text, tracks) {
@@ -994,10 +1066,10 @@ function trackingNoFromText(text) {
   )
 }
 
-function logisticsNoFromRecord(record) {
-  if (!record || typeof record !== 'object') return ''
+function logisticsCodesFromRecord(record) {
+  const items = []
+  if (!record || typeof record !== 'object') return items
   const seen = new Set()
-  const codes = []
   const walk = (v, depth) => {
     if (!v || depth > 5 || seen.has(v)) return
     if (typeof v === 'object') seen.add(v)
@@ -1009,14 +1081,25 @@ function logisticsNoFromRecord(record) {
     for (const [k, val] of Object.entries(v)) {
       if (/logistics_code|tracking_no|waybill/i.test(k) && typeof val === 'string') {
         const code = cleanTrackingNo(val)
-        if (code) codes.push(code)
+        if (code) items.push({ key: k, code })
       } else if (val && typeof val === 'object') {
         walk(val, depth + 1)
       }
     }
   }
   walk(record, 0)
-  return codes[0] || ''
+  return items
+}
+
+function logisticsNoFromRecord(record) {
+  return logisticsCodesFromRecord(record)[0]?.code || ''
+}
+
+function shipLogisticsNoFromRecord(record) {
+  const items = logisticsCodesFromRecord(record)
+  const ship = items.find((x) => /send|ship|deliver/i.test(x.key) && !/return|refund/i.test(x.key))
+  const generic = items.find((x) => /logistics_code/i.test(x.key) && !/return/i.test(x.key))
+  return ship?.code || generic?.code || ''
 }
 
 function parseLogisticsDrawer() {
@@ -1026,7 +1109,12 @@ function parseLogisticsDrawer() {
   for (const lab of body.querySelectorAll('[class*="base-info-label"], [class*="label"]')) {
     const key = textOf(lab)
     const val = textOf(lab.nextElementSibling || lab.parentElement).replace(key, '').trim()
-    if (/物流单号|运单号|快递单号/.test(key) && !info.logisticsNo) {
+    if (key.includes('发货物流单号') && !info.shipLogisticsNo) {
+      info.shipLogisticsNo = cleanTrackingNo(val)
+      if (!info.logisticsNo) info.logisticsNo = info.shipLogisticsNo
+    } else if (key.includes('退货物流单号') && !info.returnLogisticsNo) {
+      info.returnLogisticsNo = cleanTrackingNo(val)
+    } else if (/物流单号|运单号|快递单号/.test(key) && !info.logisticsNo) {
       info.logisticsNo = cleanTrackingNo(val)
     } else if (/物流商|快递公司/.test(key) && !info.carrier) {
       info.carrier = val
@@ -1046,7 +1134,9 @@ function parseLogisticsDrawer() {
     const clone = body.cloneNode(true)
     clone.querySelectorAll('style, script').forEach((n) => n.remove())
     const blob = textOf(clone)
-    info.logisticsNo = trackingNoFromText(blob)
+    info.shipLogisticsNo = info.shipLogisticsNo || cleanTrackingNo(pick(blob, /发货物流单号\s*([A-Za-z0-9-]{8,32})/))
+    info.returnLogisticsNo = info.returnLogisticsNo || cleanTrackingNo(pick(blob, /退货物流单号\s*([A-Za-z0-9-]{8,32})/))
+    info.logisticsNo = info.logisticsNo || info.shipLogisticsNo || trackingNoFromText(blob)
     if (!info.carrier) info.carrier = pick(blob, /(?:发货物流商|物流商|快递公司)\s*([^\s发退换]+)/)
     if (!info.shipTime) info.shipTime = pick(blob, /发货时间\s*([\d/]+(?:\s*[\d:]+)?)/)
   }
@@ -1118,11 +1208,59 @@ async function readReturnLogistics(ticket) {
   const tracks = parsed?.tracks || []
   return {
     logisticsNo: parsed?.logisticsNo || fallbackNo,
+    shipLogisticsNo: parsed?.shipLogisticsNo || '',
     carrier: parsed?.carrier || '',
     shipTime: parsed?.shipTime || '',
     returnLocation: secondLastTrack(tracks),
     tracks,
   }
+}
+
+function logisticsClickTarget(cell, want) {
+  if (!cell) return null
+  const nodes = cell.querySelectorAll('[class*="clickable"], [class*="logisticsText"], a, span')
+  for (const el of nodes) {
+    if (textOf(el).includes(want)) return el
+  }
+  return cell.querySelector('[class*="clickable"], [class*="logisticsText"]') || cell
+}
+
+async function readShipLogistics(ticket) {
+  closeLogisticsDrawer()
+  await sleep(120)
+  const pair = findDataRowByAftersaleId(ticket.platformAftersaleId)
+  const cell = pair ? cellByName(pair.data, ['物流信息'], pair.headers) : null
+  const fallbackNo =
+    cleanTrackingNo(ticket.shipLogisticsNo) ||
+    shipLogisticsNoFromRecord(findTableRecord(cell || pair?.data || pair?.header))
+  const clickEl = logisticsClickTarget(cell, '订单发货')
+  if (!clickEl) return { shipLogisticsNo: fallbackNo }
+  fireClick(clickEl)
+  const parsed = await waitUntil(() => {
+    const d = parseLogisticsDrawer()
+    if (d && (d.shipLogisticsNo || d.logisticsNo || (d.tracks && d.tracks.length))) return d
+    return null
+  }, 25, 200)
+  closeLogisticsDrawer()
+  await waitUntil(() => (parseLogisticsDrawer() ? null : true), 15, 120)
+  return { shipLogisticsNo: parsed?.shipLogisticsNo || parsed?.logisticsNo || fallbackNo }
+}
+
+async function enrichInterceptTickets(rows) {
+  const out = []
+  for (const t of rows || []) {
+    const row = { ...t, logistics: formatTicketLogistics(t.logistics) }
+    if (needsIntercept(row.logistics) && !row.shipLogisticsNo) {
+      try {
+        const extra = await readShipLogistics(row)
+        row.shipLogisticsNo = extra.shipLogisticsNo || ''
+      } catch {
+        /* keep row */
+      }
+    }
+    out.push(row)
+  }
+  return out
 }
 
 async function resetAftersaleFilters() {
@@ -1438,6 +1576,9 @@ async function collectAll() {
         if (!existing.cardKeys.includes(card.cardKey)) existing.cardKeys.push(card.cardKey)
         if (!existing.returnLogisticsNo && t.returnLogisticsNo) {
           existing.returnLogisticsNo = t.returnLogisticsNo
+        }
+        if (!existing.shipLogisticsNo && t.shipLogisticsNo) {
+          existing.shipLogisticsNo = t.shipLogisticsNo
         }
       } else {
         ticketMap.set(t.platformAftersaleId, { ...t, cardKeys: [card.cardKey] })
