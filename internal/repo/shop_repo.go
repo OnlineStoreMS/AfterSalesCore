@@ -492,7 +492,7 @@ func (r *ShopRepo) ListShippedRefunds(f ShippedRefundListFilter) ([]model.Shippe
 	}
 	var list []model.ShippedRefundSuccess
 	offset := (f.Page - 1) * f.PageSize
-	err := q.Order("CASE WHEN logistics_status IN ('待取件','已签收','运输中') THEN 0 ELSE 1 END, COALESCE(applied_at, synced_at) DESC NULLS LAST, id DESC").
+	err := q.Order("COALESCE(applied_at, synced_at) DESC NULLS LAST, id DESC").
 		Offset(offset).Limit(f.PageSize).Find(&list).Error
 	return list, total, err
 }
