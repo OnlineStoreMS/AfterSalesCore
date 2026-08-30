@@ -23,6 +23,7 @@ type ShopItem struct {
 	PlatformShopName   string `json:"platformShopName,omitempty"`
 	LastSyncAt         string `json:"lastSyncAt,omitempty"`
 	LastSeenAt         string `json:"lastSeenAt,omitempty"`
+	NextSyncAt         string `json:"nextSyncAt,omitempty"`
 	SyncRequested      bool   `json:"syncRequested"`
 	PendingTicketCount int    `json:"pendingTicketCount,omitempty"`
 	Remark             string `json:"remark,omitempty"`

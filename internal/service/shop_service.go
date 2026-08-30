@@ -802,7 +802,27 @@ func (s *ShopService) toItem(shop *model.MarketplaceShop) dto.ShopItem {
 		item.LastSeenAt = formatTime(*shop.LastSeenAt)
 	}
 	item.SyncRequested = shop.SyncRequestedAt != nil
+	interval := s.pluginSyncInterval(shop.TenantID)
+	item.NextSyncAt = nextSyncHint(shop, interval, time.Now())
 	return item
+}
+
+func nextSyncHint(shop *model.MarketplaceShop, interval time.Duration, now time.Time) string {
+	if shop == nil || shop.PluginKey == "" {
+		return ""
+	}
+	online := shop.LastSeenAt != nil && now.Sub(*shop.LastSeenAt) <= pluginOnlineSkew
+	due := pluginShouldSync(shop, now, interval)
+	if !online {
+		if due || shop.LastSyncAt == nil {
+			return "待插件上线后同步"
+		}
+		return formatTime(shop.LastSyncAt.Add(interval)) + "（插件离线）"
+	}
+	if due {
+		return "下一次心跳"
+	}
+	return formatTime(shop.LastSyncAt.Add(interval))
 }
 
 func pluginShouldSync(shop *model.MarketplaceShop, now time.Time, interval time.Duration) bool {

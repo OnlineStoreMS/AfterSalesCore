@@ -63,13 +63,23 @@ async function callPage(tabId, fnName, fnArgs = [], world) {
   return inj?.result
 }
 
+function isLoginUrl(url) {
+  return /login|passport/i.test(String(url || ''))
+}
+
 function isFxgUsable(tab) {
   return !!(
     tab?.id &&
     tab.url &&
     tab.url.includes('fxg.jinritemai.com') &&
-    !/login|passport/i.test(tab.url)
+    !isLoginUrl(tab.url)
   )
+}
+
+function startKeepAlive() {
+  return setInterval(() => {
+    chrome.runtime.getPlatformInfo(() => {})
+  }, 15000)
 }
 
 function scoreFxgTab(tab, savedId) {
@@ -93,6 +103,31 @@ async function findFxgTab() {
   return pool[0] || null
 }
 
+async function findJinritemaiLoginTab() {
+  const all = await chrome.tabs.query({ url: ['https://*.jinritemai.com/*'] })
+  return all.find((t) => t.id && isLoginUrl(t.url)) || null
+}
+
+async function ensureWorkbenchForSync({ background = false } = {}) {
+  let tab = await findFxgTab()
+  if (tab?.id) {
+    tab = await ensureTabAwake(tab)
+    await rememberFxgTab(tab.id)
+    return tab
+  }
+  if (await findJinritemaiLoginTab()) {
+    throw new Error('请先在打开的标签页登录抖店后台')
+  }
+  await workLog(background ? '未找到抖店标签，正在后台打开售后工作台' : '正在打开售后工作台')
+  tab = await chrome.tabs.create({ url: WORKBENCH_URL, active: !background })
+  tab = await waitTabComplete(tab.id)
+  if (!isFxgUsable(tab)) {
+    throw new Error('请先在打开的标签页登录抖店后台')
+  }
+  await rememberFxgTab(tab.id)
+  return tab
+}
+
 async function rememberFxgTab(tabId) {
   await chrome.storage.local.set({ aftersaleFxgTabId: tabId })
 }
@@ -108,7 +143,7 @@ async function waitTabComplete(tabId, timeoutMs = 25000) {
     }
     if (tab.status === 'complete') {
       if (isFxgUsable(tab)) return tab
-      if (/login|passport/i.test(tab.url || '')) {
+      if (isLoginUrl(tab.url)) {
         throw new Error('请先在打开的标签页登录抖店后台')
       }
     }
@@ -241,7 +276,9 @@ async function api(path, { method = 'POST', body, auth = false } = {}) {
 async function heartbeat() {
   const device = await getDevice()
   if (!device) return { ok: false, skipped: true }
+  const keepAlive = startKeepAlive()
   try {
+    await ensureAlarms()
     const data = await api('/plugin/heartbeat', {
       auth: true,
       body: {
@@ -249,14 +286,18 @@ async function heartbeat() {
         platformShopName: device.platformShopName || '',
       },
     })
-    await chrome.storage.local.set({ heartbeatError: '' })
+    await chrome.storage.local.set({
+      heartbeatError: '',
+      aftersaleLastHeartbeatAt: Date.now(),
+      aftersaleSyncIntervalSec: Number(data?.syncIntervalSec) || 0,
+    })
     if (lastHeartbeatError) {
       lastHeartbeatError = ''
       await workLog('心跳已恢复', 'ok')
     }
     if (data?.syncNow && !syncing) {
       await workLog('服务端请求同步')
-      await syncNow()
+      await syncNow({ background: true })
     }
     return { ok: true, data }
   } catch (e) {
@@ -268,6 +309,8 @@ async function heartbeat() {
       await workLog(`心跳失败：${msg}`, 'error')
     }
     return { ok: false, error: msg }
+  } finally {
+    clearInterval(keepAlive)
   }
 }
 
@@ -534,20 +577,21 @@ async function openWorkbenchTab() {
   }
 }
 
-async function syncNow() {
+async function syncNow({ background = false } = {}) {
   if (syncing) return { ok: false, error: '正在同步' }
   const device = await getDevice()
   if (!device) {
     await workLog('尚未绑定店铺', 'error')
     return { ok: false, error: '尚未绑定店铺' }
   }
-  let tab = await findFxgTab()
-  if (!tab?.id) {
-    await workLog('未找到抖店标签，请先打开抖店工作台', 'error')
-    return { ok: false, error: '请先打开抖店后台（点「打开抖店工作台」即可）' }
+  let tab
+  try {
+    tab = await ensureWorkbenchForSync({ background })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    await workLog(`同步失败：${msg}`, 'error')
+    return { ok: false, error: msg }
   }
-  tab = await ensureTabAwake(tab)
-  await rememberFxgTab(tab.id)
   syncing = true
   await broadcastWork()
   const keepAlive = setInterval(() => {
@@ -671,16 +715,23 @@ async function ensureAlarms() {
   }
 }
 
+async function boot() {
+  await ensureAlarms()
+  const device = await getDevice()
+  if (!device) return
+  await heartbeat()
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  ensureAlarms()
+  void boot()
 })
 
 chrome.runtime.onStartup.addListener(() => {
-  ensureAlarms()
+  void boot()
 })
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === HEARTBEAT_ALARM) heartbeat()
+  if (alarm.name === HEARTBEAT_ALARM) return heartbeat()
 })
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {

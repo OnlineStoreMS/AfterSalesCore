@@ -33,6 +33,43 @@ func TestPluginShouldSync(t *testing.T) {
 	}
 }
 
+func TestNextSyncHint(t *testing.T) {
+	now := time.Date(2026, 8, 31, 8, 0, 0, 0, time.Local)
+	interval := 30 * time.Minute
+	online := now.Add(-10 * time.Second)
+	offline := now.Add(-10 * time.Minute)
+	recentSync := now.Add(-10 * time.Minute)
+	staleSync := now.Add(-40 * time.Minute)
+
+	cases := []struct {
+		name string
+		shop *model.MarketplaceShop
+		want string
+	}{
+		{name: "unbound", shop: &model.MarketplaceShop{}, want: ""},
+		{
+			name: "online due",
+			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &online, LastSyncAt: &staleSync},
+			want: "下一次心跳",
+		},
+		{
+			name: "online waiting",
+			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &online, LastSyncAt: &recentSync},
+			want: formatTime(recentSync.Add(interval)),
+		},
+		{
+			name: "offline due",
+			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &offline, LastSyncAt: &staleSync},
+			want: "待插件上线后同步",
+		},
+	}
+	for _, tc := range cases {
+		if got := nextSyncHint(tc.shop, interval, now); got != tc.want {
+			t.Fatalf("%s: got %q want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestClampPluginSyncMinutes(t *testing.T) {
 	if repo.ClampPluginSyncMinutes(0) != 30 {
 		t.Fatal("unset should default to 30")

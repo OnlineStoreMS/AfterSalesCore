@@ -162,7 +162,7 @@ async function handleRequestSync(row: MarketplaceShop) {
           />
         </el-select>
         <el-button type="primary" plain :loading="savingSync" @click="saveSyncInterval">保存间隔</el-button>
-        <span class="sync-tip">到点由插件心跳触发；店铺上的「请求同步」仍会马上采一次。</span>
+        <span class="sync-tip">到点后由插件心跳触发并自动打开抖店工作台采集。需保持 Chrome 已启动、插件已绑定、抖店已登录。「请求同步」会在下一次心跳马上采一次。</span>
       </div>
 
       <el-table :data="tableData" stripe border>
@@ -194,6 +194,9 @@ async function handleRequestSync(row: MarketplaceShop) {
         </el-table-column>
         <el-table-column prop="lastSyncAt" label="最近同步" width="170">
           <template #default="{ row }">{{ row.lastSyncAt || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="nextSyncAt" label="下次同步" width="190">
+          <template #default="{ row }">{{ row.nextSyncAt || '—' }}</template>
         </el-table-column>
         <el-table-column prop="lastSeenAt" label="最近在线" width="170">
           <template #default="{ row }">{{ row.lastSeenAt || '—' }}</template>

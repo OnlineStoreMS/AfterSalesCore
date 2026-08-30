@@ -199,6 +199,7 @@ async function handleRequestSync() {
           {{ shop?.platformLabel }}
           <template v-if="shop?.platformShopName"> · {{ shop.platformShopName }}</template>
           <template v-if="lastSyncAt"> · 最近同步 {{ lastSyncAt }}</template>
+          <template v-if="shop?.nextSyncAt"> · 下次同步 {{ shop.nextSyncAt }}</template>
           · 默认按售后剩余时间排序，最短的在前
         </p>
       </div>

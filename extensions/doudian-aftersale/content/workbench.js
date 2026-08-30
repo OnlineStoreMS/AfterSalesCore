@@ -844,6 +844,37 @@ async function ensureCardSelected(card) {
   await clickCard(live.el)
 }
 
+function groupAggregateCard(card) {
+  return parseCards().find((c) => c.groupName === card.groupName && isAggregateCard(c) && c.count > 0)
+}
+
+async function clearSelectedInGroup(card) {
+  for (const c of parseCards()) {
+    if (c.groupName !== card.groupName || !isCardSelected(c.el)) continue
+    await clickCard(c.el)
+    await sleep(200)
+  }
+  await waitUntil(() => {
+    const selected = parseCards().some((c) => c.groupName === card.groupName && isCardSelected(c.el))
+    return selected ? null : true
+  }, 20, 150)
+}
+
+async function switchToCard(card, ctx) {
+  if (expectNewIds(ctx.prev, card)) {
+    await clearSelectedInGroup(card)
+    await waitUntil(() => {
+      const t = parseListTotal()
+      if (t == null) return null
+      if (ctx.prev.count != null && ctx.prev.count !== card.count && t === ctx.prev.count) return null
+      return true
+    }, 40, 200)
+    await sleep(400)
+  }
+  const live = liveCard(card)
+  if (!isCardSelected(live.el)) await clickCard(live.el)
+}
+
 async function collectCardTickets(card, prev = emptyPrevCard()) {
   const beforeIds = ticketIds(collectVisibleTickets())
   const beforeTotal = parseListTotal()
@@ -858,13 +889,24 @@ async function collectCardTickets(card, prev = emptyPrevCard()) {
     if (beforeTotal != null && total != null && total !== beforeTotal) ctx.sawTotalChange = true
     return listBelongsToCard(card, ctx) ? true : null
   }
-  for (let i = 0; i < 4 && !matched(); i++) {
-    await ensureCardSelected(card)
-    await waitUntil(matched, 50, 200)
-    if (matched()) break
-    const live = liveCard(card)
-    if (isCardSelected(live.el)) await sleep(400)
-    else await clickCard(live.el)
+  await switchToCard(card, ctx)
+  await waitUntil(matched, 50, 200)
+  if (!matched()) {
+    await switchToCard(card, ctx)
+    await waitUntil(matched, 40, 200)
+  }
+  if (!matched()) {
+    const agg = groupAggregateCard(card)
+    if (agg && agg.cardKey !== card.cardKey) {
+      await clickCard(liveCard(agg).el)
+      await waitUntil(() => {
+        const t = parseListTotal()
+        return t != null && t !== card.count ? true : null
+      }, 40, 200)
+      await sleep(400)
+      await clickCard(liveCard(card).el)
+      await waitUntil(matched, 50, 200)
+    }
   }
   if (!matched()) return emptyCardResult()
   await setLargestPageSize(card.count)
