@@ -181,7 +181,9 @@ func (r *ShopRepo) ListTickets(f TicketListFilter) ([]model.AftersaleTicket, int
 	}
 	var list []model.AftersaleTicket
 	offset := (f.Page - 1) * f.PageSize
-	err := q.Preload("CardKeys").Order("id DESC").Offset(offset).Limit(f.PageSize).Find(&list).Error
+	err := q.Preload("CardKeys").
+		Order("deadline_at ASC NULLS LAST, id DESC").
+		Offset(offset).Limit(f.PageSize).Find(&list).Error
 	return list, total, err
 }
 

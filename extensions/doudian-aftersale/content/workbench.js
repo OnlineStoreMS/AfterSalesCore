@@ -180,7 +180,7 @@ function parseHeaderRow(tr) {
     .map((s) => s.trim())
     .filter(Boolean)
   const skip = /^(订单编号|售后编号|[0-9]{8,}|[^\w\u4e00-\u9fa5]*\*)$/
-  const typeHit = lines.find((l) => /退货退款|仅退款|换货|补寄|维修/.test(l))
+  const typeHit = lines.find((l) => /已发货退款|未发货退款|退货退款|仅退款|换货|补寄|维修/.test(l))
   const tags = lines.filter((l) => !skip.test(l) && l !== typeHit && l.length < 20)
   return {
     orderNo,
@@ -643,6 +643,26 @@ function cardTypeKeyword(label) {
   return ''
 }
 
+function cardTypeAliases(type) {
+  if (type === '已发货退款') return ['已发货退款', '仅退款']
+  if (type === '未发货退款') return ['未发货退款', '仅退款']
+  return [type]
+}
+
+function rowConflictsCardType(blob, type) {
+  if (type === '已发货退款') return /换货|补寄|维修|未发货退款/.test(blob)
+  if (type === '未发货退款') return /换货|补寄|维修|已发货退款|退货退款/.test(blob)
+  if (type === '换货') return /已发货退款|未发货退款|仅退款|退货退款|补寄|维修/.test(blob)
+  return false
+}
+
+function rowMatchesCardType(row, type) {
+  const blob = `${row?.aftersaleType || ''} ${row?.tags || ''}`
+  if (cardTypeAliases(type).some((a) => blob.includes(a))) return true
+  if (rowConflictsCardType(blob, type)) return false
+  return false
+}
+
 function rowsMatchCardType(card, rows) {
   const label = String(card?.cardLabel || '')
   if (!label || /全部|紧急|临期|催|投诉|重复/.test(label)) return true
@@ -650,7 +670,7 @@ function rowsMatchCardType(card, rows) {
   if (!type) return true
   const list = rows || []
   if (!list.length) return false
-  const hit = list.filter((r) => `${r.aftersaleType || ''} ${r.tags || ''}`.includes(type))
+  const hit = list.filter((r) => rowMatchesCardType(r, type))
   return hit.length >= Math.ceil(list.length * 0.6)
 }
 
