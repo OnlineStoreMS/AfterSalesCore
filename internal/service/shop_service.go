@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -288,6 +290,151 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery) ([]dto.ReturnPackageIte
 		out = append(out, toReturnItem(&list[i], names[list[i].ShopID]))
 	}
 	return out, total, nil
+}
+
+func interceptKey(shopID uint64, aftersaleID string) string {
+	return strconv.FormatUint(shopID, 10) + ":" + strings.TrimSpace(aftersaleID)
+}
+
+func (s *ShopService) ListIntercepts(q dto.InterceptListQuery) ([]dto.InterceptItem, int64, error) {
+	if q.ShopID > 0 {
+		if _, err := s.repo().Get(q.ShopID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, 0, ErrNotFound
+			}
+			return nil, 0, err
+		}
+	}
+	tickets, err := s.repo().ListInterceptTickets(q.ShopID, q.Keyword)
+	if err != nil {
+		return nil, 0, err
+	}
+	pickups, err := s.repo().ListShippedRefundsByStatus(q.ShopID, LogisticsAwaitPickup)
+	if err != nil {
+		return nil, 0, err
+	}
+	shops, err := s.repo().List()
+	if err != nil {
+		return nil, 0, err
+	}
+	names := make(map[uint64]string, len(shops))
+	for i := range shops {
+		names[shops[i].ID] = shops[i].Name
+	}
+	kw := strings.TrimSpace(q.Keyword)
+	merged := map[string]*dto.InterceptItem{}
+	order := make([]string, 0)
+	for i := range tickets {
+		t := &tickets[i]
+		key := interceptKey(t.ShopID, t.PlatformAftersaleID)
+		item := interceptFromTicket(t, names[t.ShopID])
+		merged[key] = &item
+		order = append(order, key)
+	}
+	for i := range pickups {
+		p := &pickups[i]
+		if kw != "" && !interceptKeywordMatch(p, kw) {
+			continue
+		}
+		key := interceptKey(p.ShopID, p.PlatformAftersaleID)
+		if existing := merged[key]; existing != nil {
+			existing.AwaitPickup = true
+			existing.LogisticsStatus = LogisticsAwaitPickup
+			if existing.LogisticsNo == "" {
+				existing.LogisticsNo = strings.TrimSpace(p.LogisticsNo)
+			}
+			if existing.Carrier == "" {
+				existing.Carrier = strings.TrimSpace(p.Carrier)
+			}
+			existing.Source = "both"
+			continue
+		}
+		item := interceptFromShipped(p, names[p.ShopID])
+		merged[key] = &item
+		order = append(order, key)
+	}
+	list := make([]dto.InterceptItem, 0, len(order))
+	for _, key := range order {
+		if item := merged[key]; item != nil {
+			list = append(list, *item)
+		}
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		ti := interceptSortTime(list[i])
+		tj := interceptSortTime(list[j])
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return list[i].ID > list[j].ID
+	})
+	total := int64(len(list))
+	page, pageSize := q.Page, q.PageSize
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 20
+	}
+	start := (page - 1) * pageSize
+	if start >= len(list) {
+		return []dto.InterceptItem{}, total, nil
+	}
+	end := start + pageSize
+	if end > len(list) {
+		end = len(list)
+	}
+	return list[start:end], total, nil
+}
+
+func interceptKeywordMatch(p *model.ShippedRefundSuccess, kw string) bool {
+	blob := strings.ToLower(strings.Join([]string{
+		p.PlatformAftersaleID, p.OrderNo, p.ProductTitle, p.SKU, p.Logistics, p.LogisticsNo, p.Status, p.OrderInfo,
+	}, " "))
+	return strings.Contains(blob, strings.ToLower(kw))
+}
+
+func interceptSortTime(item dto.InterceptItem) time.Time {
+	if t := ParsePlatformDateTime(item.ApplyTime, 0); t != nil {
+		return *t
+	}
+	if t, err := time.ParseInLocation("2006-01-02 15:04:05", item.SyncedAt, time.Local); err == nil {
+		return t
+	}
+	return time.Time{}
+}
+
+func interceptFromTicket(t *model.AftersaleTicket, shopName string) dto.InterceptItem {
+	no := strings.TrimSpace(t.ShipLogisticsNo)
+	if no == "" {
+		no = strings.TrimSpace(t.ReturnLogisticsNo)
+	}
+	return dto.InterceptItem{
+		ID: t.ID, ShopID: t.ShopID, ShopName: shopName, Source: "intercept",
+		NeedIntercept: true, AwaitPickup: false,
+		PlatformAftersaleID: t.PlatformAftersaleID, OrderNo: t.OrderNo,
+		ProductTitle: t.ProductTitle, ProductImage: t.ProductImage, SKU: t.SKU,
+		Qty: t.Qty, BuyQty: t.BuyQty, PayAmount: t.PayAmount, RefundAmount: t.RefundAmount,
+		AftersaleType: t.AftersaleType, Reason: t.Reason, Status: t.Status,
+		Logistics: t.Logistics, LogisticsNo: no, ShipLogisticsNo: t.ShipLogisticsNo,
+		ReturnLogisticsNo: t.ReturnLogisticsNo, ApplyTime: t.ApplyTime, SyncedAt: formatTime(t.SyncedAt),
+	}
+}
+
+func interceptFromShipped(p *model.ShippedRefundSuccess, shopName string) dto.InterceptItem {
+	status := p.LogisticsStatus
+	if status == "" {
+		status = ClassifyLogisticsWithTracks(p.Logistics, p.TrackJSON)
+	}
+	return dto.InterceptItem{
+		ID: p.ID, ShopID: p.ShopID, ShopName: shopName, Source: "pickup",
+		NeedIntercept: false, AwaitPickup: true,
+		PlatformAftersaleID: p.PlatformAftersaleID, OrderNo: p.OrderNo,
+		ProductTitle: p.ProductTitle, ProductImage: p.ProductImage, SKU: p.SKU,
+		Qty: p.Qty, BuyQty: p.BuyQty, PayAmount: p.PayAmount, RefundAmount: p.RefundAmount,
+		AftersaleType: p.AftersaleType, Reason: p.Reason, Status: p.Status,
+		Logistics: p.Logistics, LogisticsStatus: firstNonEmpty(status, LogisticsAwaitPickup),
+		LogisticsNo: p.LogisticsNo, Carrier: p.Carrier, ApplyTime: p.ApplyTime, SyncedAt: formatTime(p.SyncedAt),
+	}
 }
 
 func (s *ShopService) ListShippedRefunds(q dto.ShippedRefundListQuery) ([]dto.ShippedRefundItem, int64, error) {

@@ -248,3 +248,41 @@ export async function fetchShippedRefunds(params?: {
     },
   }))
 }
+
+export interface InterceptOrder {
+  id: number
+  shopId: number
+  shopName: string
+  source: string
+  needIntercept: boolean
+  awaitPickup: boolean
+  platformAftersaleId: string
+  orderNo: string
+  productTitle: string
+  productImage?: string
+  sku: string
+  qty: number
+  buyQty?: number
+  payAmount: string
+  refundAmount: string
+  aftersaleType: string
+  reason: string
+  status: string
+  logistics?: string
+  logisticsStatus?: string
+  logisticsNo?: string
+  shipLogisticsNo?: string
+  returnLogisticsNo?: string
+  carrier?: string
+  applyTime?: string
+  syncedAt: string
+}
+
+export async function fetchInterceptOrders(params?: {
+  shopId?: number
+  keyword?: string
+  page?: number
+  pageSize?: number
+}) {
+  return unwrap<PageData<InterceptOrder>>(await client.get('/intercept-orders', { params }))
+}

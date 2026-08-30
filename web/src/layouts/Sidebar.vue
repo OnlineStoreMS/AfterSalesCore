@@ -9,6 +9,7 @@ const collapsed = defineModel<boolean>('collapsed', { default: false })
 
 const activeMenu = computed(() => {
   if (route.path.startsWith('/shops')) return '/shops'
+  if (route.path.startsWith('/returns/intercept')) return '/returns/intercept'
   if (route.path.startsWith('/returns/shipped-success')) return '/returns/shipped-success'
   if (route.path.startsWith('/returns')) return '/returns'
   if (route.path.startsWith('/notifications')) return '/notifications'
@@ -60,6 +61,9 @@ watch(() => route.path, () => {})
         <el-menu-item index="/returns" @click="navigate('/returns')">退回件</el-menu-item>
         <el-menu-item index="/returns/shipped-success" @click="navigate('/returns/shipped-success')">
           已发货退款成功
+        </el-menu-item>
+        <el-menu-item index="/returns/intercept" @click="navigate('/returns/intercept')">
+          需商家拦截快递
         </el-menu-item>
       </el-sub-menu>
       <el-menu-item

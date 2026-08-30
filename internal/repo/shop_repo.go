@@ -505,6 +505,24 @@ func (r *ShopRepo) ListShippedRefunds(f ShippedRefundListFilter) ([]model.Shippe
 	return list, total, err
 }
 
+func (r *ShopRepo) ListInterceptTickets(shopID uint64, keyword string) ([]model.AftersaleTicket, error) {
+	q := r.db.Model(&model.AftersaleTicket{}).Scopes(scopeTenant(r.tenantID)).
+		Where("logistics LIKE ?", "%需商家拦截快递%")
+	if shopID > 0 {
+		q = q.Where("shop_id = ?", shopID)
+	}
+	if kw := strings.TrimSpace(keyword); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where(
+			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR sku ILIKE ? OR logistics ILIKE ? OR ship_logistics_no ILIKE ? OR return_logistics_no ILIKE ?",
+			like, like, like, like, like, like, like,
+		)
+	}
+	var list []model.AftersaleTicket
+	err := q.Order("synced_at DESC, id DESC").Limit(500).Find(&list).Error
+	return list, err
+}
+
 func (r *ShopRepo) ListShippedRefundsByStatus(shopID uint64, status string) ([]model.ShippedRefundSuccess, error) {
 	var list []model.ShippedRefundSuccess
 	q := r.db.Model(&model.ShippedRefundSuccess{}).Scopes(scopeTenant(r.tenantID)).

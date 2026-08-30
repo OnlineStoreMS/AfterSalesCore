@@ -713,7 +713,86 @@ function rowsMatchCardType(card, rows) {
   return hit.length >= Math.ceil(list.length * 0.6)
 }
 
-function cardTableState(card) {
+function ticketIds(rows) {
+  return (rows || []).map((r) => r.platformAftersaleId).filter(Boolean)
+}
+
+function emptyPrevCard() {
+  return {
+    cardKey: '',
+    groupName: '',
+    cardLabel: '',
+    type: '',
+    count: null,
+    visibleIds: [],
+    collectedIds: [],
+  }
+}
+
+function isAggregateCard(card) {
+  return /全部|紧急|临期|催|投诉|重复/.test(String(card?.cardLabel || ''))
+}
+
+function cardKind(card) {
+  const type = cardTypeKeyword(card?.cardLabel)
+  if (type) return 'type'
+  if (isAggregateCard(card)) return 'aggregate'
+  return 'status'
+}
+
+function sameGroupSameCount(prev, card) {
+  return prev?.groupName && prev.groupName === card.groupName && prev.count === card.count
+}
+
+function expectNewIds(prev, card) {
+  if (!prev?.cardKey || prev.cardKey === card.cardKey) return false
+  const a = cardKind(prev)
+  const b = cardKind(card)
+  if (a === 'type' && b === 'type' && prev.type !== cardTypeKeyword(card.cardLabel)) return true
+  if (a === 'aggregate' && b === 'type') return true
+  if (a === 'type' && b === 'aggregate') return true
+  if (a === 'status' && b === 'type') return true
+  if (a === 'type' && b === 'status') return true
+  if (a === 'aggregate' && b === 'status' && sameGroupSameCount(prev, card)) return false
+  if (a === 'status' && b === 'aggregate' && sameGroupSameCount(prev, card)) return false
+  if (a === 'status' && b === 'status' && sameGroupSameCount(prev, card)) return false
+  return prev.count !== card.count || prev.cardKey !== card.cardKey
+}
+
+function rowsHaveUniqueType(card, rows) {
+  const type = cardTypeKeyword(card?.cardLabel)
+  if (!type) return true
+  const list = rows || []
+  if (!list.length) return false
+  const hit = list.filter((r) => {
+    const blob = rowTypeBlob(r)
+    return blob.includes(type)
+  })
+  return hit.length >= Math.ceil(list.length * 0.6)
+}
+
+function stillStaleList(card, ctx, rows) {
+  const prev = ctx?.prev || emptyPrevCard()
+  const ids = ticketIds(rows)
+  if (!ids.length) return false
+  const type = cardTypeKeyword(card.cardLabel)
+  const prevVisible = ctx?.beforeIds?.length ? ctx.beforeIds : prev.visibleIds || []
+  const prevCollected = prev.collectedIds || []
+
+  if (prev.type && type && prev.type !== type && prevCollected.length) {
+    if (ids.every((id) => prevCollected.includes(id))) return true
+  }
+  if (!expectNewIds(prev, card)) return false
+  if (prevVisible.length && ids.every((id) => prevVisible.includes(id))) {
+    if (prev.type && type && prev.type !== type) return true
+    if (rowsHaveUniqueType(card, rows)) return false
+    if (ctx?.sawTotalChange && !prev.type) return false
+    return true
+  }
+  return false
+}
+
+function cardTableState(card, ctx) {
   const live = liveCard(card)
   if (!isCardSelected(live.el)) return null
   if (currentPage() > 1) return null
@@ -726,6 +805,7 @@ function cardTableState(card) {
   if (total !== card.count) return null
   if (rows.length === 0 || rows.length > card.count) return null
   if (currentPageSize() >= 50 && rows.length < card.count) return null
+  if (stillStaleList(card, ctx, rows)) return null
   if (!rowsMatchCardType(card, rows)) return null
   return { rows, total }
 }
@@ -749,11 +829,13 @@ function emptyCardResult() {
   return all
 }
 
-function listBelongsToCard(card) {
+function listBelongsToCard(card, ctx) {
   const live = liveCard(card)
   if (!isCardSelected(live.el)) return false
   if (parseListTotal() !== card.count) return false
-  return rowsMatchCardType(card, collectVisibleTickets())
+  const rows = collectVisibleTickets()
+  if (stillStaleList(card, ctx, rows)) return false
+  return rowsMatchCardType(card, rows)
 }
 
 async function ensureCardSelected(card) {
@@ -762,8 +844,20 @@ async function ensureCardSelected(card) {
   await clickCard(live.el)
 }
 
-async function collectCardTickets(card) {
-  const matched = () => (listBelongsToCard(card) ? true : null)
+async function collectCardTickets(card, prev = emptyPrevCard()) {
+  const beforeIds = ticketIds(collectVisibleTickets())
+  const beforeTotal = parseListTotal()
+  const ctx = {
+    prev,
+    beforeIds,
+    beforeTotal,
+    sawTotalChange: beforeTotal != null && beforeTotal !== card.count,
+  }
+  const matched = () => {
+    const total = parseListTotal()
+    if (beforeTotal != null && total != null && total !== beforeTotal) ctx.sawTotalChange = true
+    return listBelongsToCard(card, ctx) ? true : null
+  }
   for (let i = 0; i < 4 && !matched(); i++) {
     await ensureCardSelected(card)
     await waitUntil(matched, 50, 200)
@@ -780,13 +874,14 @@ async function collectCardTickets(card) {
   }
   if (!matched()) return emptyCardResult()
   await ensureFirstPage()
-  await waitUntil(() => cardTableState(card), 50, 200)
-  if (!listBelongsToCard(card)) return emptyCardResult()
+  await waitUntil(() => cardTableState(card, ctx), 50, 200)
+  if (!listBelongsToCard(card, ctx)) return emptyCardResult()
   const all = []
   const seen = new Set()
   const expected = card.count || 0
   const add = (rows) => {
-    if (!listBelongsToCard(card)) return
+    if (!listBelongsToCard(card, ctx)) return
+    if (stillStaleList(card, ctx, rows)) return
     if (!rowsMatchCardType(card, rows)) return
     if ((rows || []).length > expected) return
     for (const r of rows || []) {
@@ -799,10 +894,10 @@ async function collectCardTickets(card) {
   add(await enrichInterceptTickets(await visibleTicketsWithLogistics()))
   if (expected && all.length < expected) {
     await setLargestPageSize(expected)
-    if (listBelongsToCard(card)) add(await enrichInterceptTickets(await visibleTicketsWithLogistics()))
+    if (listBelongsToCard(card, ctx)) add(await enrichInterceptTickets(await visibleTicketsWithLogistics()))
   }
   for (let p = 2; expected && all.length < expected && p <= 20; p++) {
-    if (!listBelongsToCard(card)) break
+    if (!listBelongsToCard(card, ctx)) break
     const prevIds = all.map((r) => r.platformAftersaleId)
     const moved = await goToPage(p)
     if (!moved) {
@@ -1559,9 +1654,21 @@ async function collectAll() {
   await resetAftersaleFilters()
   const ticketMap = new Map()
   const cardStats = []
+  let prevCard = emptyPrevCard()
   for (const card of cardRows) {
     if (!card.count) continue
-    const rows = await collectCardTickets(card)
+    const rows = await collectCardTickets(card, prevCard)
+    if (rows.length) {
+      prevCard = {
+        cardKey: card.cardKey,
+        groupName: card.groupName,
+        cardLabel: card.cardLabel,
+        type: cardTypeKeyword(card.cardLabel),
+        count: card.count,
+        visibleIds: ticketIds(rows),
+        collectedIds: ticketIds(rows),
+      }
+    }
     cardStats.push({
       cardKey: card.cardKey,
       label: `${card.groupName}·${card.cardLabel}`,
