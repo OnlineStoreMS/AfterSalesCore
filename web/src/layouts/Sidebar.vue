@@ -59,7 +59,7 @@ watch(() => route.path, () => {})
         </template>
         <el-menu-item index="/returns" @click="navigate('/returns')">退回件</el-menu-item>
         <el-menu-item index="/returns/shipped-success" @click="navigate('/returns/shipped-success')">
-          已发货退款成功管理
+          已发货退款成功
         </el-menu-item>
       </el-sub-menu>
       <el-menu-item

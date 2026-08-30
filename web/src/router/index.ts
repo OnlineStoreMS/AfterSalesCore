@@ -75,7 +75,7 @@ const router = createRouter({
           path: 'returns/shipped-success',
           name: 'ShippedRefunds',
           component: () => import('../views/shop/ShippedRefundList.vue'),
-          meta: { title: '已发货退款成功管理' },
+          meta: { title: '已发货退款成功' },
         },
         {
           path: 'shops/:id',
