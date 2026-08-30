@@ -1013,17 +1013,39 @@ async function resetAftersaleFilters() {
   await waitListSettled()
 }
 
+function shippedRefundHeaderCount() {
+  const table = workbenchTable()
+  if (!table) return { total: 0, shipped: 0 }
+  let total = 0
+  let shipped = 0
+  for (const tr of table.querySelectorAll('tr')) {
+    const t = tr.innerText || ''
+    if (!t.includes('售后编号') || !t.includes('订单编号')) continue
+    total += 1
+    if (t.includes('已发货退款')) shipped += 1
+  }
+  return { total, shipped }
+}
+
+function isShippedRefundListReady() {
+  if (!currentSelectValue('售后类型').includes('已发货退款')) return false
+  if (!currentSelectValue('售后状态').includes('退款成功')) return false
+  const now = ticketListFingerprint()
+  if (now.total == null || now.visible === 0) return false
+  const headers = shippedRefundHeaderCount()
+  if (headers.total === 0) return false
+  return headers.shipped >= Math.ceil(headers.total * 0.7)
+}
+
 async function applyReturnFilters() {
-  await resetAftersaleFilters()
-  await sleep(1200)
-  await clearSelectedCards()
-  await waitListSettled()
-  await sleep(800)
+  if (parseCards().some((c) => isCardSelected(c.el))) {
+    await resetAftersaleFilters()
+  }
   const before = ticketListFingerprint()
   const typeOk = await pickSelectByLabel('售后类型', '已发货退款')
-  await sleep(400)
+  await sleep(300)
   const statusOk = await pickSelectByLabel('售后状态', '退款成功')
-  await sleep(400)
+  await sleep(300)
   if (!typeOk || !statusOk) {
     throw new Error('无法设置售后类型/售后状态筛选')
   }
@@ -1032,30 +1054,20 @@ async function applyReturnFilters() {
     const open = queryAnyAll('.auxo-select-dropdown, .aurora-select-dropdown').some(isShown)
     return open ? null : true
   }, 15, 150)
-  await sleep(500)
   const query = findButton(/查\s*询/)
   if (!query) throw new Error('未找到查询按钮')
   fireClick(query)
-  await sleep(1500)
   const ready = await waitUntil(() => {
-    const type = currentSelectValue('售后类型')
-    const status = currentSelectValue('售后状态')
-    if (!type.includes('已发货退款') || !status.includes('退款成功')) return null
-    if (parseCards().some((c) => isCardSelected(c.el))) return null
+    if (!isShippedRefundListReady()) return null
     const now = ticketListFingerprint()
-    if (now.total == null) return null
-    if (now.visible === 0 && now.total > 0) return null
-    if (now.ids && now.ids === before.ids && now.total === before.total) return null
+    if (before.ids && now.ids === before.ids && now.total === before.total && (before.total || 0) <= 20) {
+      return null
+    }
     return now
-  }, 50, 200)
+  }, 50, 400)
   if (!ready) {
     fireClick(query)
-    const retry = await waitUntil(() => {
-      const now = ticketListFingerprint()
-      if (now.total == null || (now.visible === 0 && now.total > 0)) return null
-      if (now.ids && now.ids === before.ids && now.total === before.total) return null
-      return now
-    }, 30, 200)
+    const retry = await waitUntil(() => (isShippedRefundListReady() ? ticketListFingerprint() : null), 40, 400)
     if (!retry) throw new Error('退回件筛选未刷新列表')
   }
   await waitListSettled()
@@ -1113,7 +1125,7 @@ async function collectVisibleReturnItems(seen) {
 async function collectReturnPackages() {
   locateWorkbenchPage()
   closeLogisticsDrawer()
-  await sleep(3000)
+  await sleep(800)
   await applyReturnFilters()
   const expected = parseListTotal() ?? 0
   if (expected > 0) {
@@ -1175,7 +1187,6 @@ async function collectReturnPackages() {
   if (!items.length && expected >= 10) {
     throw new Error(`已发货退款/退款成功 ${expected} 条已出现，但物流列未见已退回，疑似未加载完`)
   }
-  await resetAftersaleFilters()
   return {
     items,
     stats: {
@@ -1196,6 +1207,16 @@ async function collectAll() {
   if (!cardRows.length) {
     throw new Error('未找到快捷筛选卡片，请确认当前是售后工作台列表页')
   }
+  let returns
+  let returnStats
+  try {
+    const collected = await collectReturnPackages()
+    returns = collected.items
+    returnStats = collected.stats
+  } catch (e) {
+    returnStats = { error: e instanceof Error ? e.message : String(e) }
+  }
+  await resetAftersaleFilters()
   const ticketMap = new Map()
   const cardStats = []
   for (const card of cardRows) {
@@ -1221,15 +1242,7 @@ async function collectAll() {
       }
     }
   }
-  let returns
-  let returnStats
-  try {
-    const collected = await collectReturnPackages()
-    returns = collected.items
-    returnStats = collected.stats
-  } catch (e) {
-    returnStats = { error: e instanceof Error ? e.message : String(e) }
-  }
+  await resetAftersaleFilters()
   const meta = shopMeta()
   return {
     ok: true,

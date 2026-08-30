@@ -556,7 +556,7 @@ async function syncNow() {
   try {
     await workLog('开始同步售后工作台')
     await prepareWorkbench(tab.id)
-    await workLog('正在采集卡片与售后单')
+    await workLog('正在采集退回件、卡片与售后单')
     const collected = await collectFromTab(tab.id)
     const payload = {
       platformShopId: collected.platformShopId || '',
