@@ -136,16 +136,12 @@ async function handleRequestSync(row: MarketplaceShop) {
         <el-table-column prop="name" label="店铺" min-width="180">
           <template #default="{ row }">
             <div class="shop-title">
-              <el-badge
+              <span class="shop-name">{{ row.name }}</span>
+              <span
                 v-if="row.pendingTicketCount"
-                :value="row.pendingTicketCount"
-                type="danger"
-                :max="99"
+                class="count-dot"
                 :title="`待处理售后 ${row.pendingTicketCount} 单`"
-              >
-                <span class="shop-name">{{ row.name }}</span>
-              </el-badge>
-              <span v-else class="shop-name">{{ row.name }}</span>
+              >{{ row.pendingTicketCount > 99 ? '99+' : row.pendingTicketCount }}</span>
             </div>
             <div v-if="row.platformShopName" class="sub">平台店铺：{{ row.platformShopName }}</div>
           </template>
@@ -226,7 +222,21 @@ async function handleRequestSync(row: MarketplaceShop) {
   letter-spacing: 0.08em;
   margin-right: 4px;
 }
-.shop-title { display: inline-block; padding-right: 18px; padding-top: 2px; }
-.shop-name { font-weight: 600; display: inline-block; }
+.shop-title { display: inline-flex; align-items: center; gap: 6px; }
+.shop-name { font-weight: 600; }
+.count-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #f56c6c;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+}
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
 </style>
