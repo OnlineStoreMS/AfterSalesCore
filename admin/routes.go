@@ -48,6 +48,7 @@ func RegisterRoutes(
 	g.POST("/shops/:id/request-sync", shopH.RequestSync)
 	g.GET("/shops/:id/workbench", shopH.Workbench)
 	g.GET("/shops/:id/tickets", shopH.Tickets)
+	g.GET("/return-packages", shopH.Returns)
 
 	g.GET("/notifications", notifyH.Get)
 	g.PUT("/notifications", notifyH.Save)

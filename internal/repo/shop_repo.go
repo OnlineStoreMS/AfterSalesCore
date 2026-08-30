@@ -112,6 +112,9 @@ func (r *ShopRepo) Delete(id uint64) error {
 		if err := tx.Where("shop_id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.ServiceOrder{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("shop_id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.ReturnPackage{}).Error; err != nil {
+			return err
+		}
 		return tx.Where("id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.MarketplaceShop{}).Error
 	})
 }
@@ -303,6 +306,96 @@ func (r *ShopRepo) ListTicketsWithDeadline(shopID uint64) ([]model.AftersaleTick
 		Where("shop_id = ? AND deadline_at IS NOT NULL", shopID).
 		Limit(200).Find(&list).Error
 	return list, err
+}
+
+type ReturnListFilter struct {
+	ShopID   uint64
+	Keyword  string
+	Page     int
+	PageSize int
+}
+
+func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64, error) {
+	q := r.db.Model(&model.ReturnPackage{}).Scopes(scopeTenant(r.tenantID))
+	if f.ShopID > 0 {
+		q = q.Where("shop_id = ?", f.ShopID)
+	}
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where(
+			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR sku ILIKE ? OR logistics_no ILIKE ? OR return_location ILIKE ? OR carrier ILIKE ? OR status ILIKE ?",
+			like, like, like, like, like, like, like, like,
+		)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 || f.PageSize > 200 {
+		f.PageSize = 20
+	}
+	var list []model.ReturnPackage
+	offset := (f.Page - 1) * f.PageSize
+	err := q.Order("id DESC").Offset(offset).Limit(f.PageSize).Find(&list).Error
+	return list, total, err
+}
+
+func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.ReturnPackage) error {
+	now := time.Now()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		seenIDs := make([]uint64, 0, len(items))
+		for i := range items {
+			item := &items[i]
+			item.TenantID = shop.TenantID
+			item.ShopID = shop.ID
+			item.SyncedAt = now
+			var existing model.ReturnPackage
+			err := tx.Where("shop_id = ? AND platform_aftersale_id = ?", shop.ID, item.PlatformAftersaleID).
+				First(&existing).Error
+			if err == gorm.ErrRecordNotFound {
+				if err := tx.Create(item).Error; err != nil {
+					return err
+				}
+			} else if err != nil {
+				return err
+			} else {
+				item.ID = existing.ID
+				item.CreatedAt = existing.CreatedAt
+				if err := tx.Model(&existing).Updates(map[string]any{
+					"order_no":             item.OrderNo,
+					"product_title":        item.ProductTitle,
+					"product_image":        item.ProductImage,
+					"sku":                  item.SKU,
+					"qty":                  item.Qty,
+					"pay_amount":           item.PayAmount,
+					"refund_amount":        item.RefundAmount,
+					"aftersale_type":       item.AftersaleType,
+					"reason":               item.Reason,
+					"status":               item.Status,
+					"logistics":            item.Logistics,
+					"logistics_no":         item.LogisticsNo,
+					"carrier":              item.Carrier,
+					"return_location":      item.ReturnLocation,
+					"ship_time":            item.ShipTime,
+					"apply_time":           item.ApplyTime,
+					"track_json":           item.TrackJSON,
+					"raw_json":             item.RawJSON,
+					"synced_at":            now,
+				}).Error; err != nil {
+					return err
+				}
+			}
+			seenIDs = append(seenIDs, item.ID)
+		}
+		left := tx.Where("shop_id = ?", shop.ID)
+		if len(seenIDs) > 0 {
+			left = left.Where("id NOT IN ?", seenIDs)
+		}
+		return left.Delete(&model.ReturnPackage{}).Error
+	})
 }
 
 func (r *ShopRepo) ListTenantIDs() ([]uint64, error) {

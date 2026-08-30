@@ -39,6 +39,7 @@ const breadcrumbs = computed(() => {
   if (route.path.startsWith('/packing')) return ['售后', '打包记录']
   if (route.path.match(/^\/shops\/\d+/)) return ['售后', '店铺售后工作台']
   if (route.path.startsWith('/shops')) return ['售后', '店铺管理']
+  if (route.path.startsWith('/returns')) return ['售后', '退回管理']
   if (route.path.startsWith('/notifications')) return ['售后', '通知管理']
   if (route.path.startsWith('/edge-devices')) return ['售后', '录制端管理']
   return ['首页', title]

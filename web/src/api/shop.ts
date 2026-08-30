@@ -125,3 +125,36 @@ export async function fetchShopTickets(id: number, params?: {
 }) {
   return unwrap<PageData<AftersaleTicket>>(await client.get(`/shops/${id}/tickets`, { params }))
 }
+
+export interface ReturnPackage {
+  id: number
+  shopId: number
+  shopName: string
+  platformAftersaleId: string
+  orderNo: string
+  productTitle: string
+  productImage?: string
+  sku: string
+  qty: number
+  payAmount: string
+  refundAmount: string
+  aftersaleType: string
+  reason: string
+  status: string
+  logistics?: string
+  logisticsNo: string
+  carrier?: string
+  returnLocation: string
+  shipTime?: string
+  applyTime?: string
+  syncedAt: string
+}
+
+export async function fetchReturnPackages(params?: {
+  shopId?: number
+  keyword?: string
+  page?: number
+  pageSize?: number
+}) {
+  return unwrap<PageData<ReturnPackage>>(await client.get('/return-packages', { params }))
+}

@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"strconv"
 
 	"aftersalescore/internal/dto"
 	"aftersalescore/internal/pkg/authcontext"
@@ -144,6 +145,25 @@ func (h *ShopHandler) Tickets(c *gin.Context) {
 	}
 	page, pageSize := httputil.ParsePage(c)
 	list, total, err := h.ss(c).ListTickets(id, c.Query("cardKey"), c.Query("keyword"), page, pageSize)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, response.PageResult(list, total, page, pageSize))
+}
+
+func (h *ShopHandler) Returns(c *gin.Context) {
+	page, pageSize := httputil.ParsePage(c)
+	var shopID uint64
+	if raw := c.Query("shopId"); raw != "" {
+		id, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid shopId")
+			return
+		}
+		shopID = id
+	}
+	list, total, err := h.ss(c).ListReturns(shopID, c.Query("keyword"), page, pageSize)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return

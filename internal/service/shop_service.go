@@ -254,6 +254,36 @@ func (s *ShopService) ListTickets(id uint64, cardKey, keyword string, page, page
 	return out, total, nil
 }
 
+func (s *ShopService) ListReturns(shopID uint64, keyword string, page, pageSize int) ([]dto.ReturnPackageItem, int64, error) {
+	if shopID > 0 {
+		if _, err := s.repo().Get(shopID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, 0, ErrNotFound
+			}
+			return nil, 0, err
+		}
+	}
+	list, total, err := s.repo().ListReturns(repo.ReturnListFilter{
+		ShopID: shopID, Keyword: keyword, Page: page, PageSize: pageSize,
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	shops, err := s.repo().List()
+	if err != nil {
+		return nil, 0, err
+	}
+	names := make(map[uint64]string, len(shops))
+	for i := range shops {
+		names[shops[i].ID] = shops[i].Name
+	}
+	out := make([]dto.ReturnPackageItem, 0, len(list))
+	for i := range list {
+		out = append(out, toReturnItem(&list[i], names[list[i].ShopID]))
+	}
+	return out, total, nil
+}
+
 func (s *ShopService) Bind(bindCode string) (*dto.PluginBindResult, error) {
 	code := strings.ToUpper(strings.TrimSpace(bindCode))
 	if len(code) < 4 {
@@ -427,9 +457,45 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 		return nil, err
 	}
 
+	returnCount := 0
+	if in.Returns != nil {
+		returns := make([]model.ReturnPackage, 0, len(*in.Returns))
+		for _, item := range *in.Returns {
+			aid := strings.TrimSpace(item.PlatformAftersaleID)
+			if aid == "" {
+				continue
+			}
+			returns = append(returns, model.ReturnPackage{
+				PlatformAftersaleID: aid,
+				OrderNo:             strings.TrimSpace(item.OrderNo),
+				ProductTitle:        strings.TrimSpace(item.ProductTitle),
+				ProductImage:        strings.TrimSpace(item.ProductImage),
+				SKU:                 strings.TrimSpace(item.SKU),
+				Qty:                 item.Qty,
+				PayAmount:           strings.TrimSpace(item.PayAmount),
+				RefundAmount:        strings.TrimSpace(item.RefundAmount),
+				AftersaleType:       strings.TrimSpace(item.AftersaleType),
+				Reason:              strings.TrimSpace(item.Reason),
+				Status:              strings.TrimSpace(item.Status),
+				Logistics:           strings.TrimSpace(item.Logistics),
+				LogisticsNo:         strings.TrimSpace(item.LogisticsNo),
+				Carrier:             strings.TrimSpace(item.Carrier),
+				ReturnLocation:      strings.TrimSpace(item.ReturnLocation),
+				ShipTime:            strings.TrimSpace(item.ShipTime),
+				ApplyTime:           strings.TrimSpace(item.ApplyTime),
+				TrackJSON:           item.TrackJSON,
+				RawJSON:             item.RawJSON,
+			})
+		}
+		if err := s.repos.Shop.UpsertReturns(shop, returns); err != nil {
+			return nil, err
+		}
+		returnCount = len(returns)
+	}
+
 	result := &dto.PluginSyncResult{
 		ShopID: shop.ID, CardCount: len(cards), TicketCount: len(tickets),
-		LastSyncAt: formatTime(now),
+		ReturnCount: returnCount, LastSyncAt: formatTime(now),
 	}
 	if err := s.repos.Shop.Save(shop); err != nil {
 		return nil, err
@@ -499,6 +565,19 @@ func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {
 		item.DeadlineAt = t.DeadlineAt.UTC().Format(time.RFC3339)
 	}
 	return item
+}
+
+func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageItem {
+	return dto.ReturnPackageItem{
+		ID: item.ID, ShopID: item.ShopID, ShopName: shopName,
+		PlatformAftersaleID: item.PlatformAftersaleID, OrderNo: item.OrderNo,
+		ProductTitle: item.ProductTitle, ProductImage: item.ProductImage, SKU: item.SKU,
+		Qty: item.Qty, PayAmount: item.PayAmount, RefundAmount: item.RefundAmount,
+		AftersaleType: item.AftersaleType, Reason: item.Reason, Status: item.Status,
+		Logistics: item.Logistics, LogisticsNo: item.LogisticsNo, Carrier: item.Carrier,
+		ReturnLocation: item.ReturnLocation, ShipTime: item.ShipTime, ApplyTime: item.ApplyTime,
+		SyncedAt: formatTime(item.SyncedAt),
+	}
 }
 
 func hashSecret(secret string) string {

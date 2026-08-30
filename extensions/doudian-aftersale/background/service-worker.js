@@ -564,6 +564,7 @@ async function syncNow() {
       cards: collected.cards || [],
       tickets: collected.tickets || [],
     }
+    if (Array.isArray(collected.returns)) payload.returns = collected.returns
     const short = (collected.cardStats || []).filter((s) => s.expected && s.got < s.expected)
     for (const s of short) {
       await workLog(
@@ -572,7 +573,23 @@ async function syncNow() {
         'error',
       )
     }
-    await workLog(`已采集 ${payload.cards.length} 张卡片、${payload.tickets.length} 条售后单，正在上报`)
+    if (collected.returnStats?.error) {
+      await workLog(`退回件采集失败：${collected.returnStats.error}`, 'error')
+    } else if (Array.isArray(payload.returns)) {
+      const withNo = collected.returnStats?.withNo ?? payload.returns.filter((x) => x.logisticsNo).length
+      await workLog(
+        `退回件 ${payload.returns.length} 条` +
+          (collected.returnStats?.filteredTotal != null
+            ? `（已发货退款/退款成功 ${collected.returnStats.filteredTotal}）`
+            : '') +
+          `，其中 ${withNo} 条已取到单号`,
+      )
+    }
+    await workLog(
+      `已采集 ${payload.cards.length} 张卡片、${payload.tickets.length} 条售后单` +
+        (Array.isArray(payload.returns) ? `、${payload.returns.length} 条退回件` : '') +
+        '，正在上报',
+    )
     const data = await api('/plugin/sync', { auth: true, body: payload })
     const patch = { ...device }
     if (payload.platformShopId) patch.platformShopId = payload.platformShopId
@@ -586,11 +603,13 @@ async function syncNow() {
     })
     const cardCount = data?.cardCount ?? payload.cards.length
     const ticketCount = data?.ticketCount ?? payload.tickets.length
-    await workLog(`同步完成：卡片 ${cardCount} / 售后单 ${ticketCount}`, 'ok')
+    const returnCount = data?.returnCount ?? payload.returns?.length ?? 0
+    await workLog(`同步完成：卡片 ${cardCount} / 售后单 ${ticketCount} / 退回件 ${returnCount}`, 'ok')
     return {
       ok: true,
       cardCount,
       ticketCount,
+      returnCount,
       lastSyncAt: data?.lastSyncAt || now,
     }
   } catch (e) {

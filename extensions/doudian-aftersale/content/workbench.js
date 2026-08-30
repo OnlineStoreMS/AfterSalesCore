@@ -697,6 +697,279 @@ async function collectCardTickets(card) {
   return all
 }
 
+function isReturnedOutbound(ticket) {
+  const t = String(ticket?.logistics || '')
+  return t.includes('订单发货') && t.includes('已退回')
+}
+
+function findButton(re) {
+  for (const el of queryAnyAll('button')) {
+    if (re.test(textOf(el)) && isShown(el)) return el
+  }
+  return null
+}
+
+function findSelectByLabel(label) {
+  const wraps = queryAnyAll('[class*="labelWrapper"], label, .auxo-form-item, .aurora-form-item')
+  for (const w of wraps) {
+    if (!textOf(w).includes(label)) continue
+    let p = w
+    for (let i = 0; i < 6 && p; i++) {
+      const sel = p.querySelector('.auxo-select, .aurora-select')
+      if (sel) return sel
+      p = p.parentElement
+    }
+  }
+  return null
+}
+
+function currentSelectValue(label) {
+  const sel = findSelectByLabel(label)
+  if (!sel) return ''
+  return textOf(
+    sel.querySelector('.auxo-select-selection-item, .aurora-select-content-value, [class*="selection-item"]'),
+  )
+}
+
+async function pickSelectByLabel(label, want) {
+  const sel = findSelectByLabel(label)
+  if (!sel) return false
+  if (currentSelectValue(label) === want) return true
+  fireClick(sel.querySelector('.auxo-select-selector, .aurora-select-content, .aurora-select-selector') || sel)
+  const opt = await waitUntil(() => {
+    let hit = null
+    for (const el of queryAnyAll(
+      '.auxo-select-item, .auxo-select-item-option, .aurora-select-item, .aurora-select-item-option, [class*="select-item"]',
+    )) {
+      if (!isShown(el)) continue
+      const t = textOf(el)
+      if (t === want || t.includes(want)) hit = el
+    }
+    return hit
+  }, 20, 150)
+  if (opt) fireClick(opt)
+  await sleep(200)
+  return currentSelectValue(label) === want || currentSelectValue(label).includes(want)
+}
+
+async function clearSelectedCards() {
+  for (const card of parseCards()) {
+    if (!isCardSelected(card.el)) continue
+    fireClick(card.el)
+    await sleep(250)
+  }
+}
+
+function closeLogisticsDrawer() {
+  const close =
+    queryAny('.auxo-drawer-open .auxo-drawer-close, .aurora-drawer-open .aurora-drawer-close') ||
+    queryAny('.auxo-drawer-open [class*="drawer-close"], .aurora-drawer-open [class*="drawer-close"]')
+  if (close) fireClick(close)
+}
+
+function parseLogisticsDrawer() {
+  const body = queryAny('.auxo-drawer-open .auxo-drawer-body, .aurora-drawer-open .aurora-drawer-body')
+  if (!body) return null
+  const info = {}
+  for (const lab of body.querySelectorAll('[class*="base-info-label"]')) {
+    const key = textOf(lab)
+    const val = textOf(lab.nextElementSibling || lab.parentElement).replace(key, '').trim()
+    if (key.includes('发货物流单号')) info.logisticsNo = val.replace(/\s+/g, '')
+    else if (key.includes('发货物流商')) info.carrier = val
+    else if (key.includes('发货时间')) info.shipTime = val
+  }
+  const tracks = []
+  for (const el of body.querySelectorAll('.auxo-timeline-item, .aurora-timeline-item')) {
+    const date = textOf(el.querySelector('[class*="date"]'))
+    const title = textOf(el.querySelector('[class*="itemTitle"]'))
+    const detail = textOf(el.querySelector('[class*="itemDetail"]'))
+    const text = [date, title, detail].filter(Boolean).join(' ')
+    if (text) tracks.push({ date, title, detail, text })
+  }
+  if (!info.logisticsNo) {
+    const clone = body.cloneNode(true)
+    clone.querySelectorAll('style, script').forEach((n) => n.remove())
+    info.logisticsNo = pick(textOf(clone), /发货物流单号\s*([A-Za-z0-9]+)/)
+    if (!info.carrier) info.carrier = pick(textOf(clone), /发货物流商\s*([^\s发]+)/)
+    if (!info.shipTime) info.shipTime = pick(textOf(clone), /发货时间\s*([\d/]+(?:\s*[\d:]+)?)/)
+  }
+  return { ...info, tracks }
+}
+
+function secondLastTrack(tracks) {
+  if (!tracks?.length) return ''
+  if (tracks.length === 1) return tracks[0].text || ''
+  // 抽屉轨迹为新→旧；退回地取时间正序倒数第二条（展示列表第 2 条）
+  return tracks[1].text || ''
+}
+
+function findDataRowByAftersaleId(aftersaleId) {
+  const table = $('table')
+  if (!table) return null
+  const headers = headerCells(table)
+  const trs = Array.from(table.querySelectorAll('tbody tr, tr'))
+  for (let i = 0; i < trs.length; i++) {
+    const tr = trs[i]
+    const txt = tr.innerText || ''
+    const isHeader =
+      txt.includes('售后编号') &&
+      txt.includes('订单编号') &&
+      (tr.className.includes('level-0') || tr.children.length <= 3)
+    if (!isHeader) continue
+    const headerInfo = parseHeaderRow(tr)
+    if (headerInfo.platformAftersaleId !== String(aftersaleId)) continue
+    const data = trs[i + 1]
+    return { header: tr, data, headers }
+  }
+  return null
+}
+
+async function readReturnLogistics(ticket) {
+  closeLogisticsDrawer()
+  await sleep(120)
+  const pair = findDataRowByAftersaleId(ticket.platformAftersaleId)
+  const cell = pair ? cellByName(pair.data, ['物流信息'], pair.headers) : null
+  const clickEl =
+    cell?.querySelector('[class*="clickable"], [class*="logisticsText"]') || cell
+  if (!clickEl) {
+    return { logisticsNo: '', carrier: '', shipTime: '', returnLocation: '', tracks: [] }
+  }
+  fireClick(clickEl)
+  const parsed = await waitUntil(() => {
+    const d = parseLogisticsDrawer()
+    if (d && (d.logisticsNo || (d.tracks && d.tracks.length))) return d
+    return null
+  }, 25, 200)
+  closeLogisticsDrawer()
+  await waitUntil(() => (parseLogisticsDrawer() ? null : true), 15, 120)
+  const tracks = parsed?.tracks || []
+  return {
+    logisticsNo: parsed?.logisticsNo || '',
+    carrier: parsed?.carrier || '',
+    shipTime: parsed?.shipTime || '',
+    returnLocation: secondLastTrack(tracks),
+    tracks,
+  }
+}
+
+async function resetAftersaleFilters() {
+  const reset = findButton(/重\s*置/)
+  if (reset) {
+    fireClick(reset)
+    await sleep(400)
+    return
+  }
+  await pickSelectByLabel('售后类型', '全部')
+  await pickSelectByLabel('售后状态', '全部')
+  const query = findButton(/查\s*询/)
+  if (query) fireClick(query)
+  await sleep(400)
+}
+
+async function applyReturnFilters() {
+  await clearSelectedCards()
+  const typeOk = await pickSelectByLabel('售后类型', '已发货退款')
+  const statusOk = await pickSelectByLabel('售后状态', '退款成功')
+  if (!typeOk || !statusOk) {
+    throw new Error('无法设置售后类型/售后状态筛选')
+  }
+  const query = findButton(/查\s*询/)
+  if (!query) throw new Error('未找到查询按钮')
+  fireClick(query)
+  const ready = await waitUntil(() => {
+    const type = currentSelectValue('售后类型')
+    const status = currentSelectValue('售后状态')
+    if (!type.includes('已发货退款') || !status.includes('退款成功')) return null
+    if (parseListTotal() == null) return null
+    return true
+  }, 40, 200)
+  if (!ready) throw new Error('退回件筛选未生效')
+}
+
+function toReturnItem(ticket, extra) {
+  const tracks = extra.tracks || []
+  return {
+    platformAftersaleId: ticket.platformAftersaleId,
+    orderNo: ticket.orderNo,
+    productTitle: ticket.productTitle,
+    productImage: ticket.productImage,
+    sku: ticket.sku,
+    qty: ticket.qty,
+    payAmount: ticket.payAmount,
+    refundAmount: ticket.refundAmount,
+    aftersaleType: ticket.aftersaleType || '已发货退款',
+    reason: ticket.reason,
+    status: ticket.status,
+    logistics: ticket.logistics,
+    logisticsNo: extra.logisticsNo || '',
+    carrier: extra.carrier || '',
+    returnLocation: extra.returnLocation || '',
+    shipTime: extra.shipTime || '',
+    applyTime: ticket.applyTime,
+    trackJson: JSON.stringify(tracks),
+    rawJson: JSON.stringify({
+      logistics: ticket.logistics,
+      logisticsNo: extra.logisticsNo || '',
+      carrier: extra.carrier || '',
+      returnLocation: extra.returnLocation || '',
+      tracks: tracks.slice(0, 8),
+    }),
+  }
+}
+
+async function collectVisibleReturnItems(seen) {
+  const items = []
+  for (const t of collectVisibleTickets()) {
+    if (!t.platformAftersaleId || seen.has(t.platformAftersaleId)) continue
+    if (!isReturnedOutbound(t)) continue
+    seen.add(t.platformAftersaleId)
+    let extra = { logisticsNo: '', carrier: '', shipTime: '', returnLocation: '', tracks: [] }
+    try {
+      extra = await readReturnLogistics(t)
+    } catch {
+      /* keep row without track */
+    }
+    items.push(toReturnItem(t, extra))
+  }
+  return items
+}
+
+async function collectReturnPackages() {
+  locateWorkbenchPage()
+  closeLogisticsDrawer()
+  await applyReturnFilters()
+  const expected = parseListTotal() ?? 0
+  if (expected > 0) {
+    await setLargestPageSize(expected)
+    await ensureFirstPage()
+  }
+  const seen = new Set()
+  const items = []
+  items.push(...(await collectVisibleReturnItems(seen)))
+  for (let p = 2; expected && items.length < expected && p <= 20; p++) {
+    const prevIds = collectVisibleTickets().map((r) => r.platformAftersaleId)
+    const moved = await goToPage(p)
+    if (!moved) {
+      const next = findNextPage()
+      if (!next) break
+      fireClick(next)
+      await waitForPageChange(prevIds)
+    }
+    const more = await collectVisibleReturnItems(seen)
+    items.push(...more)
+    if (!more.length && !findNextPage()) break
+  }
+  await resetAftersaleFilters()
+  return {
+    items,
+    stats: {
+      filteredTotal: expected,
+      returned: items.length,
+      withNo: items.filter((x) => x.logisticsNo).length,
+    },
+  }
+}
+
 async function collectAll() {
   locateWorkbenchPage()
   const cardRows = parseCards()
@@ -728,6 +1001,15 @@ async function collectAll() {
       }
     }
   }
+  let returns
+  let returnStats
+  try {
+    const collected = await collectReturnPackages()
+    returns = collected.items
+    returnStats = collected.stats
+  } catch (e) {
+    returnStats = { error: e instanceof Error ? e.message : String(e) }
+  }
   const meta = shopMeta()
   return {
     ok: true,
@@ -735,6 +1017,8 @@ async function collectAll() {
     cards: cardRows.map(({ el, ...rest }) => rest),
     tickets: Array.from(ticketMap.values()),
     cardStats,
+    returns,
+    returnStats,
   }
 }
 

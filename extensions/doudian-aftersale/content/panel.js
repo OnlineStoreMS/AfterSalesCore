@@ -5,6 +5,7 @@
   window.__osmsAftersalePanel = true
 
   const PANEL_ID = 'osms-aftersale-panel'
+  const POS_KEY = 'aftersalePanelPos'
   const state = {
     bound: false,
     shopName: '',
@@ -26,6 +27,68 @@
     const d = ts ? new Date(ts) : new Date()
     if (Number.isNaN(d.getTime())) return ''
     return d.toLocaleTimeString()
+  }
+
+  function clampPos(left, top, el) {
+    const w = el.offsetWidth || 320
+    const h = el.offsetHeight || 80
+    const maxL = Math.max(8, window.innerWidth - w - 8)
+    const maxT = Math.max(8, window.innerHeight - h - 8)
+    return {
+      left: Math.min(maxL, Math.max(8, left)),
+      top: Math.min(maxT, Math.max(8, top)),
+    }
+  }
+
+  function applyPos(el, pos) {
+    if (!pos || !Number.isFinite(pos.left) || !Number.isFinite(pos.top)) return
+    el.style.left = `${pos.left}px`
+    el.style.top = `${pos.top}px`
+    el.style.right = 'auto'
+    el.style.bottom = 'auto'
+  }
+
+  function bindDrag(el) {
+    const hd = el.querySelector('.hd')
+    if (!hd || hd.dataset.dragBound) return
+    hd.dataset.dragBound = '1'
+    let dragging = false
+    let startX = 0
+    let startY = 0
+    let startL = 0
+    let startT = 0
+    hd.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return
+      if (e.target instanceof Element && e.target.closest('button')) return
+      const r = el.getBoundingClientRect()
+      dragging = true
+      startX = e.clientX
+      startY = e.clientY
+      startL = r.left
+      startT = r.top
+      applyPos(el, { left: startL, top: startT })
+      e.preventDefault()
+    })
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return
+      applyPos(el, clampPos(startL + e.clientX - startX, startT + e.clientY - startY, el))
+    })
+    window.addEventListener('mouseup', () => {
+      if (!dragging) return
+      dragging = false
+      const r = el.getBoundingClientRect()
+      const pos = clampPos(r.left, r.top, el)
+      applyPos(el, pos)
+      try {
+        chrome.storage.local.set({ [POS_KEY]: pos })
+      } catch {
+        /* ignore */
+      }
+    })
+    window.addEventListener('resize', () => {
+      const r = el.getBoundingClientRect()
+      if (el.style.left) applyPos(el, clampPos(r.left, r.top, el))
+    })
   }
 
   function applyPayload(data) {
@@ -72,7 +135,7 @@
         #${PANEL_ID}.min .bd{display:none}
         #${PANEL_ID} .hd{
           display:flex; align-items:center; justify-content:space-between;
-          padding:10px 12px; background:#1e293b; cursor:move;
+          padding:10px 12px; background:#1e293b; cursor:move; user-select:none;
         }
         #${PANEL_ID} .hd button,#${PANEL_ID} .actions button{
           border:0; border-radius:6px; padding:4px 8px; cursor:pointer;
@@ -94,6 +157,14 @@
       `
       document.documentElement.appendChild(style)
       document.documentElement.appendChild(el)
+      bindDrag(el)
+      try {
+        chrome.storage.local.get(POS_KEY, (res) => {
+          if (res?.[POS_KEY]) applyPos(el, res[POS_KEY])
+        })
+      } catch {
+        /* ignore */
+      }
       el.addEventListener('click', (e) => {
         const t = e.target
         if (!(t instanceof HTMLElement)) return

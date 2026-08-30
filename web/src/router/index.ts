@@ -68,6 +68,12 @@ const router = createRouter({
           meta: { title: '店铺管理' },
         },
         {
+          path: 'returns',
+          name: 'Returns',
+          component: () => import('../views/shop/ReturnList.vue'),
+          meta: { title: '退回管理' },
+        },
+        {
           path: 'shops/:id',
           name: 'ShopWorkbench',
           component: () => import('../views/shop/ShopWorkbench.vue'),

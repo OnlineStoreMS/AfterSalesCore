@@ -137,17 +137,65 @@ type PluginSyncTicket struct {
 	RawJSON             string   `json:"rawJson"`
 }
 
+type PluginSyncReturn struct {
+	PlatformAftersaleID string `json:"platformAftersaleId"`
+	OrderNo             string `json:"orderNo"`
+	ProductTitle        string `json:"productTitle"`
+	ProductImage        string `json:"productImage"`
+	SKU                 string `json:"sku"`
+	Qty                 int    `json:"qty"`
+	PayAmount           string `json:"payAmount"`
+	RefundAmount        string `json:"refundAmount"`
+	AftersaleType       string `json:"aftersaleType"`
+	Reason              string `json:"reason"`
+	Status              string `json:"status"`
+	Logistics           string `json:"logistics"`
+	LogisticsNo         string `json:"logisticsNo"`
+	Carrier             string `json:"carrier"`
+	ReturnLocation      string `json:"returnLocation"`
+	ShipTime            string `json:"shipTime"`
+	ApplyTime           string `json:"applyTime"`
+	TrackJSON           string `json:"trackJson"`
+	RawJSON             string `json:"rawJson"`
+}
+
 type PluginSyncInput struct {
 	PluginAuthInput
-	PlatformShopID   string             `json:"platformShopId"`
-	PlatformShopName string             `json:"platformShopName"`
-	Cards            []PluginSyncCard   `json:"cards"`
-	Tickets          []PluginSyncTicket `json:"tickets"`
+	PlatformShopID   string              `json:"platformShopId"`
+	PlatformShopName string              `json:"platformShopName"`
+	Cards            []PluginSyncCard    `json:"cards"`
+	Tickets []PluginSyncTicket  `json:"tickets"`
+	Returns *[]PluginSyncReturn `json:"returns"`
 }
 
 type PluginSyncResult struct {
 	ShopID      uint64 `json:"shopId"`
 	CardCount   int    `json:"cardCount"`
 	TicketCount int    `json:"ticketCount"`
+	ReturnCount int    `json:"returnCount"`
 	LastSyncAt  string `json:"lastSyncAt"`
+}
+
+type ReturnPackageItem struct {
+	ID                  uint64 `json:"id"`
+	ShopID              uint64 `json:"shopId"`
+	ShopName            string `json:"shopName"`
+	PlatformAftersaleID string `json:"platformAftersaleId"`
+	OrderNo             string `json:"orderNo"`
+	ProductTitle        string `json:"productTitle"`
+	ProductImage        string `json:"productImage,omitempty"`
+	SKU                 string `json:"sku"`
+	Qty                 int    `json:"qty"`
+	PayAmount           string `json:"payAmount"`
+	RefundAmount        string `json:"refundAmount"`
+	AftersaleType       string `json:"aftersaleType"`
+	Reason              string `json:"reason"`
+	Status              string `json:"status"`
+	Logistics           string `json:"logistics,omitempty"`
+	LogisticsNo         string `json:"logisticsNo"`
+	Carrier             string `json:"carrier,omitempty"`
+	ReturnLocation      string `json:"returnLocation"`
+	ShipTime            string `json:"shipTime,omitempty"`
+	ApplyTime           string `json:"applyTime,omitempty"`
+	SyncedAt            string `json:"syncedAt"`
 }

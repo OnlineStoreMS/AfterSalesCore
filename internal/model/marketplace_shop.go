@@ -122,3 +122,33 @@ type ServiceOrder struct {
 }
 
 func (ServiceOrder) TableName() string { return "service_orders" }
+
+type ReturnPackage struct {
+	ID                  uint64    `gorm:"primaryKey" json:"id"`
+	TenantID            uint64    `gorm:"index;not null" json:"tenantId"`
+	ShopID              uint64    `gorm:"uniqueIndex:uk_shop_return;index;not null" json:"shopId"`
+	PlatformAftersaleID string    `gorm:"size:64;uniqueIndex:uk_shop_return;not null" json:"platformAftersaleId"`
+	OrderNo             string    `gorm:"size:64;index" json:"orderNo"`
+	ProductTitle        string    `gorm:"size:512" json:"productTitle"`
+	ProductImage        string    `gorm:"size:2048" json:"productImage"`
+	SKU                 string    `gorm:"size:256" json:"sku"`
+	Qty                 int       `json:"qty"`
+	PayAmount           string    `gorm:"size:32" json:"payAmount"`
+	RefundAmount        string    `gorm:"size:32" json:"refundAmount"`
+	AftersaleType       string    `gorm:"size:64" json:"aftersaleType"`
+	Reason              string    `gorm:"size:256" json:"reason"`
+	Status              string    `gorm:"size:64" json:"status"`
+	Logistics           string    `gorm:"size:256" json:"logistics"`
+	LogisticsNo         string    `gorm:"size:64;index" json:"logisticsNo"`
+	Carrier             string    `gorm:"size:64" json:"carrier"`
+	ReturnLocation      string    `gorm:"size:512;index" json:"returnLocation"`
+	ShipTime            string    `gorm:"size:64" json:"shipTime"`
+	ApplyTime           string    `gorm:"size:64" json:"applyTime"`
+	TrackJSON           string    `gorm:"type:text" json:"trackJson"`
+	RawJSON             string    `gorm:"type:text" json:"rawJson"`
+	SyncedAt            time.Time `json:"syncedAt"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
+}
+
+func (ReturnPackage) TableName() string { return "return_packages" }

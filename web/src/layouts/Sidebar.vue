@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HomeFilled, VideoCamera, Box, Search, Monitor, Shop, Bell } from '@element-plus/icons-vue'
+import { HomeFilled, VideoCamera, Box, Search, Monitor, Shop, Bell, RefreshLeft } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -9,6 +9,7 @@ const collapsed = defineModel<boolean>('collapsed', { default: false })
 
 const activeMenu = computed(() => {
   if (route.path.startsWith('/shops')) return '/shops'
+  if (route.path.startsWith('/returns')) return '/returns'
   if (route.path.startsWith('/notifications')) return '/notifications'
   return route.path
 })
@@ -16,6 +17,7 @@ const activeMenu = computed(() => {
 const menuItems = [
   { path: '/dashboard', title: '工作台', icon: HomeFilled },
   { path: '/shops', title: '店铺管理', icon: Shop },
+  { path: '/returns', title: '退回管理', icon: RefreshLeft },
   { path: '/notifications', title: '通知管理', icon: Bell },
   { path: '/unboxing/create', title: '录制开箱', icon: VideoCamera },
   { path: '/packing/create', title: '录制打包', icon: Box },
