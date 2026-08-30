@@ -579,16 +579,21 @@ async function syncNow() {
     if (collected.returnStats?.error) {
       await workLog(`退回件采集失败：${collected.returnStats.error}`, 'error')
     } else if (Array.isArray(payload.returns) || Array.isArray(payload.shippedRefunds)) {
-      const withNo = collected.returnStats?.withNo ?? (payload.returns || []).filter((x) => x.logisticsNo).length
       const st = collected.returnStats || {}
+      const returnN = payload.returns?.length || 0
+      const shippedN = payload.shippedRefunds?.length || st.shipped || 0
+      const withNo =
+        collected.returnStats?.withNo ??
+        (payload.returns || []).filter((x) => x.logisticsNo).length +
+          (payload.shippedRefunds || []).filter((x) => x.logisticsNo).length
       await workLog(
-        `退回件 ${payload.returns?.length || 0} 条` +
-          `，已发货退款成功 ${payload.shippedRefunds?.length || st.shipped || 0} 条` +
+        `退回件 ${returnN} 条` +
+          `，已发货退款成功 ${shippedN} 条` +
           (st.filteredTotal != null ? `（已发货退款/退款成功 ${st.filteredTotal}` : '') +
           (st.pages != null ? `，已扫 ${st.pages}/${st.pageCount || st.pages} 页` : '') +
           (st.scanned != null ? `、看过 ${st.scanned} 单` : '') +
           (st.filteredTotal != null ? '）' : '') +
-          `，其中 ${withNo} 条已取到单号`,
+          `，其中 ${withNo}/${returnN + shippedN} 条已取到单号`,
       )
     }
     await workLog(

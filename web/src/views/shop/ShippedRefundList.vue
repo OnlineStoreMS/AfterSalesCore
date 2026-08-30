@@ -110,6 +110,7 @@ onMounted(() => {
           <el-option label="已签收" value="已签收" />
           <el-option label="运输中" value="运输中" />
           <el-option label="已发货" value="已发货" />
+          <el-option label="已取消" value="已取消" />
         </el-select>
         <span class="field-label">申请时间</span>
         <el-date-picker

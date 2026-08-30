@@ -10,6 +10,7 @@ const (
 	LogisticsSigned      = "已签收"
 	LogisticsInTransit   = "运输中"
 	LogisticsReturned    = "已退回"
+	LogisticsCancelled   = "已取消"
 	LogisticsShipped     = "已发货"
 )
 
@@ -43,6 +44,9 @@ func matchLogisticsKeyword(s string) string {
 	if strings.Contains(s, LogisticsReturned) {
 		return LogisticsReturned
 	}
+	if strings.Contains(s, LogisticsCancelled) {
+		return LogisticsCancelled
+	}
 	if strings.Contains(s, LogisticsAwaitPickup) {
 		return LogisticsAwaitPickup
 	}
@@ -63,6 +67,9 @@ func ClassifyLogisticsStatus(text string) string {
 }
 
 func ClassifyLogisticsWithTracks(logistics, trackJSON string) string {
+	if strings.Contains(logistics, LogisticsCancelled) {
+		return LogisticsCancelled
+	}
 	tracks := ParseLogisticsTracks(trackJSON)
 	if len(tracks) > 0 {
 		latest := firstNonEmpty(tracks[0].Title, tracks[0].Text)

@@ -576,7 +576,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 			trackJSON := LimitLogisticsTracksJSON(item.TrackJSON)
 			status := strings.TrimSpace(item.LogisticsStatus)
 			if better := ClassifyLogisticsWithTracks(logistics, trackJSON); better != "" {
-				if status == "" || status == LogisticsShipped {
+				if status == "" || status == LogisticsShipped || better == LogisticsCancelled {
 					status = better
 				}
 			}
@@ -709,8 +709,13 @@ func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageI
 
 func toShippedRefundItem(item *model.ShippedRefundSuccess, shopName string) dto.ShippedRefundItem {
 	status := item.LogisticsStatus
-	if status == "" {
-		status = ClassifyLogisticsWithTracks(item.Logistics, item.TrackJSON)
+	if status == "" || status == LogisticsShipped {
+		if better := ClassifyLogisticsWithTracks(item.Logistics, item.TrackJSON); better != "" {
+			status = better
+		}
+	}
+	if strings.Contains(item.Logistics, LogisticsCancelled) {
+		status = LogisticsCancelled
 	}
 	tracks := ParseLogisticsTracks(item.TrackJSON)
 	outTracks := make([]dto.LogisticsTrack, 0, len(tracks))

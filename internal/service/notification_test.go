@@ -135,6 +135,12 @@ func TestClassifyLogisticsStatus(t *testing.T) {
 	if ClassifyLogisticsStatus("订单发货 运输中") != LogisticsInTransit {
 		t.Fatal("in transit")
 	}
+	if ClassifyLogisticsStatus("订单发货 已取消") != LogisticsCancelled {
+		t.Fatal("cancelled")
+	}
+	if ClassifyLogisticsStatus("订单发货 已取消\n1/1已发货") != LogisticsCancelled {
+		t.Fatal("cancelled should beat leftover shipped")
+	}
 	if !IsLogisticsAlert(LogisticsAwaitPickup) || !IsLogisticsAlert(LogisticsSigned) || !IsLogisticsAlert(LogisticsInTransit) {
 		t.Fatal("alert")
 	}
@@ -144,6 +150,10 @@ func TestClassifyLogisticsStatus(t *testing.T) {
 	got := ClassifyLogisticsWithTracks("1/1已发货", `[{"title":"运输中","text":"运输中 北京分拨"}]`)
 	if got != LogisticsInTransit {
 		t.Fatalf("track should win: %s", got)
+	}
+	got = ClassifyLogisticsWithTracks("订单发货 已取消\n1/1已发货", `[{"title":"已发货","text":"已发货"}]`)
+	if got != LogisticsCancelled {
+		t.Fatalf("list cancelled should win leftover shipped: %s", got)
 	}
 }
 
