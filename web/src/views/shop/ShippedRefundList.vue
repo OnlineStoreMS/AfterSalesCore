@@ -60,10 +60,6 @@ function isAlert(row: ShippedRefund) {
   return row.alert || ['待取件', '已签收', '运输中'].includes(row.logisticsStatus || '')
 }
 
-function rowClassName({ row }: { row: ShippedRefund }) {
-  return isAlert(row) ? 'alert-row' : ''
-}
-
 function hasTracks(row: ShippedRefund) {
   return Boolean(row.tracks?.length)
 }
@@ -140,7 +136,7 @@ onMounted(() => {
         <span class="total">共 {{ total }} 条</span>
       </div>
 
-      <el-table :data="tableData" stripe border :row-class-name="rowClassName">
+      <el-table :data="tableData" stripe border>
         <el-table-column prop="shopName" label="店铺" width="140" />
         <el-table-column label="商品信息" min-width="240">
           <template #default="{ row }">
@@ -244,7 +240,6 @@ onMounted(() => {
 .logistics-status.link { color: #409eff; cursor: pointer; }
 .logistics-status.danger { color: #f56c6c; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
-.shipped-list :deep(.alert-row) { --el-table-tr-bg-color: #fef0f0; }
 </style>
 
 <style>
