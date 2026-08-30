@@ -578,7 +578,7 @@ async function clickCard(el) {
     /* ignore */
   }
   fireClick(el)
-  await sleep(80)
+  await sleep(280)
 }
 
 function liveCard(card) {
@@ -631,7 +631,34 @@ async function ensureFirstPage() {
   await goToPage(1)
 }
 
-function cardTableState(card) {
+function visibleTicketIds() {
+  return collectVisibleTickets().map((r) => r.platformAftersaleId).filter(Boolean)
+}
+
+function sameIdSet(a, b) {
+  if (!a?.length || !b?.length) return false
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((id) => set.has(id))
+}
+
+function rowsMatchCardType(card, rows) {
+  const label = String(card?.cardLabel || '')
+  if (!label || /全部|紧急|临期|催|投诉|重复/.test(label)) return true
+  if (!/退款|换货|补寄|维修|退货/.test(label)) return true
+  const list = rows || []
+  if (!list.length) return false
+  const hit = list.filter((r) => `${r.aftersaleType || ''} ${r.tags || ''}`.includes(label))
+  return hit.length >= Math.ceil(list.length * 0.6)
+}
+
+function stillPreviousCardList(prevIds, rows) {
+  const ids = (rows || []).map((r) => r.platformAftersaleId).filter(Boolean)
+  if (!prevIds?.length || !ids.length) return false
+  return ids.every((id) => prevIds.includes(id))
+}
+
+function cardTableState(card, prevIds) {
   const live = liveCard(card)
   if (!isCardSelected(live.el)) return null
   if (currentPage() > 1) return null
@@ -644,6 +671,8 @@ function cardTableState(card) {
   if (total !== card.count) return null
   if (rows.length === 0 || rows.length > card.count) return null
   if (currentPageSize() >= 50 && rows.length < card.count) return null
+  if (stillPreviousCardList(prevIds, rows)) return null
+  if (!rowsMatchCardType(card, rows)) return null
   return { rows, total }
 }
 
@@ -666,33 +695,39 @@ function emptyCardResult() {
   return all
 }
 
-function listBelongsToCard(card) {
+function listBelongsToCard(card, prevIds) {
   const live = liveCard(card)
   if (!isCardSelected(live.el)) return false
-  return parseListTotal() === card.count
+  if (parseListTotal() !== card.count) return false
+  const rows = collectVisibleTickets()
+  if (stillPreviousCardList(prevIds, rows)) return false
+  return rowsMatchCardType(card, rows)
 }
 
-async function collectCardTickets(card) {
-  const matched = () => (listBelongsToCard(card) ? true : null)
-  for (let i = 0; i < 3 && !matched(); i++) {
+async function collectCardTickets(card, prevIds = []) {
+  const beforeIds = prevIds.length ? prevIds : visibleTicketIds()
+  const matched = () => (listBelongsToCard(card, beforeIds) ? true : null)
+  for (let i = 0; i < 4 && !matched(); i++) {
     await clickCard(liveCard(card).el)
-    await waitUntil(matched, 40, 200)
+    await waitUntil(matched, 50, 200)
   }
   if (!matched()) return emptyCardResult()
   await setLargestPageSize(card.count)
   if (!matched()) {
     await clickCard(liveCard(card).el)
-    await waitUntil(matched, 40, 200)
+    await waitUntil(matched, 50, 200)
   }
   if (!matched()) return emptyCardResult()
   await ensureFirstPage()
-  await waitUntil(() => cardTableState(card), 50, 200)
-  if (!listBelongsToCard(card)) return emptyCardResult()
+  await waitUntil(() => cardTableState(card, beforeIds), 50, 200)
+  if (!listBelongsToCard(card, beforeIds)) return emptyCardResult()
   const all = []
   const seen = new Set()
   const expected = card.count || 0
   const add = (rows) => {
-    if (!listBelongsToCard(card)) return
+    if (!listBelongsToCard(card, beforeIds)) return
+    if (stillPreviousCardList(beforeIds, rows)) return
+    if (!rowsMatchCardType(card, rows)) return
     if ((rows || []).length > expected) return
     for (const r of rows || []) {
       if (!r.platformAftersaleId || seen.has(r.platformAftersaleId)) continue
@@ -1312,9 +1347,11 @@ async function collectAll() {
   await resetAftersaleFilters()
   const ticketMap = new Map()
   const cardStats = []
+  let prevCardIds = []
   for (const card of cardRows) {
     if (!card.count) continue
-    const rows = await collectCardTickets(card)
+    const rows = await collectCardTickets(card, prevCardIds)
+    if (rows.length) prevCardIds = rows.map((r) => r.platformAftersaleId).filter(Boolean)
     cardStats.push({
       cardKey: card.cardKey,
       label: `${card.groupName}·${card.cardLabel}`,
