@@ -44,6 +44,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.AftersaleTicketCard{},
 		&model.ServiceOrder{},
 		&model.ReturnPackage{},
+		&model.ShippedRefundSuccess{},
 		&model.TenantNotification{},
 	); err != nil {
 		return err

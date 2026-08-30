@@ -307,11 +307,13 @@ function parseDataRow(tr, headers, headerInfo) {
     logistics: logisticsRaw,
     returnLogisticsNo,
     applyTime: pick(afterText, /申请时间\s*([\d/]+(?:\s*[\d:]+)?)/),
+    orderInfo: orderText,
+    aftersaleInfo: afterText,
     rawJson: JSON.stringify({
       headerTags: headerInfo.tags,
       product: textOf(productCell).slice(0, 400),
-      order: orderText.slice(0, 200),
-      after: afterText.slice(0, 300),
+      order: orderText.slice(0, 800),
+      after: afterText.slice(0, 800),
       status: statusText.slice(0, 120),
       logistics: logisticsRaw.slice(0, 200),
       returnLogisticsNo,
@@ -725,6 +727,23 @@ function isReturnedOutbound(ticket) {
   return String(ticket?.logistics || '').includes('已退回')
 }
 
+function matchLogisticsKeyword(s) {
+  const t = String(s || '')
+  if (t.includes('已退回')) return '已退回'
+  if (t.includes('待取件')) return '待取件'
+  if (t.includes('已签收')) return '已签收'
+  if (t.includes('运输中')) return '运输中'
+  if (t.includes('已发货')) return '已发货'
+  return ''
+}
+
+function logisticsStatusOf(text, tracks) {
+  const latest = tracks?.[0]?.title || tracks?.[0]?.text || ''
+  const fromLatest = matchLogisticsKeyword(latest)
+  if (fromLatest && fromLatest !== '已发货') return fromLatest
+  return matchLogisticsKeyword([latest, text, ...(tracks || []).map((x) => x.text || x.title)].join('\n'))
+}
+
 function hasShipStatus(text) {
   return /\d+\s*\/\s*\d+\s*已/.test(String(text || ''))
 }
@@ -1091,11 +1110,14 @@ function toReturnItem(ticket, extra) {
     productImage: ticket.productImage,
     sku: ticket.sku,
     qty: ticket.qty,
+    buyQty: ticket.buyQty || 0,
     payAmount: ticket.payAmount,
     refundAmount: ticket.refundAmount,
     aftersaleType: ticket.aftersaleType || '已发货退款',
     reason: ticket.reason,
     status: ticket.status,
+    orderInfo: ticket.orderInfo || '',
+    aftersaleInfo: ticket.aftersaleInfo || '',
     logistics: ticket.logistics,
     logisticsNo: extra.logisticsNo || '',
     carrier: extra.carrier || '',
@@ -1105,6 +1127,8 @@ function toReturnItem(ticket, extra) {
     returnTime: returnTimeFromTracks(tracks, ticket.applyTime, extra.shipTime),
     trackJson: JSON.stringify(tracks),
     rawJson: JSON.stringify({
+      orderInfo: ticket.orderInfo || '',
+      aftersaleInfo: ticket.aftersaleInfo || '',
       logistics: ticket.logistics,
       logisticsNo: extra.logisticsNo || '',
       carrier: extra.carrier || '',
@@ -1114,21 +1138,72 @@ function toReturnItem(ticket, extra) {
   }
 }
 
-async function collectVisibleReturnItems(seen) {
-  const items = []
+function toShippedRefundItem(ticket, extra) {
+  const tracks = (extra?.tracks || []).slice(0, 5)
+  return {
+    platformAftersaleId: ticket.platformAftersaleId,
+    orderNo: ticket.orderNo,
+    productTitle: ticket.productTitle,
+    productImage: ticket.productImage,
+    sku: ticket.sku,
+    productTags: ticket.productTags || '',
+    tags: ticket.tags || '',
+    qty: ticket.qty,
+    buyQty: ticket.buyQty || 0,
+    payAmount: ticket.payAmount,
+    refundAmount: ticket.refundAmount,
+    aftersaleType: ticket.aftersaleType || '已发货退款',
+    reason: ticket.reason,
+    status: ticket.status,
+    orderInfo: ticket.orderInfo || '',
+    aftersaleInfo: ticket.aftersaleInfo || '',
+    logistics: ticket.logistics,
+    logisticsStatus: logisticsStatusOf(ticket.logistics, tracks),
+    logisticsNo: extra?.logisticsNo || '',
+    carrier: extra?.carrier || '',
+    shipTime: extra?.shipTime || '',
+    trackJson: JSON.stringify(tracks),
+    applyTime: ticket.applyTime,
+    rawJson: JSON.stringify({
+      orderInfo: ticket.orderInfo || '',
+      aftersaleInfo: ticket.aftersaleInfo || '',
+      logistics: ticket.logistics,
+      logisticsNo: extra?.logisticsNo || '',
+      productTags: ticket.productTags || '',
+      tags: ticket.tags || '',
+      tracks,
+    }),
+  }
+}
+
+async function collectVisibleRefundBuckets(seenReturned, seenShipped) {
+  const returns = []
+  const shipped = []
   for (const t of collectVisibleTickets()) {
-    if (!t.platformAftersaleId || seen.has(t.platformAftersaleId)) continue
-    if (!isReturnedOutbound(t)) continue
-    seen.add(t.platformAftersaleId)
+    if (!t.platformAftersaleId) continue
+    if (isReturnedOutbound(t)) {
+      if (seenReturned.has(t.platformAftersaleId)) continue
+      seenReturned.add(t.platformAftersaleId)
+      let extra = { logisticsNo: '', carrier: '', shipTime: '', returnLocation: '', tracks: [] }
+      try {
+        extra = await readReturnLogistics(t)
+      } catch {
+        /* keep row without track */
+      }
+      returns.push(toReturnItem(t, extra))
+      continue
+    }
+    if (seenShipped.has(t.platformAftersaleId)) continue
+    seenShipped.add(t.platformAftersaleId)
     let extra = { logisticsNo: '', carrier: '', shipTime: '', returnLocation: '', tracks: [] }
     try {
       extra = await readReturnLogistics(t)
     } catch {
       /* keep row without track */
     }
-    items.push(toReturnItem(t, extra))
+    shipped.push(toShippedRefundItem(t, extra))
   }
-  return items
+  return { returns, shipped }
 }
 
 async function collectReturnPackages() {
@@ -1147,15 +1222,19 @@ async function collectReturnPackages() {
   const pageSize = currentPageSize() || 10
   const pageCount = expected > 0 ? Math.max(1, Math.ceil(expected / pageSize)) : 1
   const seenReturned = new Set()
+  const seenShipped = new Set()
   const seenTickets = new Set()
   const items = []
+  const shippedItems = []
   let pages = 0
 
   async function collectCurrentPage() {
     for (const t of collectVisibleTickets()) {
       if (t.platformAftersaleId) seenTickets.add(t.platformAftersaleId)
     }
-    items.push(...(await collectVisibleReturnItems(seenReturned)))
+    const bucket = await collectVisibleRefundBuckets(seenReturned, seenShipped)
+    items.push(...bucket.returns)
+    shippedItems.push(...bucket.shipped)
   }
 
   for (let p = 1; p <= Math.min(pageCount, 30); p++) {
@@ -1194,11 +1273,12 @@ async function collectReturnPackages() {
   if (!items.length && leftoverReturned) {
     throw new Error(`页面有 ${leftoverReturned} 条已退回，但未解析到售后单`)
   }
-  if (!items.length && expected >= 10) {
-    throw new Error(`已发货退款/退款成功 ${expected} 条已出现，但物流列未见已退回，疑似未加载完`)
+  if (expected >= 10 && !items.length && !shippedItems.length) {
+    throw new Error(`已发货退款/退款成功 ${expected} 条已出现，但列表未采到明细`)
   }
   return {
     items,
+    shippedItems,
     stats: {
       filteredTotal: expected,
       scanned: seenTickets.size,
@@ -1206,6 +1286,7 @@ async function collectReturnPackages() {
       pageSize,
       pageCount,
       returned: items.length,
+      shipped: shippedItems.length,
       withNo: items.filter((x) => x.logisticsNo).length,
     },
   }
@@ -1218,11 +1299,13 @@ async function collectAll() {
     throw new Error('未找到快捷筛选卡片，请确认当前是售后工作台列表页')
   }
   let returns
+  let shippedRefunds
   let returnStats
   try {
     const collected = await collectReturnPackages()
     returnStats = collected.stats
     if (collected.items?.length) returns = collected.items
+    if (collected.shippedItems?.length) shippedRefunds = collected.shippedItems
   } catch (e) {
     returnStats = { error: e instanceof Error ? e.message : String(e) }
   }
@@ -1261,6 +1344,7 @@ async function collectAll() {
     tickets: Array.from(ticketMap.values()),
     cardStats,
     returns,
+    shippedRefunds,
     returnStats,
   }
 }

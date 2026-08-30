@@ -407,6 +407,27 @@ func (s *NotificationService) sendScenario(
 	label := scenarioLabel(scenario, cards)
 	group := scenarioGroup(scenario, cards)
 
+	if status := shippedRefundScenarioStatus(scenario); status != "" {
+		rows, err := s.shopRepo().ListShippedRefundsByStatus(shop.ID, status)
+		if err != nil {
+			return 0, 0, 0, "", err
+		}
+		for _, row := range rows {
+			key := notificationKey(shop.ID, "shipped_refund", row.PlatformAftersaleID, scenario, "")
+			if notified[key] != "" {
+				skipped++
+				continue
+			}
+			card := buildShippedRefundCard(shopName, label, row)
+			if err := s.feishu.SendInteractiveCard(ctx, cfg.WebhookURL, cfg.Secret, card); err != nil {
+				return sent, skipped, barcodeWarnings, lastBarcodeError, err
+			}
+			sent++
+			s.markNotified(notified, key)
+		}
+		return sent, skipped, barcodeWarnings, lastBarcodeError, nil
+	}
+
 	if scenario == ScenarioUrgent {
 		tickets, err := s.shopRepo().ListTicketsWithDeadline(shop.ID)
 		if err != nil {

@@ -143,11 +143,14 @@ type ReturnPackage struct {
 	ProductImage        string    `gorm:"size:2048" json:"productImage"`
 	SKU                 string    `gorm:"size:256" json:"sku"`
 	Qty                 int       `json:"qty"`
+	BuyQty              int       `json:"buyQty"`
 	PayAmount           string    `gorm:"size:32" json:"payAmount"`
 	RefundAmount        string    `gorm:"size:32" json:"refundAmount"`
 	AftersaleType       string    `gorm:"size:64" json:"aftersaleType"`
 	Reason              string    `gorm:"size:256" json:"reason"`
 	Status              string    `gorm:"size:64" json:"status"`
+	OrderInfo           string    `gorm:"type:text" json:"orderInfo"`
+	AftersaleInfo       string    `gorm:"type:text" json:"aftersaleInfo"`
 	Logistics           string    `gorm:"size:256" json:"logistics"`
 	LogisticsNo         string    `gorm:"size:64;index" json:"logisticsNo"`
 	Carrier             string    `gorm:"size:64" json:"carrier"`
@@ -165,3 +168,39 @@ type ReturnPackage struct {
 }
 
 func (ReturnPackage) TableName() string { return "return_packages" }
+
+type ShippedRefundSuccess struct {
+	ID                  uint64     `gorm:"primaryKey" json:"id"`
+	TenantID            uint64     `gorm:"index;not null" json:"tenantId"`
+	ShopID              uint64     `gorm:"uniqueIndex:uk_shop_shipped_refund;index;not null" json:"shopId"`
+	PlatformAftersaleID string     `gorm:"size:64;uniqueIndex:uk_shop_shipped_refund;not null" json:"platformAftersaleId"`
+	OrderNo             string     `gorm:"size:64;index" json:"orderNo"`
+	ProductTitle        string     `gorm:"size:512" json:"productTitle"`
+	ProductImage        string     `gorm:"size:2048" json:"productImage"`
+	SKU                 string     `gorm:"size:256" json:"sku"`
+	ProductTags         string     `gorm:"size:256" json:"productTags"`
+	Tags                string     `gorm:"size:256" json:"tags"`
+	Qty                 int        `json:"qty"`
+	BuyQty              int        `json:"buyQty"`
+	PayAmount           string     `gorm:"size:32" json:"payAmount"`
+	RefundAmount        string     `gorm:"size:32" json:"refundAmount"`
+	AftersaleType       string     `gorm:"size:64" json:"aftersaleType"`
+	Reason              string     `gorm:"size:256" json:"reason"`
+	Status              string     `gorm:"size:64" json:"status"`
+	OrderInfo           string     `gorm:"type:text" json:"orderInfo"`
+	AftersaleInfo       string     `gorm:"type:text" json:"aftersaleInfo"`
+	Logistics           string     `gorm:"size:256" json:"logistics"`
+	LogisticsStatus     string     `gorm:"size:32;index" json:"logisticsStatus"`
+	LogisticsNo         string     `gorm:"size:64" json:"logisticsNo"`
+	Carrier             string     `gorm:"size:64" json:"carrier"`
+	ShipTime            string     `gorm:"size:64" json:"shipTime"`
+	TrackJSON           string     `gorm:"type:text" json:"trackJson"`
+	ApplyTime           string     `gorm:"size:64" json:"applyTime"`
+	AppliedAt           *time.Time `gorm:"index" json:"appliedAt"`
+	RawJSON             string     `gorm:"type:text" json:"rawJson"`
+	SyncedAt            time.Time  `json:"syncedAt"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+}
+
+func (ShippedRefundSuccess) TableName() string { return "shipped_refund_success" }

@@ -54,6 +54,60 @@ func buildTicketCard(shopName, scenarioLabel, group string, t model.AftersaleTic
 	}
 }
 
+func buildShippedRefundCard(shopName, scenarioLabel string, row model.ShippedRefundSuccess) feishu.InteractiveCard {
+	var lines []string
+	if line := mdLine("店铺", shopName, "blue"); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("物流状态", firstNonEmpty(row.LogisticsStatus, ClassifyLogisticsStatus(row.Logistics)), "red"); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("订单号", row.OrderNo, ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("售后单", row.PlatformAftersaleID, ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("类型", firstNonEmpty(row.AftersaleType, "已发货退款"), "purple"); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("状态", row.Status, ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("商品", row.ProductTitle, ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("规格", row.SKU, ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("订单信息", truncateText(row.OrderInfo, 220), ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("售后信息", truncateText(row.AftersaleInfo, 220), ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("物流单号", firstNonEmpty(row.LogisticsNo, ""), ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("物流", truncateText(row.Logistics, 160), "red"); line != "" {
+		lines = append(lines, line)
+	}
+	for i, tr := range ParseLogisticsTracks(row.TrackJSON) {
+		label := "轨迹"
+		if i == 0 {
+			label = "最近轨迹"
+		}
+		if line := mdLine(label, truncateText(firstNonEmpty(tr.Text, tr.Title), 160), ""); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return feishu.InteractiveCard{
+		Title:    "售后通知 · " + scenarioLabel,
+		Template: "red",
+		Markdown: strings.Join(lines, "\n"),
+	}
+}
+
 func urgencyOf(deadline *time.Time, now time.Time) string {
 	if deadline == nil {
 		return ""

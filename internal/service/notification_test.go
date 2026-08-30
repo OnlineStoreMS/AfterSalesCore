@@ -119,6 +119,41 @@ func TestUrgencyOf(t *testing.T) {
 	}
 }
 
+func TestClassifyLogisticsStatus(t *testing.T) {
+	if ClassifyLogisticsStatus("1/1已退回") != LogisticsReturned {
+		t.Fatal("returned")
+	}
+	if ClassifyLogisticsStatus("订单发货 待取件") != LogisticsAwaitPickup {
+		t.Fatal("await pickup")
+	}
+	if ClassifyLogisticsStatus("1/1已签收") != LogisticsSigned {
+		t.Fatal("signed")
+	}
+	if ClassifyLogisticsStatus("1/1已发货") != LogisticsShipped {
+		t.Fatal("shipped")
+	}
+	if ClassifyLogisticsStatus("订单发货 运输中") != LogisticsInTransit {
+		t.Fatal("in transit")
+	}
+	if !IsLogisticsAlert(LogisticsAwaitPickup) || !IsLogisticsAlert(LogisticsSigned) || !IsLogisticsAlert(LogisticsInTransit) {
+		t.Fatal("alert")
+	}
+	if IsLogisticsAlert(LogisticsShipped) {
+		t.Fatal("shipped is not alert")
+	}
+	got := ClassifyLogisticsWithTracks("1/1已发货", `[{"title":"运输中","text":"运输中 北京分拨"}]`)
+	if got != LogisticsInTransit {
+		t.Fatalf("track should win: %s", got)
+	}
+}
+
+func TestSanitizeKeepsShippedRefundScenarios(t *testing.T) {
+	got := sanitizeScenarios([]string{ScenarioAwaitPickup, ScenarioSigned, ScenarioInTransit, "urgent"}, nil)
+	if len(got) != 4 {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestMdLineSkipsEmpty(t *testing.T) {
 	if mdLine("买家", "", "") != "" {
 		t.Fatal("empty value should skip")

@@ -115,6 +115,9 @@ func (r *ShopRepo) Delete(id uint64) error {
 		if err := tx.Where("shop_id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.ReturnPackage{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("shop_id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.ShippedRefundSuccess{}).Error; err != nil {
+			return err
+		}
 		return tx.Where("id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.MarketplaceShop{}).Error
 	})
 }
@@ -327,8 +330,8 @@ func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
 		like := "%" + kw + "%"
 		q = q.Where(
-			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR sku ILIKE ? OR logistics_no ILIKE ? OR return_location ILIKE ? OR carrier ILIKE ? OR status ILIKE ?",
-			like, like, like, like, like, like, like, like,
+			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR sku ILIKE ? OR logistics_no ILIKE ? OR return_location ILIKE ? OR carrier ILIKE ? OR status ILIKE ? OR order_info ILIKE ? OR aftersale_info ILIKE ?",
+			like, like, like, like, like, like, like, like, like, like,
 		)
 	}
 	if f.ReturnFrom != nil {
@@ -366,11 +369,15 @@ func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.Retu
 	}
 	now := time.Now()
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		aftersaleIDs := make([]string, 0, len(items))
 		for i := range items {
 			item := &items[i]
 			item.TenantID = shop.TenantID
 			item.ShopID = shop.ID
 			item.SyncedAt = now
+			if item.PlatformAftersaleID != "" {
+				aftersaleIDs = append(aftersaleIDs, item.PlatformAftersaleID)
+			}
 			var existing model.ReturnPackage
 			err := tx.Where("shop_id = ? AND platform_aftersale_id = ?", shop.ID, item.PlatformAftersaleID).
 				First(&existing).Error
@@ -389,11 +396,14 @@ func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.Retu
 				"product_image":  item.ProductImage,
 				"sku":            item.SKU,
 				"qty":            item.Qty,
+				"buy_qty":        item.BuyQty,
 				"pay_amount":     item.PayAmount,
 				"refund_amount":  item.RefundAmount,
 				"aftersale_type": item.AftersaleType,
 				"reason":         item.Reason,
 				"status":         item.Status,
+				"order_info":     item.OrderInfo,
+				"aftersale_info": item.AftersaleInfo,
 				"logistics":      item.Logistics,
 				"apply_time":     item.ApplyTime,
 				"applied_at":     item.AppliedAt,
@@ -417,6 +427,141 @@ func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.Retu
 			}
 			if item.ReturnedAt != nil {
 				updates["returned_at"] = item.ReturnedAt
+			}
+			if item.TrackJSON != "" {
+				updates["track_json"] = item.TrackJSON
+			}
+			if err := tx.Model(&existing).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+		if len(aftersaleIDs) > 0 {
+			if err := tx.Where("shop_id = ? AND platform_aftersale_id IN ?", shop.ID, aftersaleIDs).
+				Delete(&model.ShippedRefundSuccess{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+type ShippedRefundListFilter struct {
+	ShopID    uint64
+	Keyword   string
+	Status    string
+	AlertOnly bool
+	ApplyFrom *time.Time
+	ApplyTo   *time.Time
+	Page      int
+	PageSize  int
+}
+
+func (r *ShopRepo) ListShippedRefunds(f ShippedRefundListFilter) ([]model.ShippedRefundSuccess, int64, error) {
+	q := r.db.Model(&model.ShippedRefundSuccess{}).Scopes(scopeTenant(r.tenantID))
+	if f.ShopID > 0 {
+		q = q.Where("shop_id = ?", f.ShopID)
+	}
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where(
+			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR sku ILIKE ? OR logistics ILIKE ? OR order_info ILIKE ? OR aftersale_info ILIKE ? OR status ILIKE ? OR track_json ILIKE ? OR logistics_no ILIKE ?",
+			like, like, like, like, like, like, like, like, like, like,
+		)
+	}
+	if status := strings.TrimSpace(f.Status); status != "" {
+		q = q.Where("logistics_status = ?", status)
+	}
+	if f.AlertOnly {
+		q = q.Where("logistics_status IN ?", []string{"待取件", "已签收", "运输中"})
+	}
+	if f.ApplyFrom != nil {
+		q = q.Where("applied_at >= ?", f.ApplyFrom)
+	}
+	if f.ApplyTo != nil {
+		q = q.Where("applied_at <= ?", f.ApplyTo)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 || f.PageSize > 200 {
+		f.PageSize = 20
+	}
+	var list []model.ShippedRefundSuccess
+	offset := (f.Page - 1) * f.PageSize
+	err := q.Order("CASE WHEN logistics_status IN ('待取件','已签收','运输中') THEN 0 ELSE 1 END, COALESCE(applied_at, synced_at) DESC NULLS LAST, id DESC").
+		Offset(offset).Limit(f.PageSize).Find(&list).Error
+	return list, total, err
+}
+
+func (r *ShopRepo) ListShippedRefundsByStatus(shopID uint64, status string) ([]model.ShippedRefundSuccess, error) {
+	var list []model.ShippedRefundSuccess
+	q := r.db.Model(&model.ShippedRefundSuccess{}).Scopes(scopeTenant(r.tenantID)).
+		Where("logistics_status = ?", status)
+	if shopID > 0 {
+		q = q.Where("shop_id = ?", shopID)
+	}
+	err := q.Order("COALESCE(applied_at, synced_at) DESC").Find(&list).Error
+	return list, err
+}
+
+func (r *ShopRepo) UpsertShippedRefunds(shop *model.MarketplaceShop, items []model.ShippedRefundSuccess) error {
+	if len(items) == 0 {
+		return nil
+	}
+	now := time.Now()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for i := range items {
+			item := &items[i]
+			item.TenantID = shop.TenantID
+			item.ShopID = shop.ID
+			item.SyncedAt = now
+			var existing model.ShippedRefundSuccess
+			err := tx.Where("shop_id = ? AND platform_aftersale_id = ?", shop.ID, item.PlatformAftersaleID).
+				First(&existing).Error
+			if err == gorm.ErrRecordNotFound {
+				if err := tx.Create(item).Error; err != nil {
+					return err
+				}
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			updates := map[string]any{
+				"order_no":         item.OrderNo,
+				"product_title":    item.ProductTitle,
+				"product_image":    item.ProductImage,
+				"sku":              item.SKU,
+				"product_tags":     item.ProductTags,
+				"tags":             item.Tags,
+				"qty":              item.Qty,
+				"buy_qty":          item.BuyQty,
+				"pay_amount":       item.PayAmount,
+				"refund_amount":    item.RefundAmount,
+				"aftersale_type":   item.AftersaleType,
+				"reason":           item.Reason,
+				"status":           item.Status,
+				"order_info":       item.OrderInfo,
+				"aftersale_info":   item.AftersaleInfo,
+				"logistics":        item.Logistics,
+				"logistics_status": item.LogisticsStatus,
+				"apply_time":       item.ApplyTime,
+				"applied_at":       item.AppliedAt,
+				"raw_json":         item.RawJSON,
+				"synced_at":        now,
+			}
+			if item.LogisticsNo != "" {
+				updates["logistics_no"] = item.LogisticsNo
+			}
+			if item.Carrier != "" {
+				updates["carrier"] = item.Carrier
+			}
+			if item.ShipTime != "" {
+				updates["ship_time"] = item.ShipTime
 			}
 			if item.TrackJSON != "" {
 				updates["track_json"] = item.TrackJSON

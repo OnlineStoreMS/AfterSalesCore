@@ -8,11 +8,17 @@ import (
 )
 
 const (
-	ScenarioUrgent = "urgent"
+	ScenarioUrgent      = "urgent"
+	ScenarioAwaitPickup = "shipped_refund_await_pickup"
+	ScenarioSigned      = "shipped_refund_signed"
+	ScenarioInTransit   = "shipped_refund_in_transit"
 )
 
 var fixedScenarioOptions = []dto.ScenarioOption{
 	{Key: ScenarioUrgent, Label: "时效紧迫", Group: "时效"},
+	{Key: ScenarioAwaitPickup, Label: "待取件", Group: "已发货退款成功"},
+	{Key: ScenarioSigned, Label: "已签收", Group: "已发货退款成功"},
+	{Key: ScenarioInTransit, Label: "运输中", Group: "已发货退款成功"},
 }
 
 func IsAggregateCard(label string) bool {
@@ -113,6 +119,19 @@ func scenarioLabel(key string, cards []model.AftersaleFilterCard) string {
 		}
 	}
 	return key
+}
+
+func shippedRefundScenarioStatus(scenario string) string {
+	switch scenario {
+	case ScenarioAwaitPickup:
+		return LogisticsAwaitPickup
+	case ScenarioSigned:
+		return LogisticsSigned
+	case ScenarioInTransit:
+		return LogisticsInTransit
+	default:
+		return ""
+	}
 }
 
 func scenarioGroup(key string, cards []model.AftersaleFilterCard) string {

@@ -3,22 +3,22 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import {
-  fetchReturnPackages,
+  fetchShippedRefunds,
   fetchShops,
   type MarketplaceShop,
-  type ReturnPackage,
+  type ShippedRefund,
 } from '../../api/shop'
 import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
 
 const loading = ref(false)
 const shops = ref<MarketplaceShop[]>([])
-const tableData = ref<ReturnPackage[]>([])
+const tableData = ref<ShippedRefund[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const shopId = ref<number | undefined>()
 const keyword = ref('')
-const returnRange = ref<[string, string] | null>(null)
+const status = ref('')
 const applyRange = ref<[string, string] | null>(null)
 
 async function loadShops() {
@@ -32,11 +32,10 @@ async function loadShops() {
 async function loadData() {
   loading.value = true
   try {
-    const data = await fetchReturnPackages({
+    const data = await fetchShippedRefunds({
       shopId: shopId.value || undefined,
       keyword: keyword.value || undefined,
-      returnFrom: returnRange.value?.[0] || undefined,
-      returnTo: returnRange.value?.[1] || undefined,
+      status: status.value || undefined,
       applyFrom: applyRange.value?.[0] || undefined,
       applyTo: applyRange.value?.[1] || undefined,
       page: page.value,
@@ -56,6 +55,10 @@ function handleSearch() {
   loadData()
 }
 
+function isAlert(row: ShippedRefund) {
+  return row.alert || ['待取件', '已签收', '运输中'].includes(row.logisticsStatus || '')
+}
+
 onMounted(() => {
   loadShops()
   loadData()
@@ -63,11 +66,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-loading="loading" class="return-list">
+  <div v-loading="loading" class="shipped-list">
     <div class="page-head">
       <div>
-        <h2 class="page-title">退回管理</h2>
-        <p class="desc">默认按物流退回时间排序，没有退回时间则按申请时间，最近的在前。</p>
+        <h2 class="page-title">已发货退款成功管理</h2>
+        <p class="desc">已发货退款且退款成功、尚未退回的售后单。物流为待取件、已签收、运输中时标红，可在通知管理里推送紧急飞书卡片。</p>
       </div>
     </div>
 
@@ -87,20 +90,18 @@ onMounted(() => {
             :value="shop.id"
           />
         </el-select>
-        <span class="field-label">物流退回时间</span>
-        <el-date-picker
-          v-model="returnRange"
-          type="datetimerange"
-          range-separator="至"
-          start-placeholder="开始"
-          end-placeholder="结束"
-          value-format="YYYY-MM-DD HH:mm:ss"
-          :shortcuts="dateShortcuts"
-          :default-time="dateRangeDefaultTime"
+        <el-select
+          v-model="status"
           clearable
-          style="width: 360px"
+          placeholder="物流状态"
+          style="width: 140px"
           @change="handleSearch"
-        />
+        >
+          <el-option label="待取件" value="待取件" />
+          <el-option label="已签收" value="已签收" />
+          <el-option label="运输中" value="运输中" />
+          <el-option label="已发货" value="已发货" />
+        </el-select>
         <span class="field-label">申请时间</span>
         <el-date-picker
           v-model="applyRange"
@@ -118,15 +119,15 @@ onMounted(() => {
         <el-input
           v-model="keyword"
           clearable
-          placeholder="物流单号 / 退回地 / 订单号 / 售后编号 / 商品"
+          placeholder="订单号 / 售后编号 / 商品 / 物流 / 订单信息"
           style="width: 300px"
           @keyup.enter="handleSearch"
         />
         <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-        <span class="total">共 {{ total }} 条退回件</span>
+        <span class="total">共 {{ total }} 条</span>
       </div>
 
-      <el-table :data="tableData" stripe border>
+      <el-table :data="tableData" stripe border :row-class-name="({ row }) => (isAlert(row) ? 'alert-row' : '')">
         <el-table-column prop="shopName" label="店铺" width="140" />
         <el-table-column label="商品信息" min-width="240">
           <template #default="{ row }">
@@ -135,6 +136,7 @@ onMounted(() => {
               <div class="product-meta">
                 <div class="title">{{ row.productTitle || '—' }}</div>
                 <div v-if="row.sku" class="sub">{{ row.sku }}</div>
+                <div v-if="row.productTags" class="sub">{{ row.productTags }}</div>
               </div>
             </div>
           </template>
@@ -162,20 +164,19 @@ onMounted(() => {
             </template>
           </template>
         </el-table-column>
-        <el-table-column label="物流单号" min-width="160">
+        <el-table-column label="物流信息" min-width="280">
           <template #default="{ row }">
-            <div class="tracking">{{ row.logisticsNo || '—' }}</div>
-            <div v-if="row.carrier" class="sub">{{ row.carrier }}</div>
-            <div v-if="row.logistics" class="sub">{{ row.logistics }}</div>
+            <div class="logistics" :class="{ danger: isAlert(row) }">
+              <div v-if="row.logisticsStatus" class="status">{{ row.logisticsStatus }}</div>
+              <div v-if="row.logisticsNo" class="sub">{{ row.logisticsNo }}<span v-if="row.carrier"> · {{ row.carrier }}</span></div>
+              <pre class="cell-pre">{{ row.logistics || '—' }}</pre>
+              <ol v-if="row.tracks?.length" class="tracks">
+                <li v-for="(track, i) in row.tracks.slice(0, 5)" :key="i">
+                  {{ track.text || [track.date, track.title, track.detail].filter(Boolean).join(' ') }}
+                </li>
+              </ol>
+            </div>
           </template>
-        </el-table-column>
-        <el-table-column label="退回地" min-width="220">
-          <template #default="{ row }">
-            <div class="location">{{ row.returnLocation || '—' }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="物流退回时间" width="170">
-          <template #default="{ row }">{{ row.returnTime || '—' }}</template>
         </el-table-column>
         <el-table-column label="申请时间" width="170">
           <template #default="{ row }">{{ row.applyTime || '—' }}</template>
@@ -210,8 +211,13 @@ onMounted(() => {
 .product-meta { min-width: 0; }
 .title { font-weight: 600; line-height: 1.4; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
-.tracking { color: #409eff; word-break: break-all; }
-.location { white-space: pre-wrap; line-height: 1.5; word-break: break-word; }
 .cell-pre { margin: 0; white-space: pre-wrap; line-height: 1.5; word-break: break-word; font: inherit; color: inherit; }
+.logistics.danger,
+.logistics.danger .status,
+.logistics.danger .cell-pre { color: #f56c6c; }
+.status { font-weight: 600; margin-bottom: 4px; }
+.tracks { margin: 6px 0 0; padding-left: 18px; line-height: 1.5; }
+.tracks li { margin-bottom: 4px; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
+.shipped-list :deep(.alert-row) { --el-table-tr-bg-color: #fef0f0; }
 </style>

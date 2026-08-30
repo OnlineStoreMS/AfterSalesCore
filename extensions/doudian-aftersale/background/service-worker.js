@@ -556,7 +556,7 @@ async function syncNow() {
   try {
     await workLog('开始同步售后工作台')
     await prepareWorkbench(tab.id)
-    await workLog('正在采集退回件、卡片与售后单')
+    await workLog('正在采集退回件、已发货退款成功、卡片与售后单')
     const collected = await collectFromTab(tab.id)
     const payload = {
       platformShopId: collected.platformShopId || '',
@@ -565,6 +565,9 @@ async function syncNow() {
       tickets: collected.tickets || [],
     }
     if (Array.isArray(collected.returns) && collected.returns.length) payload.returns = collected.returns
+    if (Array.isArray(collected.shippedRefunds) && collected.shippedRefunds.length) {
+      payload.shippedRefunds = collected.shippedRefunds
+    }
     const short = (collected.cardStats || []).filter((s) => s.expected && s.got < s.expected)
     for (const s of short) {
       await workLog(
@@ -575,11 +578,12 @@ async function syncNow() {
     }
     if (collected.returnStats?.error) {
       await workLog(`退回件采集失败：${collected.returnStats.error}`, 'error')
-    } else if (Array.isArray(payload.returns)) {
-      const withNo = collected.returnStats?.withNo ?? payload.returns.filter((x) => x.logisticsNo).length
+    } else if (Array.isArray(payload.returns) || Array.isArray(payload.shippedRefunds)) {
+      const withNo = collected.returnStats?.withNo ?? (payload.returns || []).filter((x) => x.logisticsNo).length
       const st = collected.returnStats || {}
       await workLog(
-        `退回件 ${payload.returns.length} 条` +
+        `退回件 ${payload.returns?.length || 0} 条` +
+          `，已发货退款成功 ${payload.shippedRefunds?.length || st.shipped || 0} 条` +
           (st.filteredTotal != null ? `（已发货退款/退款成功 ${st.filteredTotal}` : '') +
           (st.pages != null ? `，已扫 ${st.pages}/${st.pageCount || st.pages} 页` : '') +
           (st.scanned != null ? `、看过 ${st.scanned} 单` : '') +
@@ -590,6 +594,7 @@ async function syncNow() {
     await workLog(
       `已采集 ${payload.cards.length} 张卡片、${payload.tickets.length} 条售后单` +
         (Array.isArray(payload.returns) ? `、${payload.returns.length} 条退回件` : '') +
+        (Array.isArray(payload.shippedRefunds) ? `、${payload.shippedRefunds.length} 条已发货退款成功` : '') +
         '，正在上报',
     )
     const data = await api('/plugin/sync', { auth: true, body: payload })
@@ -606,12 +611,17 @@ async function syncNow() {
     const cardCount = data?.cardCount ?? payload.cards.length
     const ticketCount = data?.ticketCount ?? payload.tickets.length
     const returnCount = data?.returnCount ?? payload.returns?.length ?? 0
-    await workLog(`同步完成：卡片 ${cardCount} / 售后单 ${ticketCount} / 退回件 ${returnCount}`, 'ok')
+    const shippedRefundCount = data?.shippedRefundCount ?? payload.shippedRefunds?.length ?? 0
+    await workLog(
+      `同步完成：卡片 ${cardCount} / 售后单 ${ticketCount} / 退回件 ${returnCount} / 已发货退款成功 ${shippedRefundCount}`,
+      'ok',
+    )
     return {
       ok: true,
       cardCount,
       ticketCount,
       returnCount,
+      shippedRefundCount,
       lastSyncAt: data?.lastSyncAt || now,
     }
   } catch (e) {

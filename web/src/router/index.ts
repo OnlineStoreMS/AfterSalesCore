@@ -74,6 +74,12 @@ const router = createRouter({
           meta: { title: '退回管理' },
         },
         {
+          path: 'returns/shipped-success',
+          name: 'ShippedRefunds',
+          component: () => import('../views/shop/ShippedRefundList.vue'),
+          meta: { title: '已发货退款成功管理' },
+        },
+        {
           path: 'shops/:id',
           name: 'ShopWorkbench',
           component: () => import('../views/shop/ShopWorkbench.vue'),

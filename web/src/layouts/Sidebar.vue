@@ -9,15 +9,13 @@ const collapsed = defineModel<boolean>('collapsed', { default: false })
 
 const activeMenu = computed(() => {
   if (route.path.startsWith('/shops')) return '/shops'
+  if (route.path.startsWith('/returns/shipped-success')) return '/returns/shipped-success'
   if (route.path.startsWith('/returns')) return '/returns'
   if (route.path.startsWith('/notifications')) return '/notifications'
   return route.path
 })
 
 const menuItems = [
-  { path: '/dashboard', title: '工作台', icon: HomeFilled },
-  { path: '/shops', title: '店铺管理', icon: Shop },
-  { path: '/returns', title: '退回管理', icon: RefreshLeft },
   { path: '/notifications', title: '通知管理', icon: Bell },
   { path: '/unboxing/create', title: '录制开箱', icon: VideoCamera },
   { path: '/packing/create', title: '录制打包', icon: Box },
@@ -40,11 +38,30 @@ watch(() => route.path, () => {})
     <div class="logo">{{ logoText }}</div>
     <el-menu
       :default-active="activeMenu"
+      :default-openeds="['returns']"
       :collapse="collapsed"
       background-color="#001529"
       text-color="#ffffffa6"
       active-text-color="#fff"
     >
+      <el-menu-item index="/dashboard" @click="navigate('/dashboard')">
+        <el-icon><HomeFilled /></el-icon>
+        <span>工作台</span>
+      </el-menu-item>
+      <el-menu-item index="/shops" @click="navigate('/shops')">
+        <el-icon><Shop /></el-icon>
+        <span>店铺管理</span>
+      </el-menu-item>
+      <el-sub-menu index="returns">
+        <template #title>
+          <el-icon><RefreshLeft /></el-icon>
+          <span>退回管理</span>
+        </template>
+        <el-menu-item index="/returns" @click="navigate('/returns')">退回件</el-menu-item>
+        <el-menu-item index="/returns/shipped-success" @click="navigate('/returns/shipped-success')">
+          已发货退款成功管理
+        </el-menu-item>
+      </el-sub-menu>
       <el-menu-item
         v-for="item in menuItems"
         :key="item.path"
@@ -80,5 +97,8 @@ watch(() => route.path, () => {})
 }
 .sidebar :deep(.el-menu) {
   border-right: none;
+}
+.sidebar :deep(.el-sub-menu .el-menu-item) {
+  min-width: 0;
 }
 </style>

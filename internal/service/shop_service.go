@@ -290,6 +290,43 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery) ([]dto.ReturnPackageIte
 	return out, total, nil
 }
 
+func (s *ShopService) ListShippedRefunds(q dto.ShippedRefundListQuery) ([]dto.ShippedRefundItem, int64, error) {
+	if q.ShopID > 0 {
+		if _, err := s.repo().Get(q.ShopID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, 0, ErrNotFound
+			}
+			return nil, 0, err
+		}
+	}
+	list, total, err := s.repo().ListShippedRefunds(repo.ShippedRefundListFilter{
+		ShopID:    q.ShopID,
+		Keyword:   q.Keyword,
+		Status:    q.Status,
+		AlertOnly: q.AlertOnly,
+		ApplyFrom: ParseQueryDateTime(q.ApplyFrom, false),
+		ApplyTo:   ParseQueryDateTime(q.ApplyTo, true),
+		Page:      q.Page,
+		PageSize:  q.PageSize,
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	shops, err := s.repo().List()
+	if err != nil {
+		return nil, 0, err
+	}
+	names := make(map[uint64]string, len(shops))
+	for i := range shops {
+		names[shops[i].ID] = shops[i].Name
+	}
+	out := make([]dto.ShippedRefundItem, 0, len(list))
+	for i := range list {
+		out = append(out, toShippedRefundItem(&list[i], names[list[i].ShopID]))
+	}
+	return out, total, nil
+}
+
 func (s *ShopService) Bind(bindCode string) (*dto.PluginBindResult, error) {
 	code := strings.ToUpper(strings.TrimSpace(bindCode))
 	if len(code) < 4 {
@@ -500,11 +537,14 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 				ProductImage:        strings.TrimSpace(item.ProductImage),
 				SKU:                 strings.TrimSpace(item.SKU),
 				Qty:                 item.Qty,
+				BuyQty:              item.BuyQty,
 				PayAmount:           strings.TrimSpace(item.PayAmount),
 				RefundAmount:        strings.TrimSpace(item.RefundAmount),
 				AftersaleType:       strings.TrimSpace(item.AftersaleType),
 				Reason:              strings.TrimSpace(item.Reason),
 				Status:              strings.TrimSpace(item.Status),
+				OrderInfo:           strings.TrimSpace(item.OrderInfo),
+				AftersaleInfo:       strings.TrimSpace(item.AftersaleInfo),
 				Logistics:           strings.TrimSpace(item.Logistics),
 				LogisticsNo:         strings.TrimSpace(item.LogisticsNo),
 				Carrier:             strings.TrimSpace(item.Carrier),
@@ -524,9 +564,63 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 		returnCount = len(returns)
 	}
 
+	shippedCount := 0
+	if in.ShippedRefunds != nil && len(*in.ShippedRefunds) > 0 {
+		shipped := make([]model.ShippedRefundSuccess, 0, len(*in.ShippedRefunds))
+		for _, item := range *in.ShippedRefunds {
+			aid := strings.TrimSpace(item.PlatformAftersaleID)
+			if aid == "" {
+				continue
+			}
+			logistics := strings.TrimSpace(item.Logistics)
+			trackJSON := LimitLogisticsTracksJSON(item.TrackJSON)
+			status := strings.TrimSpace(item.LogisticsStatus)
+			if better := ClassifyLogisticsWithTracks(logistics, trackJSON); better != "" {
+				if status == "" || status == LogisticsShipped {
+					status = better
+				}
+			}
+			if status == LogisticsReturned {
+				continue
+			}
+			applyTime := strings.TrimSpace(item.ApplyTime)
+			shipped = append(shipped, model.ShippedRefundSuccess{
+				PlatformAftersaleID: aid,
+				OrderNo:             strings.TrimSpace(item.OrderNo),
+				ProductTitle:        strings.TrimSpace(item.ProductTitle),
+				ProductImage:        strings.TrimSpace(item.ProductImage),
+				SKU:                 strings.TrimSpace(item.SKU),
+				ProductTags:         strings.TrimSpace(item.ProductTags),
+				Tags:                strings.TrimSpace(item.Tags),
+				Qty:                 item.Qty,
+				BuyQty:              item.BuyQty,
+				PayAmount:           strings.TrimSpace(item.PayAmount),
+				RefundAmount:        strings.TrimSpace(item.RefundAmount),
+				AftersaleType:       strings.TrimSpace(item.AftersaleType),
+				Reason:              strings.TrimSpace(item.Reason),
+				Status:              strings.TrimSpace(item.Status),
+				OrderInfo:           strings.TrimSpace(item.OrderInfo),
+				AftersaleInfo:       strings.TrimSpace(item.AftersaleInfo),
+				Logistics:           logistics,
+				LogisticsStatus:     status,
+				LogisticsNo:         strings.TrimSpace(item.LogisticsNo),
+				Carrier:             strings.TrimSpace(item.Carrier),
+				ShipTime:            strings.TrimSpace(item.ShipTime),
+				TrackJSON:           trackJSON,
+				ApplyTime:           applyTime,
+				AppliedAt:           ParsePlatformDateTime(applyTime, 0),
+				RawJSON:             item.RawJSON,
+			})
+		}
+		if err := s.repos.Shop.UpsertShippedRefunds(shop, shipped); err != nil {
+			return nil, err
+		}
+		shippedCount = len(shipped)
+	}
+
 	result := &dto.PluginSyncResult{
 		ShopID: shop.ID, CardCount: len(cards), TicketCount: len(tickets),
-		ReturnCount: returnCount, LastSyncAt: formatTime(now),
+		ReturnCount: returnCount, ShippedRefundCount: shippedCount, LastSyncAt: formatTime(now),
 	}
 	if err := s.repos.Shop.Save(shop); err != nil {
 		return nil, err
@@ -603,11 +697,39 @@ func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageI
 		ID: item.ID, ShopID: item.ShopID, ShopName: shopName,
 		PlatformAftersaleID: item.PlatformAftersaleID, OrderNo: item.OrderNo,
 		ProductTitle: item.ProductTitle, ProductImage: item.ProductImage, SKU: item.SKU,
-		Qty: item.Qty, PayAmount: item.PayAmount, RefundAmount: item.RefundAmount,
+		Qty: item.Qty, BuyQty: item.BuyQty, PayAmount: item.PayAmount, RefundAmount: item.RefundAmount,
 		AftersaleType: item.AftersaleType, Reason: item.Reason, Status: item.Status,
+		OrderInfo: item.OrderInfo, AftersaleInfo: item.AftersaleInfo,
 		Logistics: item.Logistics, LogisticsNo: item.LogisticsNo, Carrier: item.Carrier,
 		ReturnLocation: item.ReturnLocation, ShipTime: item.ShipTime,
 		ApplyTime: item.ApplyTime, ReturnTime: item.ReturnTime,
+		SyncedAt: formatTime(item.SyncedAt),
+	}
+}
+
+func toShippedRefundItem(item *model.ShippedRefundSuccess, shopName string) dto.ShippedRefundItem {
+	status := item.LogisticsStatus
+	if status == "" {
+		status = ClassifyLogisticsWithTracks(item.Logistics, item.TrackJSON)
+	}
+	tracks := ParseLogisticsTracks(item.TrackJSON)
+	outTracks := make([]dto.LogisticsTrack, 0, len(tracks))
+	for _, t := range tracks {
+		outTracks = append(outTracks, dto.LogisticsTrack{
+			Date: t.Date, Title: t.Title, Detail: t.Detail, Text: t.Text,
+		})
+	}
+	return dto.ShippedRefundItem{
+		ID: item.ID, ShopID: item.ShopID, ShopName: shopName,
+		PlatformAftersaleID: item.PlatformAftersaleID, OrderNo: item.OrderNo,
+		ProductTitle: item.ProductTitle, ProductImage: item.ProductImage, SKU: item.SKU,
+		ProductTags: item.ProductTags, Tags: item.Tags,
+		Qty: item.Qty, BuyQty: item.BuyQty, PayAmount: item.PayAmount, RefundAmount: item.RefundAmount,
+		AftersaleType: item.AftersaleType, Reason: item.Reason, Status: item.Status,
+		OrderInfo: item.OrderInfo, AftersaleInfo: item.AftersaleInfo,
+		Logistics: item.Logistics, LogisticsStatus: status,
+		LogisticsNo: item.LogisticsNo, Carrier: item.Carrier, ShipTime: item.ShipTime,
+		Tracks: outTracks, Alert: IsLogisticsAlert(status), ApplyTime: item.ApplyTime,
 		SyncedAt: formatTime(item.SyncedAt),
 	}
 }

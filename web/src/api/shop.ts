@@ -158,11 +158,14 @@ export interface ReturnPackage {
   productImage?: string
   sku: string
   qty: number
+  buyQty?: number
   payAmount: string
   refundAmount: string
   aftersaleType: string
   reason: string
   status: string
+  orderInfo?: string
+  aftersaleInfo?: string
   logistics?: string
   logisticsNo: string
   carrier?: string
@@ -171,6 +174,44 @@ export interface ReturnPackage {
   applyTime?: string
   returnTime?: string
   syncedAt: string
+}
+
+export interface ShippedRefund {
+  id: number
+  shopId: number
+  shopName: string
+  platformAftersaleId: string
+  orderNo: string
+  productTitle: string
+  productImage?: string
+  sku: string
+  productTags?: string
+  tags?: string
+  qty: number
+  buyQty?: number
+  payAmount: string
+  refundAmount: string
+  aftersaleType: string
+  reason: string
+  status: string
+  orderInfo?: string
+  aftersaleInfo?: string
+  logistics?: string
+  logisticsStatus?: string
+  logisticsNo?: string
+  carrier?: string
+  shipTime?: string
+  tracks?: LogisticsTrack[]
+  alert: boolean
+  applyTime?: string
+  syncedAt: string
+}
+
+export interface LogisticsTrack {
+  date?: string
+  title?: string
+  detail?: string
+  text?: string
 }
 
 export async function fetchReturnPackages(params?: {
@@ -184,4 +225,22 @@ export async function fetchReturnPackages(params?: {
   pageSize?: number
 }) {
   return unwrap<PageData<ReturnPackage>>(await client.get('/return-packages', { params }))
+}
+
+export async function fetchShippedRefunds(params?: {
+  shopId?: number
+  keyword?: string
+  status?: string
+  alertOnly?: boolean
+  applyFrom?: string
+  applyTo?: string
+  page?: number
+  pageSize?: number
+}) {
+  return unwrap<PageData<ShippedRefund>>(await client.get('/shipped-refunds', {
+    params: {
+      ...params,
+      alertOnly: params?.alertOnly ? '1' : undefined,
+    },
+  }))
 }
