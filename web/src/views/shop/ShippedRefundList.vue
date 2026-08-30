@@ -5,6 +5,7 @@ import { Search } from '@element-plus/icons-vue'
 import {
   fetchShippedRefunds,
   fetchShops,
+  type LogisticsTrack,
   type MarketplaceShop,
   type ShippedRefund,
 } from '../../api/shop'
@@ -61,6 +62,14 @@ function isAlert(row: ShippedRefund) {
 
 function rowClassName({ row }: { row: ShippedRefund }) {
   return isAlert(row) ? 'alert-row' : ''
+}
+
+function hasTracks(row: ShippedRefund) {
+  return Boolean(row.tracks?.length)
+}
+
+function trackDetail(track: LogisticsTrack) {
+  return track.detail || (track.title || track.date ? '' : track.text || '')
 }
 
 onMounted(() => {
@@ -168,18 +177,33 @@ onMounted(() => {
             </template>
           </template>
         </el-table-column>
-        <el-table-column label="物流信息" min-width="280">
+        <el-table-column label="物流信息" width="120">
           <template #default="{ row }">
-            <div class="logistics" :class="{ danger: isAlert(row) }">
-              <div v-if="row.logisticsStatus" class="status">{{ row.logisticsStatus }}</div>
-              <div v-if="row.logisticsNo" class="sub">{{ row.logisticsNo }}<span v-if="row.carrier"> · {{ row.carrier }}</span></div>
-              <pre class="cell-pre">{{ row.logistics || '—' }}</pre>
-              <ol v-if="row.tracks?.length" class="tracks">
-                <li v-for="(track, i) in row.tracks.slice(0, 5)" :key="i">
-                  {{ track.text || [track.date, track.title, track.detail].filter(Boolean).join(' ') }}
-                </li>
-              </ol>
-            </div>
+            <el-popover
+              placement="left-start"
+              :width="360"
+              trigger="hover"
+              :disabled="!hasTracks(row)"
+              popper-class="shipped-track-popper"
+            >
+              <template #reference>
+                <span class="logistics-status" :class="{ danger: isAlert(row), link: hasTracks(row) }">
+                  {{ row.logisticsStatus || '—' }}
+                </span>
+              </template>
+              <div class="track-pop">
+                <div v-if="row.logisticsNo || row.carrier" class="track-meta">
+                  {{ [row.carrier, row.logisticsNo].filter(Boolean).join(' ') }}
+                </div>
+                <ul class="track-list">
+                  <li v-for="(track, i) in (row.tracks || []).slice(0, 5)" :key="i">
+                    <div class="track-title">{{ track.title || '物流记录' }}</div>
+                    <div v-if="track.date" class="track-date">{{ track.date }}</div>
+                    <div v-if="trackDetail(track)" class="track-detail">{{ trackDetail(track) }}</div>
+                  </li>
+                </ul>
+              </div>
+            </el-popover>
           </template>
         </el-table-column>
         <el-table-column label="申请时间" width="170">
@@ -216,12 +240,30 @@ onMounted(() => {
 .title { font-weight: 600; line-height: 1.4; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
 .cell-pre { margin: 0; white-space: pre-wrap; line-height: 1.5; word-break: break-word; font: inherit; color: inherit; }
-.logistics.danger,
-.logistics.danger .status,
-.logistics.danger .cell-pre { color: #f56c6c; }
-.status { font-weight: 600; margin-bottom: 4px; }
-.tracks { margin: 6px 0 0; padding-left: 18px; line-height: 1.5; }
-.tracks li { margin-bottom: 4px; }
+.logistics-status { font-weight: 600; }
+.logistics-status.link { color: #409eff; cursor: pointer; }
+.logistics-status.danger { color: #f56c6c; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 .shipped-list :deep(.alert-row) { --el-table-tr-bg-color: #fef0f0; }
+</style>
+
+<style>
+.shipped-track-popper .track-meta { color: #909399; font-size: 12px; margin-bottom: 8px; }
+.shipped-track-popper .track-list { margin: 0; padding: 0; list-style: none; }
+.shipped-track-popper .track-list li { position: relative; padding: 0 0 12px 14px; border-left: 2px solid #e4e7ed; }
+.shipped-track-popper .track-list li:last-child { padding-bottom: 0; border-left-color: transparent; }
+.shipped-track-popper .track-list li::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #c0c4cc;
+}
+.shipped-track-popper .track-list li:first-child::before { background: #409eff; }
+.shipped-track-popper .track-title { font-weight: 600; line-height: 1.4; }
+.shipped-track-popper .track-date { color: #909399; font-size: 12px; margin-top: 2px; }
+.shipped-track-popper .track-detail { color: #606266; font-size: 12px; margin-top: 2px; line-height: 1.5; word-break: break-word; }
 </style>
