@@ -481,7 +481,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 	}
 
 	returnCount := 0
-	if in.Returns != nil {
+	if in.Returns != nil && len(*in.Returns) > 0 {
 		returns := make([]model.ReturnPackage, 0, len(*in.Returns))
 		for _, item := range *in.Returns {
 			aid := strings.TrimSpace(item.PlatformAftersaleID)

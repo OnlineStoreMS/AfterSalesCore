@@ -764,7 +764,16 @@ function returnedVisibleCount() {
   )
 }
 
-async function waitReturnListReady(expected) {
+async function ensureReturnPageSize() {
+  for (let i = 0; i < 3 && currentPageSize() > 10; i++) {
+    await applyPageSize(10)
+    if (await waitUntil(() => (currentPageSize() <= 10 ? true : null), 20, 150)) break
+  }
+  await waitListSettled()
+  return currentPageSize() || 10
+}
+
+async function waitReturnListReady(expected, opts = {}) {
   const pageSize = currentPageSize() || 10
   const needRows = expected > 0 ? Math.min(expected, pageSize) : 0
   await waitUntil(() => {
@@ -773,10 +782,10 @@ async function waitReturnListReady(expected) {
     const filled = logisticsFilledCount()
     if (rows.length && filled < Math.ceil(rows.length * 0.85)) return null
     return true
-  }, 50, 500)
-  await sleep(800)
+  }, 40, 400)
+  await sleep(400)
   await scrollWorkbenchTable()
-  const deadline = Date.now() + 22000
+  const deadline = Date.now() + (opts.maxWait || 12000)
   let last = -1
   let stable = 0
   while (Date.now() < deadline) {
@@ -787,7 +796,7 @@ async function waitReturnListReady(expected) {
       last = n
       if (stable >= 2) return n
     }
-    await sleep(700)
+    await sleep(600)
   }
   return returnedVisibleCount()
 }
@@ -1127,12 +1136,13 @@ async function collectReturnPackages() {
   closeLogisticsDrawer()
   await sleep(800)
   await applyReturnFilters()
+  await ensureReturnPageSize()
   const expected = parseListTotal() ?? 0
   if (expected > 0) {
     await ensureFirstPage()
     await waitListSettled()
-    await waitReturnListReady(expected)
-    await sleep(800)
+    await waitReturnListReady(expected, { maxWait: 15000 })
+    await sleep(600)
   }
   const pageSize = currentPageSize() || 10
   const pageCount = expected > 0 ? Math.max(1, Math.ceil(expected / pageSize)) : 1
@@ -1159,7 +1169,7 @@ async function collectReturnPackages() {
         await waitForPageChange(prevIds)
       }
       await waitListSettled()
-      await waitReturnListReady(expected)
+      await waitReturnListReady(expected, { maxWait: 8000 })
     }
     pages++
     await collectCurrentPage()
@@ -1171,7 +1181,7 @@ async function collectReturnPackages() {
     fireClick(next)
     await waitForPageChange(prevIds)
     await waitListSettled()
-    await waitReturnListReady(expected)
+    await waitReturnListReady(expected, { maxWait: 8000 })
     pages++
     await collectCurrentPage()
   }
@@ -1211,8 +1221,8 @@ async function collectAll() {
   let returnStats
   try {
     const collected = await collectReturnPackages()
-    returns = collected.items
     returnStats = collected.stats
+    if (collected.items?.length) returns = collected.items
   } catch (e) {
     returnStats = { error: e instanceof Error ? e.message : String(e) }
   }

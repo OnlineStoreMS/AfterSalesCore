@@ -564,7 +564,7 @@ async function syncNow() {
       cards: collected.cards || [],
       tickets: collected.tickets || [],
     }
-    if (Array.isArray(collected.returns)) payload.returns = collected.returns
+    if (Array.isArray(collected.returns) && collected.returns.length) payload.returns = collected.returns
     const short = (collected.cardStats || []).filter((s) => s.expected && s.got < s.expected)
     for (const s of short) {
       await workLog(

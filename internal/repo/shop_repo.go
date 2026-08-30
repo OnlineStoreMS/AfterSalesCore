@@ -361,9 +361,11 @@ func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64
 }
 
 func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.ReturnPackage) error {
+	if len(items) == 0 {
+		return nil
+	}
 	now := time.Now()
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		seenIDs := make([]uint64, 0, len(items))
 		for i := range items {
 			item := &items[i]
 			item.TenantID = shop.TenantID
@@ -376,45 +378,54 @@ func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.Retu
 				if err := tx.Create(item).Error; err != nil {
 					return err
 				}
-			} else if err != nil {
-				return err
-			} else {
-				item.ID = existing.ID
-				item.CreatedAt = existing.CreatedAt
-				if err := tx.Model(&existing).Updates(map[string]any{
-					"order_no":             item.OrderNo,
-					"product_title":        item.ProductTitle,
-					"product_image":        item.ProductImage,
-					"sku":                  item.SKU,
-					"qty":                  item.Qty,
-					"pay_amount":           item.PayAmount,
-					"refund_amount":        item.RefundAmount,
-					"aftersale_type":       item.AftersaleType,
-					"reason":               item.Reason,
-					"status":               item.Status,
-					"logistics":            item.Logistics,
-					"logistics_no":         item.LogisticsNo,
-					"carrier":              item.Carrier,
-					"return_location":      item.ReturnLocation,
-					"ship_time":            item.ShipTime,
-					"apply_time":           item.ApplyTime,
-					"return_time":          item.ReturnTime,
-					"returned_at":          item.ReturnedAt,
-					"applied_at":           item.AppliedAt,
-					"track_json":           item.TrackJSON,
-					"raw_json":             item.RawJSON,
-					"synced_at":            now,
-				}).Error; err != nil {
-					return err
-				}
+				continue
 			}
-			seenIDs = append(seenIDs, item.ID)
+			if err != nil {
+				return err
+			}
+			updates := map[string]any{
+				"order_no":       item.OrderNo,
+				"product_title":  item.ProductTitle,
+				"product_image":  item.ProductImage,
+				"sku":            item.SKU,
+				"qty":            item.Qty,
+				"pay_amount":     item.PayAmount,
+				"refund_amount":  item.RefundAmount,
+				"aftersale_type": item.AftersaleType,
+				"reason":         item.Reason,
+				"status":         item.Status,
+				"logistics":      item.Logistics,
+				"apply_time":     item.ApplyTime,
+				"applied_at":     item.AppliedAt,
+				"raw_json":       item.RawJSON,
+				"synced_at":      now,
+			}
+			if item.LogisticsNo != "" {
+				updates["logistics_no"] = item.LogisticsNo
+			}
+			if item.Carrier != "" {
+				updates["carrier"] = item.Carrier
+			}
+			if item.ReturnLocation != "" {
+				updates["return_location"] = item.ReturnLocation
+			}
+			if item.ShipTime != "" {
+				updates["ship_time"] = item.ShipTime
+			}
+			if item.ReturnTime != "" {
+				updates["return_time"] = item.ReturnTime
+			}
+			if item.ReturnedAt != nil {
+				updates["returned_at"] = item.ReturnedAt
+			}
+			if item.TrackJSON != "" {
+				updates["track_json"] = item.TrackJSON
+			}
+			if err := tx.Model(&existing).Updates(updates).Error; err != nil {
+				return err
+			}
 		}
-		left := tx.Where("shop_id = ?", shop.ID)
-		if len(seenIDs) > 0 {
-			left = left.Where("id NOT IN ?", seenIDs)
-		}
-		return left.Delete(&model.ReturnPackage{}).Error
+		return nil
 	})
 }
 
