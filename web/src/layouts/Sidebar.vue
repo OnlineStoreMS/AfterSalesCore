@@ -24,7 +24,7 @@ const menuItems = [
   { path: '/edge-devices', title: '录制端管理', icon: Monitor },
 ]
 
-const logoText = computed(() => (collapsed.value ? 'AS' : '售后管理'))
+const logoText = computed(() => (collapsed.value ? 'AS' : '售后中心'))
 
 function navigate(path: string) {
   router.push(path)

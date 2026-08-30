@@ -2,8 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import {redirectToPortal, ensureSession, clearToken} from '../utils/auth'
 
-const APP_TITLE = 'AfterSalesCore - 售后管理'
-
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -111,11 +109,6 @@ router.beforeEach(async (to) => {
     return false
   }
   return true
-})
-
-router.afterEach((to) => {
-  const page = to.meta.title as string | undefined
-  document.title = page ? `${page} - ${APP_TITLE}` : APP_TITLE
 })
 
 export default router

@@ -30,20 +30,20 @@ function logout() {
 }
 
 const breadcrumbs = computed(() => {
-  const title = (route.meta.title as string) || '售后管理'
-  if (route.path.startsWith('/unboxing/create')) return ['售后', '录制开箱']
-  if (route.path.startsWith('/packing/create')) return ['售后', '录制打包']
-  if (route.path.match(/^\/unboxing\/\d+/)) return ['售后', '开箱详情']
-  if (route.path.match(/^\/packing\/\d+/)) return ['售后', '打包详情']
-  if (route.path.startsWith('/unboxing')) return ['售后', '开箱记录']
-  if (route.path.startsWith('/packing')) return ['售后', '打包记录']
-  if (route.path.match(/^\/shops\/\d+/)) return ['售后', '店铺售后工作台']
-  if (route.path.startsWith('/shops')) return ['售后', '店铺管理']
-  if (route.path.startsWith('/returns/shipped-success')) return ['售后', '退回管理', '已发货退款成功管理']
-  if (route.path.startsWith('/returns')) return ['售后', '退回管理']
-  if (route.path.startsWith('/notifications')) return ['售后', '通知管理']
-  if (route.path.startsWith('/edge-devices')) return ['售后', '录制端管理']
-  return ['首页', title]
+  const title = (route.meta.title as string) || '工作台'
+  if (route.path.startsWith('/unboxing/create')) return ['售后中心', '录制开箱']
+  if (route.path.startsWith('/packing/create')) return ['售后中心', '录制打包']
+  if (route.path.match(/^\/unboxing\/\d+/)) return ['售后中心', '开箱详情']
+  if (route.path.match(/^\/packing\/\d+/)) return ['售后中心', '打包详情']
+  if (route.path.startsWith('/unboxing')) return ['售后中心', '开箱记录']
+  if (route.path.startsWith('/packing')) return ['售后中心', '打包记录']
+  if (route.path.match(/^\/shops\/\d+/)) return ['售后中心', '店铺售后工作台']
+  if (route.path.startsWith('/shops')) return ['售后中心', '店铺管理']
+  if (route.path.startsWith('/returns/shipped-success')) return ['售后中心', '退回管理', '已发货退款成功管理']
+  if (route.path.startsWith('/returns')) return ['售后中心', '退回管理']
+  if (route.path.startsWith('/notifications')) return ['售后中心', '通知管理']
+  if (route.path.startsWith('/edge-devices')) return ['售后中心', '录制端管理']
+  return ['售后中心', title]
 })
 </script>
 

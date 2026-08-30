@@ -59,6 +59,10 @@ function isAlert(row: ShippedRefund) {
   return row.alert || ['待取件', '已签收', '运输中'].includes(row.logisticsStatus || '')
 }
 
+function rowClassName({ row }: { row: ShippedRefund }) {
+  return isAlert(row) ? 'alert-row' : ''
+}
+
 onMounted(() => {
   loadShops()
   loadData()
@@ -127,7 +131,7 @@ onMounted(() => {
         <span class="total">共 {{ total }} 条</span>
       </div>
 
-      <el-table :data="tableData" stripe border :row-class-name="({ row }) => (isAlert(row) ? 'alert-row' : '')">
+      <el-table :data="tableData" stripe border :row-class-name="rowClassName">
         <el-table-column prop="shopName" label="店铺" width="140" />
         <el-table-column label="商品信息" min-width="240">
           <template #default="{ row }">
