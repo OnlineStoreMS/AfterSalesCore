@@ -16,6 +16,7 @@ export interface MarketplaceShop {
   lastSyncAt?: string
   lastSeenAt?: string
   syncRequested?: boolean
+  pendingTicketCount?: number
   remark?: string
   createdAt: string
   updatedAt: string

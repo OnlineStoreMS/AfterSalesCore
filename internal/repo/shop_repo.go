@@ -33,6 +33,25 @@ func (r *ShopRepo) List() ([]model.MarketplaceShop, error) {
 	return list, err
 }
 
+func (r *ShopRepo) CountPendingTickets() (map[uint64]int, error) {
+	type row struct {
+		ShopID uint64
+		Count  int
+	}
+	var rows []row
+	err := r.db.Model(&model.AftersaleTicket{}).
+		Scopes(scopeTenant(r.tenantID)).
+		Select("shop_id, count(*) as count").
+		Where("id IN (?)", r.db.Model(&model.AftersaleTicketCard{}).Select("ticket_id")).
+		Group("shop_id").
+		Scan(&rows).Error
+	out := make(map[uint64]int, len(rows))
+	for _, x := range rows {
+		out[x.ShopID] = x.Count
+	}
+	return out, err
+}
+
 func (r *ShopRepo) Get(id uint64) (*model.MarketplaceShop, error) {
 	var shop model.MarketplaceShop
 	err := r.db.Scopes(scopeTenant(r.tenantID)).First(&shop, id).Error

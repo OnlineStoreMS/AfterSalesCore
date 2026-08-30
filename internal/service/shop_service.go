@@ -67,9 +67,15 @@ func (s *ShopService) List() ([]dto.ShopItem, error) {
 	if err != nil {
 		return nil, err
 	}
+	counts, err := s.repo().CountPendingTickets()
+	if err != nil {
+		return nil, err
+	}
 	out := make([]dto.ShopItem, 0, len(list))
 	for i := range list {
-		out = append(out, s.toItem(&list[i]))
+		item := s.toItem(&list[i])
+		item.PendingTicketCount = counts[list[i].ID]
+		out = append(out, item)
 	}
 	return out, nil
 }
@@ -83,6 +89,11 @@ func (s *ShopService) Get(id uint64) (*dto.ShopItem, error) {
 		return nil, err
 	}
 	item := s.toItem(shop)
+	counts, err := s.repo().CountPendingTickets()
+	if err != nil {
+		return nil, err
+	}
+	item.PendingTicketCount = counts[shop.ID]
 	return &item, nil
 }
 
