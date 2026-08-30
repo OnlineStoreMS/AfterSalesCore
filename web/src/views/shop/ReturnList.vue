@@ -141,25 +141,19 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="订单信息" min-width="220">
           <template #default="{ row }">
-            <pre v-if="row.orderInfo" class="cell-pre">{{ row.orderInfo }}</pre>
-            <template v-else>
-              <div>应付金额 ¥{{ row.payAmount || '—' }}</div>
-              <div class="sub">购买件数 {{ row.buyQty || row.qty || 0 }} 件</div>
-              <div class="sub">订单 {{ row.orderNo || '—' }}</div>
-              <div class="sub">售后 {{ row.platformAftersaleId }}</div>
-            </template>
+            <div>应付金额 ¥{{ row.payAmount || '—' }}</div>
+            <div class="sub">购买件数 {{ row.buyQty || row.qty || 0 }} 件</div>
+            <div class="sub">订单 {{ row.orderNo || '—' }}</div>
+            <div class="sub">售后 {{ row.platformAftersaleId }}</div>
           </template>
         </el-table-column>
         <el-table-column label="售后信息" min-width="220">
           <template #default="{ row }">
-            <pre v-if="row.aftersaleInfo" class="cell-pre">{{ row.aftersaleInfo }}</pre>
-            <template v-else>
-              <div>{{ row.aftersaleType || '已发货退款' }}</div>
-              <div class="sub">售后退款 ¥{{ row.refundAmount || '—' }}</div>
-              <div class="sub">申请件数 {{ row.qty || 0 }} 件</div>
-              <div v-if="row.reason" class="sub">申请原因 {{ row.reason }}</div>
-              <div v-if="row.applyTime" class="sub">申请时间 {{ row.applyTime }}</div>
-            </template>
+            <div>{{ row.aftersaleType || '已发货退款' }}</div>
+            <div class="sub">售后退款 ¥{{ row.refundAmount || '—' }}</div>
+            <div class="sub">申请件数 {{ row.qty || 0 }} 件</div>
+            <div v-if="row.reason" class="sub">申请原因 {{ row.reason }}</div>
+            <div v-if="row.applyTime" class="sub">申请时间 {{ row.applyTime }}</div>
           </template>
         </el-table-column>
         <el-table-column label="物流单号" min-width="160">
@@ -212,6 +206,5 @@ onMounted(() => {
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
 .tracking { color: #409eff; word-break: break-all; }
 .location { white-space: pre-wrap; line-height: 1.5; word-break: break-word; }
-.cell-pre { margin: 0; white-space: pre-wrap; line-height: 1.5; word-break: break-word; font: inherit; color: inherit; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

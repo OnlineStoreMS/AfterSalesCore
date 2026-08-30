@@ -145,35 +145,28 @@ onMounted(() => {
               <div class="product-meta">
                 <div class="title">{{ row.productTitle || '—' }}</div>
                 <div v-if="row.sku" class="sub">{{ row.sku }}</div>
-                <div v-if="row.productTags" class="sub">{{ row.productTags }}</div>
               </div>
             </div>
           </template>
         </el-table-column>
         <el-table-column label="订单信息" min-width="220">
           <template #default="{ row }">
-            <pre v-if="row.orderInfo" class="cell-pre">{{ row.orderInfo }}</pre>
-            <template v-else>
-              <div>应付金额 ¥{{ row.payAmount || '—' }}</div>
-              <div class="sub">购买件数 {{ row.buyQty || row.qty || 0 }} 件</div>
-              <div class="sub">订单 {{ row.orderNo || '—' }}</div>
-              <div class="sub">售后 {{ row.platformAftersaleId }}</div>
-            </template>
+            <div>应付金额 ¥{{ row.payAmount || '—' }}</div>
+            <div class="sub">购买件数 {{ row.buyQty || row.qty || 0 }} 件</div>
+            <div class="sub">订单 {{ row.orderNo || '—' }}</div>
+            <div class="sub">售后 {{ row.platformAftersaleId }}</div>
           </template>
         </el-table-column>
         <el-table-column label="售后信息" min-width="220">
           <template #default="{ row }">
-            <pre v-if="row.aftersaleInfo" class="cell-pre">{{ row.aftersaleInfo }}</pre>
-            <template v-else>
-              <div>{{ row.aftersaleType || '已发货退款' }}</div>
-              <div class="sub">售后退款 ¥{{ row.refundAmount || '—' }}</div>
-              <div class="sub">申请件数 {{ row.qty || 0 }} 件</div>
-              <div v-if="row.reason" class="sub">申请原因 {{ row.reason }}</div>
-              <div v-if="row.applyTime" class="sub">申请时间 {{ row.applyTime }}</div>
-            </template>
+            <div>{{ row.aftersaleType || '已发货退款' }}</div>
+            <div class="sub">售后退款 ¥{{ row.refundAmount || '—' }}</div>
+            <div class="sub">申请件数 {{ row.qty || 0 }} 件</div>
+            <div v-if="row.reason" class="sub">申请原因 {{ row.reason }}</div>
+            <div v-if="row.applyTime" class="sub">申请时间 {{ row.applyTime }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="物流信息" width="120">
+        <el-table-column label="物流单号" min-width="180">
           <template #default="{ row }">
             <el-popover
               placement="left-start"
@@ -183,9 +176,14 @@ onMounted(() => {
               popper-class="shipped-track-popper"
             >
               <template #reference>
-                <span class="logistics-status" :class="{ danger: isAlert(row), link: hasTracks(row) }">
-                  {{ row.logisticsStatus || '—' }}
-                </span>
+                <div class="logistics-cell" :class="{ link: hasTracks(row) }">
+                  <div class="tracking">{{ row.logisticsNo || '—' }}</div>
+                  <div v-if="row.carrier" class="sub">{{ row.carrier }}</div>
+                  <div v-if="row.logisticsStatus" class="logistics-status" :class="{ danger: isAlert(row) }">
+                    {{ row.logisticsStatus }}
+                  </div>
+                  <div v-if="row.logistics" class="sub">{{ row.logistics }}</div>
+                </div>
               </template>
               <div class="track-pop">
                 <div v-if="row.logisticsNo || row.carrier" class="track-meta">
@@ -235,9 +233,9 @@ onMounted(() => {
 .product-meta { min-width: 0; }
 .title { font-weight: 600; line-height: 1.4; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
-.cell-pre { margin: 0; white-space: pre-wrap; line-height: 1.5; word-break: break-word; font: inherit; color: inherit; }
-.logistics-status { font-weight: 600; }
-.logistics-status.link { color: #409eff; cursor: pointer; }
+.tracking { color: #409eff; word-break: break-all; }
+.logistics-cell.link { cursor: pointer; }
+.logistics-status { font-weight: 600; margin-top: 2px; }
 .logistics-status.danger { color: #f56c6c; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>
