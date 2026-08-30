@@ -141,10 +141,13 @@ type ReturnPackage struct {
 	Logistics           string    `gorm:"size:256" json:"logistics"`
 	LogisticsNo         string    `gorm:"size:64;index" json:"logisticsNo"`
 	Carrier             string    `gorm:"size:64" json:"carrier"`
-	ReturnLocation      string    `gorm:"size:512;index" json:"returnLocation"`
-	ShipTime            string    `gorm:"size:64" json:"shipTime"`
-	ApplyTime           string    `gorm:"size:64" json:"applyTime"`
-	TrackJSON           string    `gorm:"type:text" json:"trackJson"`
+	ReturnLocation      string     `gorm:"size:512;index" json:"returnLocation"`
+	ShipTime            string     `gorm:"size:64" json:"shipTime"`
+	ApplyTime           string     `gorm:"size:64" json:"applyTime"`
+	ReturnTime          string     `gorm:"size:64" json:"returnTime"`
+	ReturnedAt          *time.Time `gorm:"index" json:"returnedAt"`
+	AppliedAt           *time.Time `gorm:"index" json:"appliedAt"`
+	TrackJSON           string     `gorm:"type:text" json:"trackJson"`
 	RawJSON             string    `gorm:"type:text" json:"rawJson"`
 	SyncedAt            time.Time `json:"syncedAt"`
 	CreatedAt           time.Time `json:"createdAt"`

@@ -309,10 +309,14 @@ func (r *ShopRepo) ListTicketsWithDeadline(shopID uint64) ([]model.AftersaleTick
 }
 
 type ReturnListFilter struct {
-	ShopID   uint64
-	Keyword  string
-	Page     int
-	PageSize int
+	ShopID     uint64
+	Keyword    string
+	ReturnFrom *time.Time
+	ReturnTo   *time.Time
+	ApplyFrom  *time.Time
+	ApplyTo    *time.Time
+	Page       int
+	PageSize   int
 }
 
 func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64, error) {
@@ -327,6 +331,18 @@ func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64
 			like, like, like, like, like, like, like, like,
 		)
 	}
+	if f.ReturnFrom != nil {
+		q = q.Where("returned_at >= ?", f.ReturnFrom)
+	}
+	if f.ReturnTo != nil {
+		q = q.Where("returned_at <= ?", f.ReturnTo)
+	}
+	if f.ApplyFrom != nil {
+		q = q.Where("applied_at >= ?", f.ApplyFrom)
+	}
+	if f.ApplyTo != nil {
+		q = q.Where("applied_at <= ?", f.ApplyTo)
+	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -339,7 +355,8 @@ func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64
 	}
 	var list []model.ReturnPackage
 	offset := (f.Page - 1) * f.PageSize
-	err := q.Order("id DESC").Offset(offset).Limit(f.PageSize).Find(&list).Error
+	err := q.Order("COALESCE(returned_at, applied_at) DESC NULLS LAST, id DESC").
+		Offset(offset).Limit(f.PageSize).Find(&list).Error
 	return list, total, err
 }
 
@@ -381,6 +398,9 @@ func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.Retu
 					"return_location":      item.ReturnLocation,
 					"ship_time":            item.ShipTime,
 					"apply_time":           item.ApplyTime,
+					"return_time":          item.ReturnTime,
+					"returned_at":          item.ReturnedAt,
+					"applied_at":           item.AppliedAt,
 					"track_json":           item.TrackJSON,
 					"raw_json":             item.RawJSON,
 					"synced_at":            now,

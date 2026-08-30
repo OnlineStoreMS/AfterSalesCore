@@ -254,9 +254,9 @@ func (s *ShopService) ListTickets(id uint64, cardKey, keyword string, page, page
 	return out, total, nil
 }
 
-func (s *ShopService) ListReturns(shopID uint64, keyword string, page, pageSize int) ([]dto.ReturnPackageItem, int64, error) {
-	if shopID > 0 {
-		if _, err := s.repo().Get(shopID); err != nil {
+func (s *ShopService) ListReturns(q dto.ReturnListQuery) ([]dto.ReturnPackageItem, int64, error) {
+	if q.ShopID > 0 {
+		if _, err := s.repo().Get(q.ShopID); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, 0, ErrNotFound
 			}
@@ -264,7 +264,14 @@ func (s *ShopService) ListReturns(shopID uint64, keyword string, page, pageSize 
 		}
 	}
 	list, total, err := s.repo().ListReturns(repo.ReturnListFilter{
-		ShopID: shopID, Keyword: keyword, Page: page, PageSize: pageSize,
+		ShopID:     q.ShopID,
+		Keyword:    q.Keyword,
+		ReturnFrom: ParseQueryDateTime(q.ReturnFrom, false),
+		ReturnTo:   ParseQueryDateTime(q.ReturnTo, true),
+		ApplyFrom:  ParseQueryDateTime(q.ApplyFrom, false),
+		ApplyTo:    ParseQueryDateTime(q.ApplyTo, true),
+		Page:       q.Page,
+		PageSize:   q.PageSize,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -465,6 +472,11 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 			if aid == "" {
 				continue
 			}
+			applyTime := strings.TrimSpace(item.ApplyTime)
+			shipTime := strings.TrimSpace(item.ShipTime)
+			returnTime, returnedAt, appliedAt := ResolveReturnTimes(
+				strings.TrimSpace(item.ReturnTime), applyTime, shipTime, item.TrackJSON,
+			)
 			returns = append(returns, model.ReturnPackage{
 				PlatformAftersaleID: aid,
 				OrderNo:             strings.TrimSpace(item.OrderNo),
@@ -481,8 +493,11 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 				LogisticsNo:         strings.TrimSpace(item.LogisticsNo),
 				Carrier:             strings.TrimSpace(item.Carrier),
 				ReturnLocation:      strings.TrimSpace(item.ReturnLocation),
-				ShipTime:            strings.TrimSpace(item.ShipTime),
-				ApplyTime:           strings.TrimSpace(item.ApplyTime),
+				ShipTime:            shipTime,
+				ApplyTime:           applyTime,
+				ReturnTime:          returnTime,
+				ReturnedAt:          returnedAt,
+				AppliedAt:           appliedAt,
 				TrackJSON:           item.TrackJSON,
 				RawJSON:             item.RawJSON,
 			})
@@ -575,7 +590,8 @@ func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageI
 		Qty: item.Qty, PayAmount: item.PayAmount, RefundAmount: item.RefundAmount,
 		AftersaleType: item.AftersaleType, Reason: item.Reason, Status: item.Status,
 		Logistics: item.Logistics, LogisticsNo: item.LogisticsNo, Carrier: item.Carrier,
-		ReturnLocation: item.ReturnLocation, ShipTime: item.ShipTime, ApplyTime: item.ApplyTime,
+		ReturnLocation: item.ReturnLocation, ShipTime: item.ShipTime,
+		ApplyTime: item.ApplyTime, ReturnTime: item.ReturnTime,
 		SyncedAt: formatTime(item.SyncedAt),
 	}
 }

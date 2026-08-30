@@ -856,6 +856,17 @@ function secondLastTrack(tracks) {
   return tracks[1].text || ''
 }
 
+function returnTimeFromTracks(tracks, applyTime, shipTime) {
+  const hit =
+    (tracks || []).find((t) => t.title === '已退回' || String(t.text || '').includes('已退回')) ||
+    tracks?.[0]
+  const date = String(hit?.date || '').trim()
+  if (!date) return ''
+  if (/^\d{4}/.test(date)) return date.replace(/-/g, '/')
+  const year = pick(applyTime, /^(\d{4})/) || pick(shipTime, /^(\d{4})/) || String(new Date().getFullYear())
+  return `${year}/${date}`
+}
+
 function findDataRowByAftersaleId(aftersaleId) {
   const table = workbenchTable()
   if (!table) return null
@@ -983,6 +994,7 @@ function toReturnItem(ticket, extra) {
     returnLocation: extra.returnLocation || '',
     shipTime: extra.shipTime || '',
     applyTime: ticket.applyTime,
+    returnTime: returnTimeFromTracks(tracks, ticket.applyTime, extra.shipTime),
     trackJson: JSON.stringify(tracks),
     rawJson: JSON.stringify({
       logistics: ticket.logistics,

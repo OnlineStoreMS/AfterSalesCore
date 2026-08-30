@@ -155,6 +155,7 @@ type PluginSyncReturn struct {
 	ReturnLocation      string `json:"returnLocation"`
 	ShipTime            string `json:"shipTime"`
 	ApplyTime           string `json:"applyTime"`
+	ReturnTime          string `json:"returnTime"`
 	TrackJSON           string `json:"trackJson"`
 	RawJSON             string `json:"rawJson"`
 }
@@ -197,5 +198,17 @@ type ReturnPackageItem struct {
 	ReturnLocation      string `json:"returnLocation"`
 	ShipTime            string `json:"shipTime,omitempty"`
 	ApplyTime           string `json:"applyTime,omitempty"`
+	ReturnTime          string `json:"returnTime,omitempty"`
 	SyncedAt            string `json:"syncedAt"`
+}
+
+type ReturnListQuery struct {
+	ShopID     uint64
+	Keyword    string
+	ReturnFrom string
+	ReturnTo   string
+	ApplyFrom  string
+	ApplyTo    string
+	Page       int
+	PageSize   int
 }

@@ -74,6 +74,10 @@ func AutoMigrate(db *gorm.DB) error {
 			CREATE INDEX IF NOT EXISTS idx_unboxing_tenant_tracking ON unboxing_records (tenant_id, tracking_no);
 			CREATE INDEX IF NOT EXISTS idx_unboxing_created ON unboxing_records (tenant_id, created_at DESC);
 			CREATE INDEX IF NOT EXISTS idx_edge_devices_edge_id ON edge_devices (edge_id);
+			UPDATE return_packages
+			SET applied_at = to_timestamp(apply_time, 'YYYY/MM/DD HH24:MI:SS')
+			WHERE applied_at IS NULL
+			  AND apply_time ~ '^[0-9]{4}/[0-9]{1,2}/[0-9]{1,2}';
 		`).Error
 	}
 	return nil

@@ -163,7 +163,16 @@ func (h *ShopHandler) Returns(c *gin.Context) {
 		}
 		shopID = id
 	}
-	list, total, err := h.ss(c).ListReturns(shopID, c.Query("keyword"), page, pageSize)
+	list, total, err := h.ss(c).ListReturns(dto.ReturnListQuery{
+		ShopID:     shopID,
+		Keyword:    c.Query("keyword"),
+		ReturnFrom: c.Query("returnFrom"),
+		ReturnTo:   c.Query("returnTo"),
+		ApplyFrom:  c.Query("applyFrom"),
+		ApplyTo:    c.Query("applyTo"),
+		Page:       page,
+		PageSize:   pageSize,
+	})
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return

@@ -147,12 +147,17 @@ export interface ReturnPackage {
   returnLocation: string
   shipTime?: string
   applyTime?: string
+  returnTime?: string
   syncedAt: string
 }
 
 export async function fetchReturnPackages(params?: {
   shopId?: number
   keyword?: string
+  returnFrom?: string
+  returnTo?: string
+  applyFrom?: string
+  applyTo?: string
   page?: number
   pageSize?: number
 }) {
