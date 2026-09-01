@@ -462,6 +462,7 @@ type ShippedRefundListFilter struct {
 	ApplyTo   *time.Time
 	Page      int
 	PageSize  int
+	Unpaged   bool
 }
 
 func (r *ShopRepo) ListShippedRefunds(f ShippedRefundListFilter) ([]model.ShippedRefundSuccess, int64, error) {
@@ -492,16 +493,20 @@ func (r *ShopRepo) ListShippedRefunds(f ShippedRefundListFilter) ([]model.Shippe
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	q = q.Order("COALESCE(applied_at, synced_at) DESC NULLS LAST, id DESC")
+	var list []model.ShippedRefundSuccess
+	if f.Unpaged {
+		err := q.Find(&list).Error
+		return list, total, err
+	}
 	if f.Page < 1 {
 		f.Page = 1
 	}
 	if f.PageSize < 1 || f.PageSize > 200 {
 		f.PageSize = 20
 	}
-	var list []model.ShippedRefundSuccess
 	offset := (f.Page - 1) * f.PageSize
-	err := q.Order("COALESCE(applied_at, synced_at) DESC NULLS LAST, id DESC").
-		Offset(offset).Limit(f.PageSize).Find(&list).Error
+	err := q.Offset(offset).Limit(f.PageSize).Find(&list).Error
 	return list, total, err
 }
 
@@ -596,7 +601,17 @@ func (r *ShopRepo) UpsertShippedRefunds(shop *model.MarketplaceShop, items []mod
 				return err
 			}
 		}
-		return nil
+		ids := make([]string, 0, len(items))
+		for i := range items {
+			if id := strings.TrimSpace(items[i].PlatformAftersaleID); id != "" {
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		return tx.Where("shop_id = ? AND tenant_id = ? AND platform_aftersale_id NOT IN ?", shop.ID, shop.TenantID, ids).
+			Delete(&model.ShippedRefundSuccess{}).Error
 	})
 }
 

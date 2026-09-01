@@ -413,6 +413,9 @@ func (s *NotificationService) sendScenario(
 			return 0, 0, 0, "", err
 		}
 		for _, row := range rows {
+			if ClassifyShippedRefundStatus(row.Logistics, row.TrackJSON, row.LogisticsStatus) != status {
+				continue
+			}
 			key := notificationKey(shop.ID, "shipped_refund", row.PlatformAftersaleID, scenario, "")
 			if notified[key] != "" {
 				skipped++

@@ -1004,11 +1004,14 @@ function formatTicketLogistics(raw) {
 }
 
 function logisticsStatusOf(text, tracks) {
-  if (String(text || '').includes('已取消')) return '已取消'
+  const raw = String(text || '')
+  if (raw.includes('已取消')) return '已取消'
+  const ship = matchLogisticsKeyword(chunkAfterLabel(raw, '订单发货', ['买家退货', '需商家拦截快递']))
+  if (ship) return ship
   const latest = tracks?.[0]?.title || tracks?.[0]?.text || ''
   const fromLatest = matchLogisticsKeyword(latest)
   if (fromLatest && fromLatest !== '已发货') return fromLatest
-  return matchLogisticsKeyword([latest, text, ...(tracks || []).map((x) => x.text || x.title)].join('\n'))
+  return matchLogisticsKeyword([latest, raw, ...(tracks || []).map((x) => x.text || x.title)].join('\n'))
 }
 
 function hasShipStatus(text) {

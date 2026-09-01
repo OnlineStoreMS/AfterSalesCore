@@ -333,6 +333,9 @@ func (s *ShopService) ListIntercepts(q dto.InterceptListQuery) ([]dto.InterceptI
 	}
 	for i := range pickups {
 		p := &pickups[i]
+		if !IsMerchantInterceptPickup(p.Logistics, p.LogisticsStatus) {
+			continue
+		}
 		if kw != "" && !interceptKeywordMatch(p, kw) {
 			continue
 		}
@@ -421,10 +424,7 @@ func interceptFromTicket(t *model.AftersaleTicket, shopName string) dto.Intercep
 }
 
 func interceptFromShipped(p *model.ShippedRefundSuccess, shopName string) dto.InterceptItem {
-	status := p.LogisticsStatus
-	if status == "" {
-		status = ClassifyLogisticsWithTracks(p.Logistics, p.TrackJSON)
-	}
+	status := ClassifyShippedRefundStatus(p.Logistics, p.TrackJSON, p.LogisticsStatus)
 	return dto.InterceptItem{
 		ID: p.ID, ShopID: p.ShopID, ShopName: shopName, Source: "pickup",
 		NeedIntercept: false, AwaitPickup: true,
@@ -446,15 +446,12 @@ func (s *ShopService) ListShippedRefunds(q dto.ShippedRefundListQuery) ([]dto.Sh
 			return nil, 0, err
 		}
 	}
-	list, total, err := s.repo().ListShippedRefunds(repo.ShippedRefundListFilter{
+	list, _, err := s.repo().ListShippedRefunds(repo.ShippedRefundListFilter{
 		ShopID:    q.ShopID,
 		Keyword:   q.Keyword,
-		Status:    q.Status,
-		AlertOnly: q.AlertOnly,
 		ApplyFrom: ParseQueryDateTime(q.ApplyFrom, false),
 		ApplyTo:   ParseQueryDateTime(q.ApplyTo, true),
-		Page:      q.Page,
-		PageSize:  q.PageSize,
+		Unpaged:   true,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -467,11 +464,35 @@ func (s *ShopService) ListShippedRefunds(q dto.ShippedRefundListQuery) ([]dto.Sh
 	for i := range shops {
 		names[shops[i].ID] = shops[i].Name
 	}
+	wantStatus := strings.TrimSpace(q.Status)
 	out := make([]dto.ShippedRefundItem, 0, len(list))
 	for i := range list {
-		out = append(out, toShippedRefundItem(&list[i], names[list[i].ShopID]))
+		item := toShippedRefundItem(&list[i], names[list[i].ShopID])
+		if wantStatus != "" && item.LogisticsStatus != wantStatus {
+			continue
+		}
+		if q.AlertOnly && !item.Alert {
+			continue
+		}
+		out = append(out, item)
 	}
-	return out, total, nil
+	total := int64(len(out))
+	page, pageSize := q.Page, q.PageSize
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 20
+	}
+	start := (page - 1) * pageSize
+	if start >= len(out) {
+		return []dto.ShippedRefundItem{}, total, nil
+	}
+	end := start + pageSize
+	if end > len(out) {
+		end = len(out)
+	}
+	return out[start:end], total, nil
 }
 
 func (s *ShopService) Bind(bindCode string) (*dto.PluginBindResult, error) {
@@ -722,12 +743,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 			}
 			logistics := strings.TrimSpace(item.Logistics)
 			trackJSON := LimitLogisticsTracksJSON(item.TrackJSON)
-			status := strings.TrimSpace(item.LogisticsStatus)
-			if better := ClassifyLogisticsWithTracks(logistics, trackJSON); better != "" {
-				if status == "" || status == LogisticsShipped || better == LogisticsCancelled {
-					status = better
-				}
-			}
+			status := ClassifyShippedRefundStatus(logistics, trackJSON, item.LogisticsStatus)
 			if status == LogisticsReturned {
 				continue
 			}
@@ -887,15 +903,7 @@ func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageI
 }
 
 func toShippedRefundItem(item *model.ShippedRefundSuccess, shopName string) dto.ShippedRefundItem {
-	status := item.LogisticsStatus
-	if status == "" || status == LogisticsShipped {
-		if better := ClassifyLogisticsWithTracks(item.Logistics, item.TrackJSON); better != "" {
-			status = better
-		}
-	}
-	if strings.Contains(item.Logistics, LogisticsCancelled) {
-		status = LogisticsCancelled
-	}
+	status := ClassifyShippedRefundStatus(item.Logistics, item.TrackJSON, item.LogisticsStatus)
 	tracks := ParseLogisticsTracks(item.TrackJSON)
 	outTracks := make([]dto.LogisticsTrack, 0, len(tracks))
 	for _, t := range tracks {

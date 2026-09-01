@@ -157,6 +157,36 @@ func TestClassifyLogisticsStatus(t *testing.T) {
 	}
 }
 
+func TestClassifyShippedRefundStatusPrefersShipLine(t *testing.T) {
+	got := ClassifyShippedRefundStatus("买家退货 待取件\n订单发货 已签收", "", LogisticsAwaitPickup)
+	if got != LogisticsSigned {
+		t.Fatalf("buyer pickup should not override ship signed: %s", got)
+	}
+	got = ClassifyShippedRefundStatus("订单发货 待取件\n需商家拦截快递", "", "")
+	if got != LogisticsAwaitPickup {
+		t.Fatalf("ship pickup: %s", got)
+	}
+	got = ClassifyShippedRefundStatus("订单发货", "", "")
+	if got != LogisticsShipped {
+		t.Fatalf("plain ship: %s", got)
+	}
+}
+
+func TestIsMerchantInterceptPickup(t *testing.T) {
+	if !IsMerchantInterceptPickup("订单发货 待取件\n需商家拦截快递", "") {
+		t.Fatal("intercept text")
+	}
+	if !IsMerchantInterceptPickup("订单发货 待取件", LogisticsAwaitPickup) {
+		t.Fatal("ship await pickup")
+	}
+	if IsMerchantInterceptPickup("买家退货 待取件\n订单发货 已发货", LogisticsAwaitPickup) {
+		t.Fatal("buyer return pickup is not merchant intercept")
+	}
+	if IsMerchantInterceptPickup("买家退货 待取件\n订单发货 已签收", LogisticsAwaitPickup) {
+		t.Fatal("return receive pickup is not merchant intercept")
+	}
+}
+
 func TestParseTicketLogistics(t *testing.T) {
 	got := ParseTicketLogistics("买家退货 1/1 已签收\n订单发货 1/1 已发货\n需商家拦截快递")
 	if !got.HasBuyer || got.BuyerStatus != LogisticsSigned {

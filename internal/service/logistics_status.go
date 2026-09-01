@@ -92,6 +92,54 @@ func IsLogisticsAlert(status string) bool {
 	return status == LogisticsAwaitPickup || status == LogisticsSigned || status == LogisticsInTransit
 }
 
+// ClassifyShippedRefundStatus 已发货退款成功以「订单发货」行为准。
+// 买家退货待取件不能盖过订单发货已签收/已发货，否则拦截列表会把退货待取件误收进来。
+func ClassifyShippedRefundStatus(logistics, trackJSON, stored string) string {
+	if strings.Contains(logistics, LogisticsCancelled) {
+		return LogisticsCancelled
+	}
+	view := ParseTicketLogistics(logistics)
+	if view.HasShip && view.ShipStatus != "" {
+		return view.ShipStatus
+	}
+	status := strings.TrimSpace(stored)
+	if status == "" || status == LogisticsShipped {
+		if better := ClassifyLogisticsWithTracks(logistics, trackJSON); better != "" {
+			status = better
+		} else if view.HasShip && !view.HasBuyer {
+			status = LogisticsShipped
+		}
+	}
+	if isBuyerPickupOnly(view, status) {
+		return firstNonEmpty(view.ShipStatus, LogisticsShipped)
+	}
+	return status
+}
+
+func isBuyerPickupOnly(view TicketLogisticsView, status string) bool {
+	if status != LogisticsAwaitPickup && view.BuyerStatus != LogisticsAwaitPickup {
+		return false
+	}
+	if view.Intercept || view.ShipStatus == LogisticsAwaitPickup {
+		return false
+	}
+	return view.HasBuyer && view.BuyerStatus == LogisticsAwaitPickup
+}
+
+// IsMerchantInterceptPickup 需商家拦截：文案含拦截，或订单发货待取件。
+// 仅买家退货待取件不算。
+func IsMerchantInterceptPickup(logistics, storedStatus string) bool {
+	view := ParseTicketLogistics(logistics)
+	if view.Intercept || view.ShipStatus == LogisticsAwaitPickup {
+		return true
+	}
+	if view.HasBuyer {
+		return false
+	}
+	status := ClassifyShippedRefundStatus(logistics, "", storedStatus)
+	return status == LogisticsAwaitPickup
+}
+
 type TicketLogisticsView struct {
 	HasBuyer    bool
 	BuyerStatus string
