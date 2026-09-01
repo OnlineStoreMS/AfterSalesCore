@@ -54,6 +54,55 @@ func buildTicketCard(shopName, scenarioLabel, group string, t model.AftersaleTic
 	}
 }
 
+func buildServiceOrderCard(shopName, scenarioLabel, group string, o model.ServiceOrder, now time.Time) feishu.InteractiveCard {
+	urgency := urgencyOf(o.DeadlineAt, now)
+	var lines []string
+	if line := mdLine("店铺", shopName, "blue"); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("订单号", o.OrderNo, ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("工单", o.PlatformServiceID, ""); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("类型", firstNonEmpty(o.BusinessType, o.OrderType), "purple"); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("状态", firstNonEmpty(o.Status, o.StatusTab), urgencyColor(urgency)); line != "" {
+		lines = append(lines, line)
+	}
+	if line := mdLine("商品", o.ProductTitle, ""); line != "" {
+		lines = append(lines, line)
+	}
+	if remain := formatRemainText(o.DeadlineAt, o.TimeoutText, o.TimeoutAction, now); remain != "" {
+		if line := mdLine("时效", remain, urgencyColor(urgency)); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	if line := mdLine("最新记录", firstNonEmpty(o.LastLog, o.Detail), "grey"); line != "" {
+		lines = append(lines, line)
+	}
+	if o.LastLog != "" && o.LastLogTime != "" {
+		if line := mdLine("记录时间", o.LastLogTime, "grey"); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	if o.LastLog != "" {
+		if line := mdLine("说明", o.Detail, "grey"); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	if line := mdLine("建议", o.Solution, ""); line != "" {
+		lines = append(lines, line)
+	}
+	return feishu.InteractiveCard{
+		Title:    "售后通知 · " + scenarioLabel,
+		Template: scenarioCardTemplate(scenarioLabel, group, urgency),
+		Markdown: strings.Join(lines, "\n"),
+	}
+}
+
 func buildShippedRefundCard(shopName, scenarioLabel string, row model.ShippedRefundSuccess) feishu.InteractiveCard {
 	var lines []string
 	if line := mdLine("店铺", shopName, "blue"); line != "" {
@@ -240,8 +289,8 @@ func firstNonEmpty(vals ...string) string {
 }
 
 func notificationKey(shopID uint64, kind, id, scenario, urgency string) string {
-	if scenario == ScenarioUrgent && urgency != "" {
-		return fmt.Sprintf("%d:%s:%s:urgent:%s", shopID, kind, id, urgency)
+	if urgency != "" && (scenario == ScenarioUrgent || scenario == ScenarioServicePending) {
+		return fmt.Sprintf("%d:%s:%s:%s:%s", shopID, kind, id, scenario, urgency)
 	}
 	return fmt.Sprintf("%d:%s:%s:%s", shopID, kind, id, scenario)
 }

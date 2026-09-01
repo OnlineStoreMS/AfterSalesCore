@@ -325,6 +325,16 @@ export interface ServiceOrderPage extends PageData<ServiceOrder> {
   tabs: ServiceTabCount[]
 }
 
+export interface NavCounts {
+  pendingServiceOrders: number
+  interceptOrders: number
+  ticketTotal: number
+}
+
+export async function fetchNavCounts() {
+  return unwrap<NavCounts>(await client.get('/nav-counts'))
+}
+
 export async function fetchServiceOrders(params?: {
   shopId?: number
   statusTab?: string

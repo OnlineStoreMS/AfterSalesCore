@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import {
@@ -18,8 +18,10 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const shopId = ref<number | undefined>()
-const statusTab = ref('')
+const statusTab = ref('待处理')
 const keyword = ref('')
+const nowTick = ref(Date.now())
+let tickTimer = 0
 
 const tabCounts = computed(() => {
   const map = Object.fromEntries(tabs.value.map((t) => [t.statusTab, t.count]))
@@ -30,13 +32,44 @@ const tabCounts = computed(() => {
   }
 })
 
+function remainSecondsOf(row: ServiceOrder) {
+  void nowTick.value
+  if (row.deadlineAt) {
+    const t = Date.parse(row.deadlineAt)
+    if (!Number.isNaN(t)) return Math.floor((t - Date.now()) / 1000)
+  }
+  return Number(row.remainSeconds || 0)
+}
+
 function remainLabel(row: ServiceOrder) {
-  if (!row.remainSeconds) return row.timeoutText || '—'
-  const h = Math.floor(row.remainSeconds / 3600)
-  const m = Math.floor((row.remainSeconds % 3600) / 60)
   const action = row.timeoutAction || '逾期'
-  if (h > 0) return `${h}小时${m}分后${action}`
-  return `${m}分后${action}`
+  if (row.statusTab === '已逾期' || (row.deadlineAt && remainSecondsOf(row) <= 0)) {
+    return action ? `已超时 · ${action}` : '已超时'
+  }
+  const sec = remainSecondsOf(row)
+  if (row.deadlineAt || sec > 0) {
+    const h = Math.floor(Math.max(0, sec) / 3600)
+    const m = Math.floor((Math.max(0, sec) % 3600) / 60)
+    if (h > 0) return `${h}小时${m}分后${action}`
+    return `${m}分后${action}`
+  }
+  return row.timeoutText || '—'
+}
+
+function timeoutTone(row: ServiceOrder) {
+  if (row.statusTab === '已逾期') return 'danger'
+  const sec = remainSecondsOf(row)
+  if (!row.deadlineAt && !row.timeoutText && !sec) return ''
+  if (sec <= 0 || sec <= 4 * 3600) return 'danger'
+  if (sec <= 12 * 3600) return 'warning'
+  return 'ok'
+}
+
+function statusTone(tab: string) {
+  if (tab === '已逾期') return 'danger'
+  if (tab === '待处理') return 'warning'
+  if (tab === '处理中') return 'primary'
+  return 'info'
 }
 
 async function loadShops() {
@@ -75,6 +108,12 @@ function handleSearch() {
 onMounted(() => {
   loadShops()
   loadData()
+  tickTimer = window.setInterval(() => {
+    nowTick.value = Date.now()
+  }, 1000)
+})
+onUnmounted(() => {
+  if (tickTimer) window.clearInterval(tickTimer)
 })
 </script>
 
@@ -83,7 +122,7 @@ onMounted(() => {
     <div class="page-head">
       <div>
         <h2 class="page-title">服务工单</h2>
-        <p class="desc">采集待处理、处理中、已逾期工单。由 WindowsAgent 打开内建浏览器进入抖店「售后 → 服务工单」后上报。默认按剩余时效最短的在前。</p>
+        <p class="desc">默认看待处理。采集近 30 天待处理、处理中、已逾期。时效按剩余时间变色，可在通知管理勾选「待处理服务工单」按等级提醒。</p>
       </div>
     </div>
 
@@ -152,17 +191,15 @@ onMounted(() => {
             <div class="sub">{{ row.orderType || '' }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="120">
+        <el-table-column label="状态" width="140">
           <template #default="{ row }">
-            <div>{{ row.statusTab }}</div>
-            <div class="sub">{{ row.status || '—' }}</div>
+            <el-tag :type="statusTone(row.statusTab)" size="small">{{ row.statusTab }}</el-tag>
+            <div class="status-text" :class="statusTone(row.statusTab)">{{ row.status || '—' }}</div>
           </template>
         </el-table-column>
         <el-table-column label="时效" min-width="160">
           <template #default="{ row }">
-            <span :class="{ danger: row.statusTab === '已逾期' || (row.remainSeconds > 0 && row.remainSeconds < 3600) }">
-              {{ remainLabel(row) }}
-            </span>
+            <span class="timeout" :class="timeoutTone(row)">{{ remainLabel(row) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="建议 / 最新记录" min-width="200">
@@ -170,6 +207,7 @@ onMounted(() => {
             <div v-if="row.solution">{{ row.solution }}</div>
             <div v-if="row.lastLog" class="sub">{{ row.lastLog }}</div>
             <div v-if="row.lastLogTime" class="sub">{{ row.lastLogTime }}</div>
+            <div v-if="row.detail && !row.lastLog" class="sub">{{ row.detail }}</div>
           </template>
         </el-table-column>
         <el-table-column prop="syncedAt" label="同步时间" width="170" />
@@ -201,6 +239,14 @@ onMounted(() => {
 .product-meta { min-width: 0; }
 .title { font-weight: 600; line-height: 1.4; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
-.danger { color: #f56c6c; font-weight: 600; }
+.status-text { font-size: 12px; margin-top: 6px; font-weight: 600; }
+.status-text.danger { color: #f56c6c; }
+.status-text.warning { color: #e6a23c; }
+.status-text.primary { color: #409eff; }
+.status-text.info { color: #909399; }
+.timeout { font-weight: 600; }
+.timeout.danger { color: #f56c6c; }
+.timeout.warning { color: #e6a23c; }
+.timeout.ok { color: #67c23a; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

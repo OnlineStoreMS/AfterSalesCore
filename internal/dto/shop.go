@@ -278,6 +278,12 @@ type ServiceTabCount struct {
 	Count     int64  `json:"count"`
 }
 
+type SidebarCounts struct {
+	PendingServiceOrders int `json:"pendingServiceOrders"`
+	InterceptOrders      int `json:"interceptOrders"`
+	TicketTotal          int `json:"ticketTotal"`
+}
+
 type ServiceOrderListQuery struct {
 	ShopID    uint64
 	StatusTab string

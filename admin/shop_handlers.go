@@ -250,6 +250,15 @@ func (h *ShopHandler) Intercepts(c *gin.Context) {
 	response.OK(c, response.PageResult(list, total, page, pageSize))
 }
 
+func (h *ShopHandler) NavCounts(c *gin.Context) {
+	counts, err := h.ss(c).SidebarCounts()
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, counts)
+}
+
 func (h *ShopHandler) ServiceOrders(c *gin.Context) {
 	page, pageSize := httputil.ParsePage(c)
 	var shopID uint64

@@ -292,6 +292,33 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery) ([]dto.ReturnPackageIte
 	return out, total, nil
 }
 
+func (s *ShopService) SidebarCounts() (*dto.SidebarCounts, error) {
+	out := &dto.SidebarCounts{}
+	tabs, err := s.repo().CountServiceTabs(0)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tabs {
+		if t.StatusTab == "待处理" {
+			out.PendingServiceOrders = int(t.Count)
+			break
+		}
+	}
+	_, interceptTotal, err := s.ListIntercepts(dto.InterceptListQuery{Page: 1, PageSize: 1})
+	if err != nil {
+		return nil, err
+	}
+	out.InterceptOrders = int(interceptTotal)
+	ticketCounts, err := s.repo().CountPendingTickets()
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range ticketCounts {
+		out.TicketTotal += n
+	}
+	return out, nil
+}
+
 func (s *ShopService) ListServiceOrders(q dto.ServiceOrderListQuery) ([]dto.ServiceOrderItem, []dto.ServiceTabCount, int64, error) {
 	if q.ShopID > 0 {
 		if _, err := s.repo().Get(q.ShopID); err != nil {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -53,17 +54,19 @@ func TestSanitizeScenariosDropsServiceAndAggregate(t *testing.T) {
 		"待商家收/发货:全部待收货/发货",
 		"urgent",
 		"urgent",
+		ScenarioServicePending,
 	}, cards)
-	if len(got) != 2 || got[0] != "待商家收/发货:退货待收货" || got[1] != "urgent" {
+	if len(got) != 3 || got[0] != "待商家收/发货:退货待收货" || got[1] != "urgent" || got[2] != ScenarioServicePending {
 		t.Fatalf("got %+v", got)
 	}
 }
 
 func TestPruneServiceNotified(t *testing.T) {
 	m := map[string]string{
-		"2:service:SO1:service:待处理":   "2026-08-01T00:00:00Z",
-		"2:ticket:147:service:待处理":    "2026-08-01T00:00:00Z",
-		"2:ticket:147:urgent:warning": "2026-08-01T00:00:00Z",
+		"2:service:SO1:service:待处理":                 "2026-08-01T00:00:00Z",
+		"2:ticket:147:service:待处理":                  "2026-08-01T00:00:00Z",
+		"2:ticket:147:urgent:warning":               "2026-08-01T00:00:00Z",
+		"2:service_order:688:service_pending:warning": "2026-09-02T00:00:00Z",
 	}
 	if !pruneServiceNotified(m) {
 		t.Fatal("expected prune")
@@ -71,7 +74,10 @@ func TestPruneServiceNotified(t *testing.T) {
 	if _, ok := m["2:ticket:147:urgent:warning"]; !ok {
 		t.Fatal("ticket urgent key should stay")
 	}
-	if len(m) != 1 {
+	if _, ok := m["2:service_order:688:service_pending:warning"]; !ok {
+		t.Fatal("service_order pending key should stay")
+	}
+	if len(m) != 2 {
 		t.Fatalf("got %+v", m)
 	}
 }
@@ -92,6 +98,11 @@ func TestNotificationKeyUrgentEscalation(t *testing.T) {
 	other := notificationKey(2, "ticket", "147", "紧急:临期待处理", "")
 	if other == k4 {
 		t.Fatal("card scenario key should differ from urgent")
+	}
+	s1 := notificationKey(2, "service_order", "688", ScenarioServicePending, "warning")
+	s2 := notificationKey(2, "service_order", "688", ScenarioServicePending, "critical")
+	if s1 == s2 || !strings.Contains(s1, "service_pending:warning") {
+		t.Fatalf("service pending keys: %q %q", s1, s2)
 	}
 }
 
@@ -208,6 +219,36 @@ func TestSanitizeKeepsShippedRefundScenarios(t *testing.T) {
 	got := sanitizeScenarios([]string{ScenarioAwaitPickup, ScenarioSigned, ScenarioInTransit, "urgent"}, nil)
 	if len(got) != 4 {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestBuildServiceOrderCardIncludesLatestLog(t *testing.T) {
+	now := time.Date(2026, 9, 2, 6, 0, 0, 0, time.Local)
+	deadline := now.Add(2 * time.Hour)
+	card := buildServiceOrderCard("觅选美妆", "待处理服务工单", "服务工单", model.ServiceOrder{
+		PlatformServiceID: "688823458",
+		OrderNo:           "6928667913671638197",
+		ProductTitle:      "磁吸假睫毛",
+		StatusTab:         "待处理",
+		Status:            "待商家处理",
+		BusinessType:      "平台介入工单",
+		TimeoutAction:     "逾期",
+		DeadlineAt:        &deadline,
+		LastLog:           "平台客服回复服务工单",
+		LastLogTime:       "2026/09/01 11:37:07",
+		Detail:            "请在48小时内寄回",
+	}, now)
+	if card.Title != "售后通知 · 待处理服务工单" {
+		t.Fatalf("title %q", card.Title)
+	}
+	if !strings.Contains(card.Markdown, "最新记录") || !strings.Contains(card.Markdown, "平台客服回复服务工单") {
+		t.Fatalf("latest log missing: %s", card.Markdown)
+	}
+	if !strings.Contains(card.Markdown, "请在48小时内寄回") {
+		t.Fatalf("detail missing: %s", card.Markdown)
+	}
+	if !strings.Contains(card.Markdown, "时效") {
+		t.Fatalf("timeout missing: %s", card.Markdown)
 	}
 }
 

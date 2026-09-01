@@ -319,6 +319,14 @@ func (r *ShopRepo) ListTicketsWithDeadline(shopID uint64) ([]model.AftersaleTick
 	return list, err
 }
 
+func (r *ShopRepo) ListPendingServiceOrders(shopID uint64) ([]model.ServiceOrder, error) {
+	var list []model.ServiceOrder
+	err := r.db.Scopes(scopeTenant(r.tenantID)).
+		Where("shop_id = ? AND status_tab = ?", shopID, "待处理").
+		Limit(200).Find(&list).Error
+	return list, err
+}
+
 type ReturnListFilter struct {
 	ShopID     uint64
 	Keyword    string

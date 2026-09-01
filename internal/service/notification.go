@@ -431,6 +431,31 @@ func (s *NotificationService) sendScenario(
 		return sent, skipped, barcodeWarnings, lastBarcodeError, nil
 	}
 
+	if scenario == ScenarioServicePending {
+		orders, err := s.shopRepo().ListPendingServiceOrders(shop.ID)
+		if err != nil {
+			return 0, 0, 0, "", err
+		}
+		for _, o := range orders {
+			urgency := urgencyOf(o.DeadlineAt, now)
+			if urgency == "" {
+				continue
+			}
+			key := notificationKey(shop.ID, "service_order", o.PlatformServiceID, scenario, urgency)
+			if notified[key] != "" {
+				skipped++
+				continue
+			}
+			card := buildServiceOrderCard(shopName, label, group, o, now)
+			if err := s.feishu.SendInteractiveCard(ctx, cfg.WebhookURL, cfg.Secret, card); err != nil {
+				return sent, skipped, barcodeWarnings, lastBarcodeError, err
+			}
+			sent++
+			s.markNotified(notified, key)
+		}
+		return sent, skipped, barcodeWarnings, lastBarcodeError, nil
+	}
+
 	if scenario == ScenarioUrgent {
 		tickets, err := s.shopRepo().ListTicketsWithDeadline(shop.ID)
 		if err != nil {

@@ -8,14 +8,16 @@ import (
 )
 
 const (
-	ScenarioUrgent      = "urgent"
-	ScenarioAwaitPickup = "shipped_refund_await_pickup"
-	ScenarioSigned      = "shipped_refund_signed"
-	ScenarioInTransit   = "shipped_refund_in_transit"
+	ScenarioUrgent         = "urgent"
+	ScenarioServicePending = "service_pending"
+	ScenarioAwaitPickup    = "shipped_refund_await_pickup"
+	ScenarioSigned         = "shipped_refund_signed"
+	ScenarioInTransit      = "shipped_refund_in_transit"
 )
 
 var fixedScenarioOptions = []dto.ScenarioOption{
 	{Key: ScenarioUrgent, Label: "时效紧迫", Group: "时效"},
+	{Key: ScenarioServicePending, Label: "待处理服务工单", Group: "服务工单"},
 	{Key: ScenarioAwaitPickup, Label: "待取件", Group: "已发货退款成功"},
 	{Key: ScenarioSigned, Label: "已签收", Group: "已发货退款成功"},
 	{Key: ScenarioInTransit, Label: "运输中", Group: "已发货退款成功"},

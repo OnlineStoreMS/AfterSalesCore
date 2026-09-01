@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { HomeFilled, VideoCamera, Box, Search, Monitor, Shop, Bell, RefreshLeft, Tickets } from '@element-plus/icons-vue'
+import { fetchNavCounts, type NavCounts } from '../api/shop'
+import { useSessionStore } from '../stores/session'
 
 const route = useRoute()
 const router = useRouter()
+const sessionStore = useSessionStore()
 const collapsed = defineModel<boolean>('collapsed', { default: false })
+const counts = ref<NavCounts>({ pendingServiceOrders: 0, interceptOrders: 0, ticketTotal: 0 })
+let pollTimer = 0
 
 const activeMenu = computed(() => {
   if (route.path.startsWith('/shops')) return '/shops'
@@ -28,11 +33,36 @@ const menuItems = [
 
 const logoText = computed(() => (collapsed.value ? 'AS' : '售后中心'))
 
+function badgeText(n: number) {
+  if (!n) return ''
+  return n > 99 ? '99+' : String(n)
+}
+
+async function loadCounts() {
+  try {
+    counts.value = await fetchNavCounts()
+  } catch {
+    /* keep last */
+  }
+}
+
 function navigate(path: string) {
   router.push(path)
 }
 
-watch(() => route.path, () => {})
+onMounted(() => {
+  loadCounts()
+  pollTimer = window.setInterval(loadCounts, 30000)
+})
+onUnmounted(() => {
+  if (pollTimer) window.clearInterval(pollTimer)
+})
+watch(() => sessionStore.session?.tenant.id, () => {
+  loadCounts()
+})
+watch(() => route.path, () => {
+  loadCounts()
+})
 </script>
 
 <template>
@@ -53,11 +83,21 @@ watch(() => route.path, () => {})
       <el-menu-item index="/shops" @click="navigate('/shops')">
         <el-icon><Shop /></el-icon>
         <span>店铺管理</span>
+        <span
+          v-if="counts.ticketTotal"
+          class="nav-badge"
+          :title="`全部店铺售后单 ${counts.ticketTotal}`"
+        >{{ badgeText(counts.ticketTotal) }}</span>
       </el-menu-item>
       <el-sub-menu index="returns">
         <template #title>
           <el-icon><RefreshLeft /></el-icon>
           <span>退回管理</span>
+          <span
+            v-if="counts.interceptOrders"
+            class="nav-badge"
+            :title="`需商家拦截 ${counts.interceptOrders}`"
+          >{{ badgeText(counts.interceptOrders) }}</span>
         </template>
         <el-menu-item index="/returns" @click="navigate('/returns')">退回件</el-menu-item>
         <el-menu-item index="/returns/shipped-success" @click="navigate('/returns/shipped-success')">
@@ -65,11 +105,21 @@ watch(() => route.path, () => {})
         </el-menu-item>
         <el-menu-item index="/returns/intercept" @click="navigate('/returns/intercept')">
           需商家拦截快递
+          <span
+            v-if="counts.interceptOrders"
+            class="nav-badge"
+            :title="`需商家拦截 ${counts.interceptOrders}`"
+          >{{ badgeText(counts.interceptOrders) }}</span>
         </el-menu-item>
       </el-sub-menu>
       <el-menu-item index="/service-orders" @click="navigate('/service-orders')">
         <el-icon><Tickets /></el-icon>
         <span>服务工单</span>
+        <span
+          v-if="counts.pendingServiceOrders"
+          class="nav-badge"
+          :title="`待处理工单 ${counts.pendingServiceOrders}`"
+        >{{ badgeText(counts.pendingServiceOrders) }}</span>
       </el-menu-item>
       <el-menu-item
         v-for="item in menuItems"
@@ -109,5 +159,33 @@ watch(() => route.path, () => {})
 }
 .sidebar :deep(.el-sub-menu .el-menu-item) {
   min-width: 0;
+}
+.sidebar :deep(.el-menu-item),
+.sidebar :deep(.el-sub-menu__title) {
+  position: relative;
+}
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 8px;
+  border-radius: 9px;
+  background: #f56c6c;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+}
+.sidebar.collapsed .nav-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin-left: 0;
+  min-width: 16px;
+  height: 16px;
+  font-size: 10px;
 }
 </style>

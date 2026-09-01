@@ -252,7 +252,7 @@ onMounted(load)
                 </el-checkbox>
               </el-checkbox-group>
             </div>
-            <div class="field-tip muted">工作台卡片来自插件采集的售后工作台。「全部待收货/发货」是退货待收货与换货待收货/发货的合集，已去掉避免重复。</div>
+            <div class="field-tip muted">工作台卡片来自采集的售后工作台。「待处理服务工单」按时效等级提醒（12 小时 / 4 小时 / 30 分钟 / 已逾期），卡片带最新记录或说明。「全部待收货/发货」是合集，已去掉避免重复。</div>
           </div>
         </el-form-item>
       </el-form>
@@ -286,7 +286,7 @@ onMounted(load)
       </el-descriptions>
       <div class="status-tip muted">
         <el-icon><Promotion /></el-icon>
-        同一店铺下同一场景的同一售后单只推送一次；「时效紧迫」在 urgency 升级时会再次提醒（warning → critical 4h → imminent 30m → expired）。有物流单号且配置了飞书应用凭证时，卡片底部会显示条形码。
+        同一店铺下同一场景的同一售后单 / 工单只推送一次；「时效紧迫」和「待处理服务工单」在时效升级时会再次提醒（warning 12h → critical 4h → imminent 30m → expired）。有物流单号且配置了飞书应用凭证时，卡片底部会显示条形码。
       </div>
     </el-card>
   </div>
