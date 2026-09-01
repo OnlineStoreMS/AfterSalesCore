@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	pluginOnlineSkew = 90 * time.Second
+	pluginOnlineSkew = 3 * time.Minute
 )
 
 var (
