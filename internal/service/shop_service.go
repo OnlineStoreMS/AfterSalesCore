@@ -292,6 +292,44 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery) ([]dto.ReturnPackageIte
 	return out, total, nil
 }
 
+func (s *ShopService) ListServiceOrders(q dto.ServiceOrderListQuery) ([]dto.ServiceOrderItem, []dto.ServiceTabCount, int64, error) {
+	if q.ShopID > 0 {
+		if _, err := s.repo().Get(q.ShopID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil, 0, ErrNotFound
+			}
+			return nil, nil, 0, err
+		}
+	}
+	list, total, err := s.repo().ListServiceOrders(repo.ServiceOrderListFilter{
+		ShopID: q.ShopID, StatusTab: q.StatusTab, Keyword: q.Keyword, Page: q.Page, PageSize: q.PageSize,
+	})
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	tabs, err := s.repo().CountServiceTabs(q.ShopID)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	shops, err := s.repo().List()
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	names := make(map[uint64]string, len(shops))
+	for i := range shops {
+		names[shops[i].ID] = shops[i].Name
+	}
+	counts := make([]dto.ServiceTabCount, 0, len(tabs))
+	for _, t := range tabs {
+		counts = append(counts, dto.ServiceTabCount{StatusTab: t.StatusTab, Count: t.Count})
+	}
+	out := make([]dto.ServiceOrderItem, 0, len(list))
+	for i := range list {
+		out = append(out, toServiceOrderItem(&list[i], names[list[i].ShopID]))
+	}
+	return out, counts, total, nil
+}
+
 func interceptKey(shopID uint64, aftersaleID string) string {
 	return strconv.FormatUint(shopID, 10) + ":" + strings.TrimSpace(aftersaleID)
 }
@@ -782,9 +820,54 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 		shippedCount = len(shipped)
 	}
 
+	serviceCount := 0
+	if in.ServiceOrders != nil {
+		orders := make([]model.ServiceOrder, 0, len(*in.ServiceOrders))
+		for _, o := range *in.ServiceOrders {
+			sid := strings.TrimSpace(o.PlatformServiceID)
+			if sid == "" {
+				continue
+			}
+			deadline, action := deadlineFromUnix(o.DelayEndTime, strings.TrimSpace(o.TimeoutText), now)
+			raw := o.RawJSON
+			if strings.TrimSpace(raw) == "" {
+				raw = "{}"
+			}
+			orders = append(orders, model.ServiceOrder{
+				PlatformServiceID: sid,
+				OrderNo:           strings.TrimSpace(o.OrderNo),
+				ProductTitle:      strings.TrimSpace(o.ProductTitle),
+				ProductImage:      strings.TrimSpace(o.ProductImage),
+				ProductContent:    strings.TrimSpace(o.ProductContent),
+				BuyerNick:         strings.TrimSpace(o.BuyerNick),
+				CreateSource:      strings.TrimSpace(o.CreateSource),
+				BusinessType:      strings.TrimSpace(o.BusinessType),
+				OrderType:         strings.TrimSpace(o.OrderType),
+				Tags:              strings.TrimSpace(o.Tags),
+				StatusTab:         strings.TrimSpace(o.StatusTab),
+				Status:            strings.TrimSpace(o.Status),
+				TimeoutText:       strings.TrimSpace(o.TimeoutText),
+				TimeoutAction:     action,
+				DeadlineAt:        deadline,
+				DelayEndTime:      o.DelayEndTime,
+				Detail:            strings.TrimSpace(o.Detail),
+				Solution:          strings.TrimSpace(o.Solution),
+				LastLog:           strings.TrimSpace(o.LastLog),
+				LastLogTime:       strings.TrimSpace(o.LastLogTime),
+				CreateTime:        strings.TrimSpace(o.CreateTime),
+				RawJSON:           raw,
+			})
+		}
+		if err := s.repos.Shop.UpsertServiceOrders(shop, orders); err != nil {
+			return nil, err
+		}
+		serviceCount = len(orders)
+	}
+
 	result := &dto.PluginSyncResult{
 		ShopID: shop.ID, CardCount: len(cards), TicketCount: len(tickets),
-		ReturnCount: returnCount, ShippedRefundCount: shippedCount, LastSyncAt: formatTime(now),
+		ReturnCount: returnCount, ShippedRefundCount: shippedCount, ServiceOrderCount: serviceCount,
+		LastSyncAt: formatTime(now),
 	}
 	if err := s.repos.Shop.Save(shop); err != nil {
 		return nil, err
@@ -883,6 +966,26 @@ func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {
 	}
 	if t.DeadlineAt != nil {
 		item.DeadlineAt = t.DeadlineAt.UTC().Format(time.RFC3339)
+	}
+	return item
+}
+
+func toServiceOrderItem(o *model.ServiceOrder, shopName string) dto.ServiceOrderItem {
+	item := dto.ServiceOrderItem{
+		ID: o.ID, ShopID: o.ShopID, ShopName: shopName,
+		PlatformServiceID: o.PlatformServiceID, OrderNo: o.OrderNo,
+		ProductTitle: o.ProductTitle, ProductImage: o.ProductImage, ProductContent: o.ProductContent,
+		BuyerNick: o.BuyerNick, CreateSource: o.CreateSource,
+		BusinessType: o.BusinessType, OrderType: o.OrderType, Tags: o.Tags,
+		StatusTab: o.StatusTab, Status: o.Status,
+		TimeoutText: o.TimeoutText, TimeoutAction: o.TimeoutAction,
+		RemainSeconds: remainSeconds(o.DeadlineAt, time.Now()),
+		Detail:        o.Detail, Solution: o.Solution,
+		LastLog: o.LastLog, LastLogTime: o.LastLogTime, CreateTime: o.CreateTime,
+		SyncedAt: formatTime(o.SyncedAt),
+	}
+	if o.DeadlineAt != nil {
+		item.DeadlineAt = o.DeadlineAt.UTC().Format(time.RFC3339)
 	}
 	return item
 }

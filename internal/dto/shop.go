@@ -181,6 +181,31 @@ type PluginSyncInput struct {
 	Tickets          []PluginSyncTicket         `json:"tickets"`
 	Returns          *[]PluginSyncReturn        `json:"returns"`
 	ShippedRefunds   *[]PluginSyncShippedRefund `json:"shippedRefunds"`
+	ServiceOrders    *[]PluginSyncServiceOrder  `json:"serviceOrders"`
+}
+
+type PluginSyncServiceOrder struct {
+	PlatformServiceID string `json:"platformServiceId"`
+	OrderNo           string `json:"orderNo"`
+	ProductTitle      string `json:"productTitle"`
+	ProductImage      string `json:"productImage"`
+	ProductContent    string `json:"productContent"`
+	BuyerNick         string `json:"buyerNick"`
+	CreateSource      string `json:"createSource"`
+	BusinessType      string `json:"businessType"`
+	OrderType         string `json:"orderType"`
+	Tags              string `json:"tags"`
+	StatusTab         string `json:"statusTab"`
+	Status            string `json:"status"`
+	TimeoutText       string `json:"timeoutText"`
+	DelayEndTime      int64  `json:"delayEndTime"`
+	DelayTimeLeft     int64  `json:"delayTimeLeft"`
+	Detail            string `json:"detail"`
+	Solution          string `json:"solution"`
+	LastLog           string `json:"lastLog"`
+	LastLogTime       string `json:"lastLogTime"`
+	CreateTime        string `json:"createTime"`
+	RawJSON           string `json:"rawJson"`
 }
 
 type PluginSyncShippedRefund struct {
@@ -216,7 +241,57 @@ type PluginSyncResult struct {
 	TicketCount        int    `json:"ticketCount"`
 	ReturnCount        int    `json:"returnCount"`
 	ShippedRefundCount int    `json:"shippedRefundCount"`
+	ServiceOrderCount  int    `json:"serviceOrderCount"`
 	LastSyncAt         string `json:"lastSyncAt"`
+}
+
+type ServiceOrderItem struct {
+	ID                uint64 `json:"id"`
+	ShopID            uint64 `json:"shopId"`
+	ShopName          string `json:"shopName"`
+	PlatformServiceID string `json:"platformServiceId"`
+	OrderNo           string `json:"orderNo"`
+	ProductTitle      string `json:"productTitle"`
+	ProductImage      string `json:"productImage,omitempty"`
+	ProductContent    string `json:"productContent,omitempty"`
+	BuyerNick         string `json:"buyerNick,omitempty"`
+	CreateSource      string `json:"createSource,omitempty"`
+	BusinessType      string `json:"businessType,omitempty"`
+	OrderType         string `json:"orderType,omitempty"`
+	Tags              string `json:"tags,omitempty"`
+	StatusTab         string `json:"statusTab"`
+	Status            string `json:"status"`
+	TimeoutText       string `json:"timeoutText,omitempty"`
+	TimeoutAction     string `json:"timeoutAction,omitempty"`
+	DeadlineAt        string `json:"deadlineAt,omitempty"`
+	RemainSeconds     int    `json:"remainSeconds"`
+	Detail            string `json:"detail,omitempty"`
+	Solution          string `json:"solution,omitempty"`
+	LastLog           string `json:"lastLog,omitempty"`
+	LastLogTime       string `json:"lastLogTime,omitempty"`
+	CreateTime        string `json:"createTime,omitempty"`
+	SyncedAt          string `json:"syncedAt"`
+}
+
+type ServiceTabCount struct {
+	StatusTab string `json:"statusTab"`
+	Count     int64  `json:"count"`
+}
+
+type ServiceOrderListQuery struct {
+	ShopID    uint64
+	StatusTab string
+	Keyword   string
+	Page      int
+	PageSize  int
+}
+
+type ServiceOrderListResult struct {
+	List     []ServiceOrderItem `json:"list"`
+	Total    int64              `json:"total"`
+	Page     int                `json:"page"`
+	PageSize int                `json:"pageSize"`
+	Tabs     []ServiceTabCount  `json:"tabs"`
 }
 
 type ReturnPackageItem struct {

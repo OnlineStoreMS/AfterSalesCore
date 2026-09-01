@@ -53,6 +53,7 @@ func RegisterRoutes(
 	g.GET("/return-packages", shopH.Returns)
 	g.GET("/shipped-refunds", shopH.ShippedRefunds)
 	g.GET("/intercept-orders", shopH.Intercepts)
+	g.GET("/service-orders", shopH.ServiceOrders)
 
 	g.GET("/notifications", notifyH.Get)
 	g.PUT("/notifications", notifyH.Save)

@@ -615,6 +615,136 @@ func (r *ShopRepo) UpsertShippedRefunds(shop *model.MarketplaceShop, items []mod
 	})
 }
 
+type ServiceOrderListFilter struct {
+	ShopID    uint64
+	StatusTab string
+	Keyword   string
+	Page      int
+	PageSize  int
+}
+
+func openServiceTabs() []string {
+	return []string{"待处理", "处理中", "已逾期"}
+}
+
+func (r *ShopRepo) ListServiceOrders(f ServiceOrderListFilter) ([]model.ServiceOrder, int64, error) {
+	q := r.db.Model(&model.ServiceOrder{}).Scopes(scopeTenant(r.tenantID))
+	if f.ShopID > 0 {
+		q = q.Where("shop_id = ?", f.ShopID)
+	}
+	if tab := strings.TrimSpace(f.StatusTab); tab != "" {
+		q = q.Where("status_tab = ? OR status_tab LIKE ?", tab, "%"+tab+"%")
+	} else {
+		q = q.Where("status_tab IN ?", openServiceTabs())
+	}
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where(
+			"platform_service_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR buyer_nick ILIKE ? OR status ILIKE ?",
+			like, like, like, like, like,
+		)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 || f.PageSize > 200 {
+		f.PageSize = 20
+	}
+	var list []model.ServiceOrder
+	offset := (f.Page - 1) * f.PageSize
+	err := q.Order("CASE WHEN deadline_at IS NULL THEN 1 ELSE 0 END, deadline_at ASC, id DESC").
+		Offset(offset).Limit(f.PageSize).Find(&list).Error
+	return list, total, err
+}
+
+func (r *ShopRepo) CountServiceTabs(shopID uint64) ([]struct {
+	StatusTab string
+	Count     int64
+}, error) {
+	var rows []struct {
+		StatusTab string
+		Count     int64
+	}
+	q := r.db.Model(&model.ServiceOrder{}).
+		Select("status_tab as status_tab, count(*) as count").
+		Scopes(scopeTenant(r.tenantID)).
+		Where("status_tab IN ?", openServiceTabs())
+	if shopID > 0 {
+		q = q.Where("shop_id = ?", shopID)
+	}
+	err := q.Group("status_tab").Find(&rows).Error
+	return rows, err
+}
+
+func (r *ShopRepo) UpsertServiceOrders(shop *model.MarketplaceShop, orders []model.ServiceOrder) error {
+	now := time.Now()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		seen := make([]string, 0, len(orders))
+		for i := range orders {
+			o := &orders[i]
+			o.TenantID = shop.TenantID
+			o.ShopID = shop.ID
+			o.SyncedAt = now
+			sid := o.PlatformServiceID
+			if sid == "" {
+				continue
+			}
+			seen = append(seen, sid)
+			var existing model.ServiceOrder
+			err := tx.Where("shop_id = ? AND platform_service_id = ?", shop.ID, sid).First(&existing).Error
+			if err == gorm.ErrRecordNotFound {
+				if err := tx.Create(o).Error; err != nil {
+					return err
+				}
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			var deadline any
+			if o.DeadlineAt != nil {
+				deadline = *o.DeadlineAt
+			}
+			if err := tx.Model(&existing).Updates(map[string]any{
+				"order_no":        o.OrderNo,
+				"product_title":   o.ProductTitle,
+				"product_image":   o.ProductImage,
+				"product_content": o.ProductContent,
+				"buyer_nick":      o.BuyerNick,
+				"create_source":   o.CreateSource,
+				"business_type":   o.BusinessType,
+				"order_type":      o.OrderType,
+				"tags":            o.Tags,
+				"status_tab":      o.StatusTab,
+				"status":          o.Status,
+				"timeout_text":    o.TimeoutText,
+				"timeout_action":  o.TimeoutAction,
+				"deadline_at":     deadline,
+				"delay_end_time":  o.DelayEndTime,
+				"detail":          o.Detail,
+				"solution":        o.Solution,
+				"last_log":        o.LastLog,
+				"last_log_time":   o.LastLogTime,
+				"create_time":     o.CreateTime,
+				"raw_json":        o.RawJSON,
+				"synced_at":       now,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		q := tx.Model(&model.ServiceOrder{}).
+			Where("shop_id = ? AND status_tab IN ?", shop.ID, openServiceTabs())
+		if len(seen) > 0 {
+			q = q.Where("platform_service_id NOT IN ?", seen)
+		}
+		return q.Update("status_tab", "已离开").Error
+	})
+}
+
 const defaultPluginSyncMinutes = 30
 
 func ClampPluginSyncMinutes(n int) int {

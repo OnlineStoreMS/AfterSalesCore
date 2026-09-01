@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HomeFilled, VideoCamera, Box, Search, Monitor, Shop, Bell, RefreshLeft } from '@element-plus/icons-vue'
+import { HomeFilled, VideoCamera, Box, Search, Monitor, Shop, Bell, RefreshLeft, Tickets } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,6 +12,7 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/returns/intercept')) return '/returns/intercept'
   if (route.path.startsWith('/returns/shipped-success')) return '/returns/shipped-success'
   if (route.path.startsWith('/returns')) return '/returns'
+  if (route.path.startsWith('/service-orders')) return '/service-orders'
   if (route.path.startsWith('/notifications')) return '/notifications'
   return route.path
 })
@@ -66,6 +67,10 @@ watch(() => route.path, () => {})
           需商家拦截快递
         </el-menu-item>
       </el-sub-menu>
+      <el-menu-item index="/service-orders" @click="navigate('/service-orders')">
+        <el-icon><Tickets /></el-icon>
+        <span>服务工单</span>
+      </el-menu-item>
       <el-menu-item
         v-for="item in menuItems"
         :key="item.path"

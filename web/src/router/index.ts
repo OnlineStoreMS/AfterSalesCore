@@ -84,6 +84,12 @@ const router = createRouter({
           meta: { title: '需商家拦截快递' },
         },
         {
+          path: 'service-orders',
+          name: 'ServiceOrders',
+          component: () => import('../views/shop/ServiceOrderList.vue'),
+          meta: { title: '服务工单' },
+        },
+        {
           path: 'shops/:id',
           name: 'ShopWorkbench',
           component: () => import('../views/shop/ShopWorkbench.vue'),

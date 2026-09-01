@@ -287,3 +287,50 @@ export async function fetchInterceptOrders(params?: {
 }) {
   return unwrap<PageData<InterceptOrder>>(await client.get('/intercept-orders', { params }))
 }
+
+export interface ServiceOrder {
+  id: number
+  shopId: number
+  shopName: string
+  platformServiceId: string
+  orderNo: string
+  productTitle: string
+  productImage?: string
+  productContent?: string
+  buyerNick?: string
+  createSource?: string
+  businessType?: string
+  orderType?: string
+  tags?: string
+  statusTab: string
+  status: string
+  timeoutText?: string
+  timeoutAction?: string
+  deadlineAt?: string
+  remainSeconds: number
+  detail?: string
+  solution?: string
+  lastLog?: string
+  lastLogTime?: string
+  createTime?: string
+  syncedAt: string
+}
+
+export interface ServiceTabCount {
+  statusTab: string
+  count: number
+}
+
+export interface ServiceOrderPage extends PageData<ServiceOrder> {
+  tabs: ServiceTabCount[]
+}
+
+export async function fetchServiceOrders(params?: {
+  shopId?: number
+  statusTab?: string
+  keyword?: string
+  page?: number
+  pageSize?: number
+}) {
+  return unwrap<ServiceOrderPage>(await client.get('/service-orders', { params }))
+}
