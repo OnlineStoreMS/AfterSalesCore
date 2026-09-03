@@ -37,6 +37,8 @@ const breadcrumbs = computed(() => {
   if (route.path.match(/^\/packing\/\d+/)) return ['售后中心', '打包详情']
   if (route.path.startsWith('/unboxing')) return ['售后中心', '开箱记录']
   if (route.path.startsWith('/packing')) return ['售后中心', '打包记录']
+  if (route.path.startsWith('/shops/await-pickup')) return ['售后中心', '店铺管理', '待取件']
+  if (route.path.startsWith('/shops/shipped-refund')) return ['售后中心', '店铺管理', '已发货退款']
   if (route.path.match(/^\/shops\/\d+/)) return ['售后中心', '店铺售后工作台']
   if (route.path.startsWith('/shops')) return ['售后中心', '店铺管理']
   if (route.path.startsWith('/returns/intercept')) return ['售后中心', '退回管理', '需商家拦截快递']

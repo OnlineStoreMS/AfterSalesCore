@@ -71,14 +71,17 @@ type TicketItem struct {
 	RemainSeconds        int      `json:"remainSeconds"`
 	Dispute              string   `json:"dispute,omitempty"`
 	Logistics            string   `json:"logistics,omitempty"`
-	LogisticsBuyerStatus string   `json:"logisticsBuyerStatus,omitempty"`
-	LogisticsShipStatus  string   `json:"logisticsShipStatus,omitempty"`
-	NeedIntercept        bool     `json:"needIntercept,omitempty"`
-	ReturnLogisticsNo    string   `json:"returnLogisticsNo,omitempty"`
-	ShipLogisticsNo      string   `json:"shipLogisticsNo,omitempty"`
-	ApplyTime            string   `json:"applyTime,omitempty"`
-	CardKeys             []string `json:"cardKeys"`
-	SyncedAt             string   `json:"syncedAt"`
+	LogisticsBuyerStatus string           `json:"logisticsBuyerStatus,omitempty"`
+	LogisticsShipStatus  string           `json:"logisticsShipStatus,omitempty"`
+	NeedIntercept        bool             `json:"needIntercept,omitempty"`
+	ReturnLogisticsNo    string           `json:"returnLogisticsNo,omitempty"`
+	ShipLogisticsNo      string           `json:"shipLogisticsNo,omitempty"`
+	Tracks               []LogisticsTrack `json:"tracks,omitempty"`
+	ShopID               uint64           `json:"shopId,omitempty"`
+	ShopName             string           `json:"shopName,omitempty"`
+	ApplyTime            string           `json:"applyTime,omitempty"`
+	CardKeys             []string         `json:"cardKeys"`
+	SyncedAt             string           `json:"syncedAt"`
 }
 
 type ShopWorkbench struct {
@@ -142,6 +145,7 @@ type PluginSyncTicket struct {
 	Logistics           string   `json:"logistics"`
 	ReturnLogisticsNo   string   `json:"returnLogisticsNo"`
 	ShipLogisticsNo     string   `json:"shipLogisticsNo"`
+	TrackJSON           string   `json:"trackJson"`
 	ApplyTime           string   `json:"applyTime"`
 	CardKeys            []string `json:"cardKeys"`
 	RawJSON             string   `json:"rawJson"`
@@ -282,6 +286,21 @@ type SidebarCounts struct {
 	PendingServiceOrders int `json:"pendingServiceOrders"`
 	InterceptOrders      int `json:"interceptOrders"`
 	TicketTotal          int `json:"ticketTotal"`
+	BuyerReturnPickup    int `json:"buyerReturnPickup"`
+	ReviewShippedRefund  int `json:"reviewShippedRefund"`
+}
+
+const (
+	TicketKindBuyerReturnPickup   = "buyer-return-pickup"
+	TicketKindReviewShippedRefund = "review-shipped-refund"
+)
+
+type ShopTicketListQuery struct {
+	Kind     string
+	ShopID   uint64
+	Keyword  string
+	Page     int
+	PageSize int
 }
 
 type ServiceOrderListQuery struct {
@@ -411,10 +430,11 @@ type InterceptItem struct {
 	LogisticsStatus     string `json:"logisticsStatus,omitempty"`
 	LogisticsNo         string `json:"logisticsNo,omitempty"`
 	ShipLogisticsNo     string `json:"shipLogisticsNo,omitempty"`
-	ReturnLogisticsNo   string `json:"returnLogisticsNo,omitempty"`
-	Carrier             string `json:"carrier,omitempty"`
-	ApplyTime           string `json:"applyTime,omitempty"`
-	SyncedAt            string `json:"syncedAt"`
+	ReturnLogisticsNo   string           `json:"returnLogisticsNo,omitempty"`
+	Carrier             string           `json:"carrier,omitempty"`
+	Tracks              []LogisticsTrack `json:"tracks,omitempty"`
+	ApplyTime           string           `json:"applyTime,omitempty"`
+	SyncedAt            string           `json:"syncedAt"`
 }
 
 type InterceptListQuery struct {

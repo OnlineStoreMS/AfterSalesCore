@@ -316,7 +316,128 @@ func (s *ShopService) SidebarCounts() (*dto.SidebarCounts, error) {
 	for _, n := range ticketCounts {
 		out.TicketTotal += n
 	}
+	openTickets, err := s.repo().ListOpenTickets(0)
+	if err != nil {
+		return nil, err
+	}
+	for i := range openTickets {
+		if MatchShopTicketKind(&openTickets[i], dto.TicketKindBuyerReturnPickup) {
+			out.BuyerReturnPickup++
+		}
+		if MatchShopTicketKind(&openTickets[i], dto.TicketKindReviewShippedRefund) {
+			out.ReviewShippedRefund++
+		}
+	}
 	return out, nil
+}
+
+func MatchShopTicketKind(t *model.AftersaleTicket, kind string) bool {
+	if t == nil {
+		return false
+	}
+	switch kind {
+	case dto.TicketKindBuyerReturnPickup:
+		if !ticketHasGroup(t, "待商家收/发货") {
+			return false
+		}
+		view := ParseTicketLogistics(t.Logistics)
+		return view.HasBuyer && view.BuyerStatus == LogisticsAwaitPickup
+	case dto.TicketKindReviewShippedRefund:
+		return ticketHasCard(t, "待商家审核", "已发货退款")
+	default:
+		return false
+	}
+}
+
+func ticketHasGroup(t *model.AftersaleTicket, group string) bool {
+	for _, c := range t.CardKeys {
+		if strings.HasPrefix(c.CardKey, group+":") || strings.Contains(c.CardKey, group) {
+			return true
+		}
+	}
+	return false
+}
+
+func ticketHasCard(t *model.AftersaleTicket, group, label string) bool {
+	want := group + ":" + label
+	for _, c := range t.CardKeys {
+		if c.CardKey == want {
+			return true
+		}
+		if strings.Contains(c.CardKey, group) && strings.Contains(c.CardKey, label) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, int64, error) {
+	if q.Kind != dto.TicketKindBuyerReturnPickup && q.Kind != dto.TicketKindReviewShippedRefund {
+		return nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
+	}
+	if q.ShopID > 0 {
+		if _, err := s.repo().Get(q.ShopID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, 0, ErrNotFound
+			}
+			return nil, 0, err
+		}
+	}
+	list, err := s.repo().ListOpenTickets(q.ShopID)
+	if err != nil {
+		return nil, 0, err
+	}
+	shops, err := s.repo().List()
+	if err != nil {
+		return nil, 0, err
+	}
+	names := make(map[uint64]string, len(shops))
+	for i := range shops {
+		names[shops[i].ID] = shops[i].Name
+	}
+	kw := strings.ToLower(strings.TrimSpace(q.Keyword))
+	filtered := make([]model.AftersaleTicket, 0, len(list))
+	for i := range list {
+		t := &list[i]
+		if !MatchShopTicketKind(t, q.Kind) {
+			continue
+		}
+		if kw != "" && !shopTicketKeywordMatch(t, names[t.ShopID], kw) {
+			continue
+		}
+		filtered = append(filtered, *t)
+	}
+	total := int64(len(filtered))
+	page, pageSize := q.Page, q.PageSize
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 20
+	}
+	start := (page - 1) * pageSize
+	if start >= len(filtered) {
+		return []dto.TicketItem{}, total, nil
+	}
+	end := start + pageSize
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	out := make([]dto.TicketItem, 0, end-start)
+	for i := start; i < end; i++ {
+		item := toTicketItem(&filtered[i])
+		item.ShopName = names[filtered[i].ShopID]
+		out = append(out, item)
+	}
+	return out, total, nil
+}
+
+func shopTicketKeywordMatch(t *model.AftersaleTicket, shopName, kw string) bool {
+	blob := strings.ToLower(strings.Join([]string{
+		shopName, t.PlatformAftersaleID, t.OrderNo, t.ProductTitle, t.SKU, t.Status, t.Logistics,
+		t.ReturnLogisticsNo, t.ShipLogisticsNo, t.AftersaleType,
+	}, " "))
+	return strings.Contains(blob, kw)
 }
 
 func (s *ShopService) ListServiceOrders(q dto.ServiceOrderListQuery) ([]dto.ServiceOrderItem, []dto.ServiceTabCount, int64, error) {
@@ -484,7 +605,8 @@ func interceptFromTicket(t *model.AftersaleTicket, shopName string) dto.Intercep
 		Qty: t.Qty, BuyQty: t.BuyQty, PayAmount: t.PayAmount, RefundAmount: t.RefundAmount,
 		AftersaleType: t.AftersaleType, Reason: t.Reason, Status: t.Status,
 		Logistics: t.Logistics, LogisticsNo: no, ShipLogisticsNo: t.ShipLogisticsNo,
-		ReturnLogisticsNo: t.ReturnLogisticsNo, ApplyTime: t.ApplyTime, SyncedAt: formatTime(t.SyncedAt),
+		ReturnLogisticsNo: t.ReturnLogisticsNo, Tracks: toDTOTracks(t.TrackJSON),
+		ApplyTime: t.ApplyTime, SyncedAt: formatTime(t.SyncedAt),
 	}
 }
 
@@ -498,7 +620,8 @@ func interceptFromShipped(p *model.ShippedRefundSuccess, shopName string) dto.In
 		Qty: p.Qty, BuyQty: p.BuyQty, PayAmount: p.PayAmount, RefundAmount: p.RefundAmount,
 		AftersaleType: p.AftersaleType, Reason: p.Reason, Status: p.Status,
 		Logistics: p.Logistics, LogisticsStatus: firstNonEmpty(status, LogisticsAwaitPickup),
-		LogisticsNo: p.LogisticsNo, Carrier: p.Carrier, ApplyTime: p.ApplyTime, SyncedAt: formatTime(p.SyncedAt),
+		LogisticsNo: p.LogisticsNo, Carrier: p.Carrier, Tracks: toDTOTracks(p.TrackJSON),
+		ApplyTime: p.ApplyTime, SyncedAt: formatTime(p.SyncedAt),
 	}
 }
 
@@ -738,6 +861,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 			Logistics:           strings.TrimSpace(t.Logistics),
 			ReturnLogisticsNo:   strings.TrimSpace(t.ReturnLogisticsNo),
 			ShipLogisticsNo:     strings.TrimSpace(t.ShipLogisticsNo),
+			TrackJSON:           LimitLogisticsTracksJSON(t.TrackJSON),
 			ApplyTime:           strings.TrimSpace(t.ApplyTime),
 			RawJSON:             t.RawJSON,
 		})
@@ -981,6 +1105,8 @@ func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {
 		Logistics:         t.Logistics,
 		ReturnLogisticsNo: t.ReturnLogisticsNo,
 		ShipLogisticsNo:   t.ShipLogisticsNo,
+		Tracks:            toDTOTracks(t.TrackJSON),
+		ShopID:            t.ShopID,
 		ApplyTime:         t.ApplyTime, CardKeys: keys, SyncedAt: formatTime(t.SyncedAt),
 	}
 	view := ParseTicketLogistics(t.Logistics)
@@ -1032,15 +1158,23 @@ func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageI
 	}
 }
 
-func toShippedRefundItem(item *model.ShippedRefundSuccess, shopName string) dto.ShippedRefundItem {
-	status := ClassifyShippedRefundStatus(item.Logistics, item.TrackJSON, item.LogisticsStatus)
-	tracks := ParseLogisticsTracks(item.TrackJSON)
-	outTracks := make([]dto.LogisticsTrack, 0, len(tracks))
+func toDTOTracks(raw string) []dto.LogisticsTrack {
+	tracks := ParseLogisticsTracks(raw)
+	if len(tracks) == 0 {
+		return nil
+	}
+	out := make([]dto.LogisticsTrack, 0, len(tracks))
 	for _, t := range tracks {
-		outTracks = append(outTracks, dto.LogisticsTrack{
+		out = append(out, dto.LogisticsTrack{
 			Date: t.Date, Title: t.Title, Detail: t.Detail, Text: t.Text,
 		})
 	}
+	return out
+}
+
+func toShippedRefundItem(item *model.ShippedRefundSuccess, shopName string) dto.ShippedRefundItem {
+	status := ClassifyShippedRefundStatus(item.Logistics, item.TrackJSON, item.LogisticsStatus)
+	outTracks := toDTOTracks(item.TrackJSON)
 	return dto.ShippedRefundItem{
 		ID: item.ID, ShopID: item.ShopID, ShopName: shopName,
 		PlatformAftersaleID: item.PlatformAftersaleID, OrderNo: item.OrderNo,

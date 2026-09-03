@@ -9,10 +9,18 @@ const route = useRoute()
 const router = useRouter()
 const sessionStore = useSessionStore()
 const collapsed = defineModel<boolean>('collapsed', { default: false })
-const counts = ref<NavCounts>({ pendingServiceOrders: 0, interceptOrders: 0, ticketTotal: 0 })
+const counts = ref<NavCounts>({
+  pendingServiceOrders: 0,
+  interceptOrders: 0,
+  ticketTotal: 0,
+  buyerReturnPickup: 0,
+  reviewShippedRefund: 0,
+})
 let pollTimer = 0
 
 const activeMenu = computed(() => {
+  if (route.path.startsWith('/shops/await-pickup')) return '/shops/await-pickup'
+  if (route.path.startsWith('/shops/shipped-refund')) return '/shops/shipped-refund'
   if (route.path.startsWith('/shops')) return '/shops'
   if (route.path.startsWith('/returns/intercept')) return '/returns/intercept'
   if (route.path.startsWith('/returns/shipped-success')) return '/returns/shipped-success'
@@ -70,7 +78,7 @@ watch(() => route.path, () => {
     <div class="logo">{{ logoText }}</div>
     <el-menu
       :default-active="activeMenu"
-      :default-openeds="['returns']"
+      :default-openeds="['shops', 'returns']"
       :collapse="collapsed"
       background-color="#001529"
       text-color="#ffffffa6"
@@ -80,15 +88,34 @@ watch(() => route.path, () => {
         <el-icon><HomeFilled /></el-icon>
         <span>工作台</span>
       </el-menu-item>
-      <el-menu-item index="/shops" @click="navigate('/shops')">
-        <el-icon><Shop /></el-icon>
-        <span>店铺管理</span>
-        <span
-          v-if="counts.ticketTotal"
-          class="nav-badge"
-          :title="`全部店铺售后单 ${counts.ticketTotal}`"
-        >{{ badgeText(counts.ticketTotal) }}</span>
-      </el-menu-item>
+      <el-sub-menu index="shops">
+        <template #title>
+          <el-icon><Shop /></el-icon>
+          <span>店铺管理</span>
+          <span
+            v-if="counts.ticketTotal"
+            class="nav-badge"
+            :title="`全部店铺售后单 ${counts.ticketTotal}`"
+          >{{ badgeText(counts.ticketTotal) }}</span>
+        </template>
+        <el-menu-item index="/shops" @click="navigate('/shops')">店铺列表</el-menu-item>
+        <el-menu-item index="/shops/await-pickup" @click="navigate('/shops/await-pickup')">
+          待取件
+          <span
+            v-if="counts.buyerReturnPickup"
+            class="nav-badge"
+            :title="`待取件 ${counts.buyerReturnPickup}`"
+          >{{ badgeText(counts.buyerReturnPickup) }}</span>
+        </el-menu-item>
+        <el-menu-item index="/shops/shipped-refund" @click="navigate('/shops/shipped-refund')">
+          已发货退款
+          <span
+            v-if="counts.reviewShippedRefund"
+            class="nav-badge"
+            :title="`已发货退款 ${counts.reviewShippedRefund}`"
+          >{{ badgeText(counts.reviewShippedRefund) }}</span>
+        </el-menu-item>
+      </el-sub-menu>
       <el-sub-menu index="returns">
         <template #title>
           <el-icon><RefreshLeft /></el-icon>

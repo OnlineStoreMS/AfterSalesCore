@@ -83,6 +83,7 @@ type AftersaleTicket struct {
 	Logistics           string                `gorm:"size:256" json:"logistics"`
 	ReturnLogisticsNo   string                `gorm:"size:64;index" json:"returnLogisticsNo"`
 	ShipLogisticsNo     string                `gorm:"size:64;index" json:"shipLogisticsNo"`
+	TrackJSON           string                `gorm:"type:text" json:"trackJson"`
 	ApplyTime           string                `gorm:"size:64" json:"applyTime"`
 	RawJSON             string                `gorm:"type:text" json:"rawJson"`
 	SyncedAt            time.Time             `json:"syncedAt"`

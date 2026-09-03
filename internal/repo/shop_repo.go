@@ -241,6 +241,9 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 				if t.ShipLogisticsNo != "" {
 					updates["ship_logistics_no"] = t.ShipLogisticsNo
 				}
+				if strings.TrimSpace(t.TrackJSON) != "" {
+					updates["track_json"] = t.TrackJSON
+				}
 				if err := tx.Model(&existing).Updates(updates).Error; err != nil {
 					return err
 				}
@@ -308,6 +311,21 @@ func (r *ShopRepo) ListTicketsByCard(shopID uint64, cardKey string) ([]model.Aft
 		)
 	}
 	err := q.Limit(200).Find(&list).Error
+	return list, err
+}
+
+func (r *ShopRepo) ListOpenTickets(shopID uint64) ([]model.AftersaleTicket, error) {
+	q := r.db.Model(&model.AftersaleTicket{}).
+		Scopes(scopeTenant(r.tenantID)).
+		Where("id IN (?)", r.db.Model(&model.AftersaleTicketCard{}).Select("ticket_id"))
+	if shopID > 0 {
+		q = q.Where("shop_id = ?", shopID)
+	}
+	var list []model.AftersaleTicket
+	err := q.Preload("CardKeys").
+		Order("deadline_at ASC NULLS LAST, id DESC").
+		Limit(2000).
+		Find(&list).Error
 	return list, err
 }
 
@@ -664,7 +682,7 @@ func (r *ShopRepo) ListServiceOrders(f ServiceOrderListFilter) ([]model.ServiceO
 	}
 	var list []model.ServiceOrder
 	offset := (f.Page - 1) * f.PageSize
-	err := q.Order("CASE WHEN deadline_at IS NULL THEN 1 ELSE 0 END, deadline_at ASC, id DESC").
+	err := q.Order("COALESCE(NULLIF(TRIM(last_log_time), ''), NULLIF(TRIM(create_time), '')) DESC NULLS LAST, id DESC").
 		Offset(offset).Limit(f.PageSize).Find(&list).Error
 	return list, total, err
 }

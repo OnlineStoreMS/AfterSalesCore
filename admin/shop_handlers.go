@@ -250,6 +250,31 @@ func (h *ShopHandler) Intercepts(c *gin.Context) {
 	response.OK(c, response.PageResult(list, total, page, pageSize))
 }
 
+func (h *ShopHandler) ShopTickets(c *gin.Context) {
+	page, pageSize := httputil.ParsePage(c)
+	var shopID uint64
+	if raw := c.Query("shopId"); raw != "" {
+		id, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid shopId")
+			return
+		}
+		shopID = id
+	}
+	list, total, err := h.ss(c).ListShopTickets(dto.ShopTicketListQuery{
+		Kind:     c.Query("kind"),
+		ShopID:   shopID,
+		Keyword:  c.Query("keyword"),
+		Page:     page,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, response.PageResult(list, total, page, pageSize))
+}
+
 func (h *ShopHandler) NavCounts(c *gin.Context) {
 	counts, err := h.ss(c).SidebarCounts()
 	if err != nil {

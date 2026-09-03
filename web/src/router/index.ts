@@ -66,6 +66,26 @@ const router = createRouter({
           meta: { title: '店铺管理' },
         },
         {
+          path: 'shops/await-pickup',
+          name: 'ShopAwaitPickup',
+          component: () => import('../views/shop/ShopTicketList.vue'),
+          meta: {
+            title: '待取件',
+            kind: 'buyer-return-pickup',
+            desc: '待商家收/发货中，买家退货状态为待取件的售后单。',
+          },
+        },
+        {
+          path: 'shops/shipped-refund',
+          name: 'ShopShippedRefund',
+          component: () => import('../views/shop/ShopTicketList.vue'),
+          meta: {
+            title: '已发货退款',
+            kind: 'review-shipped-refund',
+            desc: '待商家审核 · 已发货退款的售后单。',
+          },
+        },
+        {
           path: 'returns',
           name: 'Returns',
           component: () => import('../views/shop/ReturnList.vue'),

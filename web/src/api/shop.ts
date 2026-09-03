@@ -31,6 +31,13 @@ export interface FilterCard {
   sortOrder: number
 }
 
+export interface LogisticsTrack {
+  date?: string
+  title?: string
+  detail?: string
+  text?: string
+}
+
 export interface AftersaleTicket {
   id: number
   platformAftersaleId: string
@@ -58,6 +65,9 @@ export interface AftersaleTicket {
   needIntercept?: boolean
   returnLogisticsNo?: string
   shipLogisticsNo?: string
+  tracks?: LogisticsTrack[]
+  shopId?: number
+  shopName?: string
   applyTime?: string
   cardKeys: string[]
   syncedAt: string
@@ -153,6 +163,18 @@ export async function fetchShopTickets(id: number, params?: {
   return unwrap<PageData<AftersaleTicket>>(await client.get(`/shops/${id}/tickets`, { params }))
 }
 
+export type ShopTicketKind = 'buyer-return-pickup' | 'review-shipped-refund'
+
+export async function fetchShopTicketsByKind(params: {
+  kind: ShopTicketKind
+  shopId?: number
+  keyword?: string
+  page?: number
+  pageSize?: number
+}) {
+  return unwrap<PageData<AftersaleTicket>>(await client.get('/shop-tickets', { params }))
+}
+
 export interface ReturnPackage {
   id: number
   shopId: number
@@ -212,13 +234,6 @@ export interface ShippedRefund {
   syncedAt: string
 }
 
-export interface LogisticsTrack {
-  date?: string
-  title?: string
-  detail?: string
-  text?: string
-}
-
 export async function fetchReturnPackages(params?: {
   shopId?: number
   keyword?: string
@@ -275,6 +290,7 @@ export interface InterceptOrder {
   shipLogisticsNo?: string
   returnLogisticsNo?: string
   carrier?: string
+  tracks?: LogisticsTrack[]
   applyTime?: string
   syncedAt: string
 }
@@ -329,6 +345,8 @@ export interface NavCounts {
   pendingServiceOrders: number
   interceptOrders: number
   ticketTotal: number
+  buyerReturnPickup: number
+  reviewShippedRefund: number
 }
 
 export async function fetchNavCounts() {
