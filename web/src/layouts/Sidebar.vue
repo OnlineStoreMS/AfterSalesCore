@@ -127,26 +127,11 @@ watch(() => route.path, () => {
             v-if="counts.interceptOrders || counts.buyerReturnSigned"
             class="nav-badge"
             :title="[
-              counts.buyerReturnSigned ? `退货已签收 ${counts.buyerReturnSigned}` : '',
               counts.interceptOrders ? `需商家拦截 ${counts.interceptOrders}` : '',
+              counts.buyerReturnSigned ? `退货已签收 ${counts.buyerReturnSigned}` : '',
             ].filter(Boolean).join(' / ')"
           >{{ badgeText((counts.buyerReturnSigned || 0) + (counts.interceptOrders || 0)) }}</span>
         </template>
-        <el-menu-item index="/returns/signed-return" @click="navigate('/returns/signed-return')">
-          退货已签收
-          <span
-            v-if="counts.buyerReturnSigned"
-            class="nav-badge"
-            :title="`退货已签收 ${counts.buyerReturnSigned}`"
-          >{{ badgeText(counts.buyerReturnSigned) }}</span>
-        </el-menu-item>
-        <el-menu-item index="/returns" @click="navigate('/returns')">退回件</el-menu-item>
-        <el-menu-item index="/returns/shipped-success" @click="navigate('/returns/shipped-success')">
-          已发货退款成功
-        </el-menu-item>
-        <el-menu-item index="/returns/return-refund-success" @click="navigate('/returns/return-refund-success')">
-          退货退款成功
-        </el-menu-item>
         <el-menu-item index="/returns/intercept" @click="navigate('/returns/intercept')">
           需商家拦截快递
           <span
@@ -155,6 +140,21 @@ watch(() => route.path, () => {
             :title="`需商家拦截 ${counts.interceptOrders}`"
           >{{ badgeText(counts.interceptOrders) }}</span>
         </el-menu-item>
+        <el-menu-item index="/returns/signed-return" @click="navigate('/returns/signed-return')">
+          退货已签收
+          <span
+            v-if="counts.buyerReturnSigned"
+            class="nav-badge"
+            :title="`退货已签收 ${counts.buyerReturnSigned}`"
+          >{{ badgeText(counts.buyerReturnSigned) }}</span>
+        </el-menu-item>
+        <el-menu-item index="/returns/shipped-success" @click="navigate('/returns/shipped-success')">
+          已发货退款成功
+        </el-menu-item>
+        <el-menu-item index="/returns/return-refund-success" @click="navigate('/returns/return-refund-success')">
+          退货退款成功
+        </el-menu-item>
+        <el-menu-item index="/returns" @click="navigate('/returns')">退回件</el-menu-item>
       </el-sub-menu>
       <el-menu-item index="/service-orders" @click="navigate('/service-orders')">
         <el-icon><Tickets /></el-icon>
