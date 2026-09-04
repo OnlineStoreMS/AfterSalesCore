@@ -56,7 +56,7 @@ export function parseTicketLogistics(row: {
   }
   return {
     lines,
-    shipNo: row.shipLogisticsNo || row.logisticsNo || '',
+    shipNo: row.shipLogisticsNo || (!row.returnLogisticsNo ? row.logisticsNo || '' : '') || '',
     returnNo: row.returnLogisticsNo || '',
   }
 }

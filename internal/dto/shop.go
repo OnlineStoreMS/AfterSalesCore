@@ -320,31 +320,32 @@ type ServiceOrderListResult struct {
 }
 
 type ReturnPackageItem struct {
-	ID                  uint64 `json:"id"`
-	ShopID              uint64 `json:"shopId"`
-	ShopName            string `json:"shopName"`
-	PlatformAftersaleID string `json:"platformAftersaleId"`
-	OrderNo             string `json:"orderNo"`
-	ProductTitle        string `json:"productTitle"`
-	ProductImage        string `json:"productImage,omitempty"`
-	SKU                 string `json:"sku"`
-	Qty                 int    `json:"qty"`
-	BuyQty              int    `json:"buyQty"`
-	PayAmount           string `json:"payAmount"`
-	RefundAmount        string `json:"refundAmount"`
-	AftersaleType       string `json:"aftersaleType"`
-	Reason              string `json:"reason"`
-	Status              string `json:"status"`
-	OrderInfo           string `json:"orderInfo,omitempty"`
-	AftersaleInfo       string `json:"aftersaleInfo,omitempty"`
-	Logistics           string `json:"logistics,omitempty"`
-	LogisticsNo         string `json:"logisticsNo"`
-	Carrier             string `json:"carrier,omitempty"`
-	ReturnLocation      string `json:"returnLocation"`
-	ShipTime            string `json:"shipTime,omitempty"`
-	ApplyTime           string `json:"applyTime,omitempty"`
-	ReturnTime          string `json:"returnTime,omitempty"`
-	SyncedAt            string `json:"syncedAt"`
+	ID                  uint64           `json:"id"`
+	ShopID              uint64           `json:"shopId"`
+	ShopName            string           `json:"shopName"`
+	PlatformAftersaleID string           `json:"platformAftersaleId"`
+	OrderNo             string           `json:"orderNo"`
+	ProductTitle        string           `json:"productTitle"`
+	ProductImage        string           `json:"productImage,omitempty"`
+	SKU                 string           `json:"sku"`
+	Qty                 int              `json:"qty"`
+	BuyQty              int              `json:"buyQty"`
+	PayAmount           string           `json:"payAmount"`
+	RefundAmount        string           `json:"refundAmount"`
+	AftersaleType       string           `json:"aftersaleType"`
+	Reason              string           `json:"reason"`
+	Status              string           `json:"status"`
+	OrderInfo           string           `json:"orderInfo,omitempty"`
+	AftersaleInfo       string           `json:"aftersaleInfo,omitempty"`
+	Logistics           string           `json:"logistics,omitempty"`
+	LogisticsNo         string           `json:"logisticsNo"`
+	Carrier             string           `json:"carrier,omitempty"`
+	ReturnLocation      string           `json:"returnLocation"`
+	ShipTime            string           `json:"shipTime,omitempty"`
+	ApplyTime           string           `json:"applyTime,omitempty"`
+	ReturnTime          string           `json:"returnTime,omitempty"`
+	Tracks              []LogisticsTrack `json:"tracks,omitempty"`
+	SyncedAt            string           `json:"syncedAt"`
 }
 
 type ReturnListQuery struct {

@@ -306,9 +306,10 @@ function parseDataRow(tr, headers, headerInfo) {
     dispute: textOf(disputeCell),
     logistics: formatTicketLogistics(logisticsRaw),
     returnLogisticsNo,
-    shipLogisticsNo: needsIntercept(logisticsRaw)
-      ? shipLogisticsNoFromRecord(findTableRecord(logisticsCell) || findTableRecord(tr))
-      : '',
+    shipLogisticsNo:
+      logisticsRaw.includes('订单发货') || needsIntercept(logisticsRaw)
+        ? shipLogisticsNoFromRecord(findTableRecord(logisticsCell) || findTableRecord(tr))
+        : '',
     applyTime: pick(afterText, /申请时间\s*([\d/]+(?:\s*[\d:]+)?)/),
     orderInfo: orderText,
     aftersaleInfo: afterText,
@@ -320,9 +321,10 @@ function parseDataRow(tr, headers, headerInfo) {
       status: statusText.slice(0, 120),
       logistics: formatTicketLogistics(logisticsRaw).slice(0, 200),
       returnLogisticsNo,
-      shipLogisticsNo: needsIntercept(logisticsRaw)
-        ? shipLogisticsNoFromRecord(findTableRecord(logisticsCell) || findTableRecord(tr))
-        : '',
+      shipLogisticsNo:
+        logisticsRaw.includes('订单发货') || needsIntercept(logisticsRaw)
+          ? shipLogisticsNoFromRecord(findTableRecord(logisticsCell) || findTableRecord(tr))
+          : '',
     }),
   }
 }
@@ -350,17 +352,31 @@ function refreshLogisticsMap() {
 }
 
 function applyLogistics(ticket) {
-  const code = String(ticket.returnLogisticsNo || logisticsMap[ticket.platformAftersaleId] || '').trim()
-  if (!code) return ticket
+  const rawHit = logisticsMap[ticket.platformAftersaleId]
+  let returnNo = String(ticket.returnLogisticsNo || '').trim()
+  let shipNo = String(ticket.shipLogisticsNo || '').trim()
+  if (typeof rawHit === 'string') {
+    returnNo = returnNo || rawHit.trim()
+  } else if (rawHit && typeof rawHit === 'object') {
+    returnNo = returnNo || String(rawHit.returnLogisticsNo || rawHit.return || '').trim()
+    shipNo = shipNo || String(rawHit.shipLogisticsNo || rawHit.ship || '').trim()
+  }
+  if (!returnNo && !shipNo) return ticket
   let raw = ticket.rawJson
   try {
     const o = JSON.parse(raw || '{}')
-    o.returnLogisticsNo = code
+    if (returnNo) o.returnLogisticsNo = returnNo
+    if (shipNo) o.shipLogisticsNo = shipNo
     raw = JSON.stringify(o)
   } catch {
     /* ignore */
   }
-  return { ...ticket, returnLogisticsNo: code, rawJson: raw }
+  return {
+    ...ticket,
+    returnLogisticsNo: returnNo || ticket.returnLogisticsNo || '',
+    shipLogisticsNo: shipNo || ticket.shipLogisticsNo || '',
+    rawJson: raw,
+  }
 }
 
 async function visibleTicketsWithLogistics() {
@@ -933,10 +949,10 @@ async function collectCardTickets(card, prev = emptyPrevCard()) {
       all.push(r)
     }
   }
-  add(await enrichInterceptTickets(await visibleTicketsWithLogistics()))
+  add(await enrichAllTicketLogistics(await visibleTicketsWithLogistics()))
   if (expected && all.length < expected) {
     await setLargestPageSize(expected)
-    if (listBelongsToCard(card, ctx)) add(await enrichInterceptTickets(await visibleTicketsWithLogistics()))
+    if (listBelongsToCard(card, ctx)) add(await enrichAllTicketLogistics(await visibleTicketsWithLogistics()))
   }
   for (let p = 2; expected && all.length < expected && p <= 20; p++) {
     if (!listBelongsToCard(card, ctx)) break
@@ -948,7 +964,7 @@ async function collectCardTickets(card, prev = emptyPrevCard()) {
       fireClick(next)
       await waitForPageChange(prevIds)
     }
-    add(await enrichInterceptTickets(await visibleTicketsWithLogistics()))
+    add(await enrichAllTicketLogistics(await visibleTicketsWithLogistics()))
   }
   all.pageSize = currentPageSize()
   all.visible = visibleHeaderCount()
@@ -1345,9 +1361,10 @@ async function readReturnLogistics(ticket) {
   }, 25, 200)
   closeLogisticsDrawer()
   await waitUntil(() => (parseLogisticsDrawer() ? null : true), 15, 120)
-  const tracks = parsed?.tracks || []
+  const tracks = (parsed?.tracks || []).slice(0, 5)
   return {
     logisticsNo: parsed?.logisticsNo || fallbackNo,
+    returnLogisticsNo: parsed?.returnLogisticsNo || '',
     shipLogisticsNo: parsed?.shipLogisticsNo || '',
     carrier: parsed?.carrier || '',
     shipTime: parsed?.shipTime || '',
@@ -1373,8 +1390,8 @@ async function readShipLogistics(ticket) {
   const fallbackNo =
     cleanTrackingNo(ticket.shipLogisticsNo) ||
     shipLogisticsNoFromRecord(findTableRecord(cell || pair?.data || pair?.header))
-  const clickEl = logisticsClickTarget(cell, '订单发货')
-  if (!clickEl) return { shipLogisticsNo: fallbackNo }
+  const clickEl = logisticsClickTarget(cell, '订单发货') || logisticsClickTarget(cell, '发货')
+  if (!clickEl) return { shipLogisticsNo: fallbackNo, tracks: [] }
   fireClick(clickEl)
   const parsed = await waitUntil(() => {
     const d = parseLogisticsDrawer()
@@ -1383,24 +1400,103 @@ async function readShipLogistics(ticket) {
   }, 25, 200)
   closeLogisticsDrawer()
   await waitUntil(() => (parseLogisticsDrawer() ? null : true), 15, 120)
-  return { shipLogisticsNo: parsed?.shipLogisticsNo || parsed?.logisticsNo || fallbackNo }
+  const tracks = (parsed?.tracks || []).slice(0, 5)
+  return {
+    shipLogisticsNo: parsed?.shipLogisticsNo || parsed?.logisticsNo || fallbackNo,
+    logisticsNo: parsed?.logisticsNo || parsed?.shipLogisticsNo || fallbackNo,
+    carrier: parsed?.carrier || '',
+    shipTime: parsed?.shipTime || '',
+    tracks,
+  }
 }
 
-async function enrichInterceptTickets(rows) {
+function applyTicketTracks(ticket, tracks) {
+  const list = (tracks || []).slice(0, 5)
+  if (!list.length) return ticket
+  ticket.trackJson = JSON.stringify(list)
+  try {
+    const o = JSON.parse(ticket.rawJson || '{}')
+    o.tracks = list
+    ticket.rawJson = JSON.stringify(o)
+  } catch {
+    /* ignore */
+  }
+  return ticket
+}
+
+function hasBuyerReturnLogistics(ticket) {
+  const text = String(ticket?.logistics || '')
+  return text.includes('买家退货') || !!String(ticket?.returnLogisticsNo || '').trim()
+}
+
+function hasOrderShipLogistics(ticket) {
+  const text = String(ticket?.logistics || '')
+  return text.includes('订单发货') || needsIntercept(text) || !!String(ticket?.shipLogisticsNo || '').trim()
+}
+
+/** 所有售后单：买家退货采退回单号+轨迹；仅订单发货采发货单号+轨迹；轨迹最多 5 条 */
+async function enrichAllTicketLogistics(rows) {
   const out = []
   for (const t of rows || []) {
     const row = { ...t, logistics: formatTicketLogistics(t.logistics) }
-    if (needsIntercept(row.logistics) && !row.shipLogisticsNo) {
+    const buyer = hasBuyerReturnLogistics(row)
+    const ship = hasOrderShipLogistics(row)
+    const anyHint = String(row.logistics || '').trim() || buyer || ship
+
+    if (buyer || (anyHint && !ship)) {
+      if (!row.trackJson || !row.returnLogisticsNo) {
+        try {
+          const extra = await readReturnLogistics(row)
+          const retNo =
+            cleanTrackingNo(extra.returnLogisticsNo) ||
+            cleanTrackingNo(extra.logisticsNo) ||
+            row.returnLogisticsNo ||
+            ''
+          if (retNo) row.returnLogisticsNo = retNo
+          if (extra.shipLogisticsNo && !row.shipLogisticsNo) {
+            row.shipLogisticsNo = cleanTrackingNo(extra.shipLogisticsNo)
+          }
+          if (!row.trackJson) applyTicketTracks(row, extra.tracks)
+        } catch {
+          /* keep row */
+        }
+      }
+    }
+
+    if (ship && (!row.shipLogisticsNo || (!buyer && !row.trackJson))) {
       try {
         const extra = await readShipLogistics(row)
-        row.shipLogisticsNo = extra.shipLogisticsNo || ''
+        if (extra.shipLogisticsNo) row.shipLogisticsNo = cleanTrackingNo(extra.shipLogisticsNo)
+        if (!buyer && !row.trackJson) applyTicketTracks(row, extra.tracks)
       } catch {
         /* keep row */
       }
     }
+
     out.push(row)
   }
   return out
+}
+
+function applyRefundTracksToTickets(ticketMap, returns, shippedRefunds) {
+  const tracksOf = (item) => {
+    try {
+      return JSON.parse(item?.trackJson || '[]')
+    } catch {
+      return []
+    }
+  }
+  for (const item of [...(returns || []), ...(shippedRefunds || [])]) {
+    const t = ticketMap.get(item.platformAftersaleId)
+    if (!t || t.trackJson) continue
+    applyTicketTracks(t, tracksOf(item))
+    if (!t.returnLogisticsNo && item.logisticsNo && hasBuyerReturnLogistics(t)) {
+      t.returnLogisticsNo = item.logisticsNo
+    }
+    if (!t.shipLogisticsNo && (item.shipLogisticsNo || (!hasBuyerReturnLogistics(t) && item.logisticsNo))) {
+      t.shipLogisticsNo = item.shipLogisticsNo || item.logisticsNo || ''
+    }
+  }
 }
 
 async function resetAftersaleFilters() {
@@ -1489,7 +1585,7 @@ async function applyReturnFilters() {
 }
 
 function toReturnItem(ticket, extra) {
-  const tracks = extra.tracks || []
+  const tracks = (extra.tracks || []).slice(0, 5)
   return {
     platformAftersaleId: ticket.platformAftersaleId,
     orderNo: ticket.orderNo,
@@ -1520,7 +1616,7 @@ function toReturnItem(ticket, extra) {
       logisticsNo: extra.logisticsNo || '',
       carrier: extra.carrier || '',
       returnLocation: extra.returnLocation || '',
-      tracks: tracks.slice(0, 8),
+      tracks,
     }),
   }
 }
@@ -1584,7 +1680,19 @@ async function collectVisibleRefundBuckets(seenReturned, seenShipped) {
     seenShipped.add(t.platformAftersaleId)
     let extra = { logisticsNo: '', carrier: '', shipTime: '', returnLocation: '', tracks: [] }
     try {
-      extra = await readReturnLogistics(t)
+      if (hasBuyerReturnLogistics(t)) {
+        extra = await readReturnLogistics(t)
+      } else {
+        const ship = await readShipLogistics(t)
+        extra = {
+          logisticsNo: ship.shipLogisticsNo || ship.logisticsNo || '',
+          shipLogisticsNo: ship.shipLogisticsNo || '',
+          carrier: ship.carrier || '',
+          shipTime: ship.shipTime || '',
+          returnLocation: '',
+          tracks: ship.tracks || [],
+        }
+      }
     } catch {
       /* keep row without track */
     }
@@ -1732,12 +1840,16 @@ async function collectAll() {
         if (!existing.shipLogisticsNo && t.shipLogisticsNo) {
           existing.shipLogisticsNo = t.shipLogisticsNo
         }
+        if (!existing.trackJson && t.trackJson) {
+          existing.trackJson = t.trackJson
+        }
       } else {
         ticketMap.set(t.platformAftersaleId, { ...t, cardKeys: [card.cardKey] })
       }
     }
   }
   await resetAftersaleFilters()
+  applyRefundTracksToTickets(ticketMap, returns, shippedRefunds)
   const meta = shopMeta()
   return {
     ok: true,

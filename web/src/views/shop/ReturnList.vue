@@ -5,6 +5,7 @@ import { Search } from '@element-plus/icons-vue'
 import {
   fetchReturnPackages,
   fetchShops,
+  type LogisticsTrack,
   type MarketplaceShop,
   type ReturnPackage,
 } from '../../api/shop'
@@ -56,6 +57,14 @@ function handleSearch() {
   loadData()
 }
 
+function hasTracks(row: ReturnPackage) {
+  return Boolean(row.tracks?.length)
+}
+
+function trackDetail(track: LogisticsTrack) {
+  return track.detail || (track.title || track.date ? '' : track.text || '')
+}
+
 onMounted(() => {
   loadShops()
   loadData()
@@ -67,7 +76,7 @@ onMounted(() => {
     <div class="page-head">
       <div>
         <h2 class="page-title">退回管理</h2>
-        <p class="desc">默认按物流退回时间排序，没有退回时间则按申请时间，最近的在前。</p>
+        <p class="desc">默认按物流退回时间排序，没有退回时间则按申请时间，最近的在前。悬停物流单号可查看最近 5 条轨迹。</p>
       </div>
     </div>
 
@@ -156,11 +165,35 @@ onMounted(() => {
             <div v-if="row.applyTime" class="sub">申请时间 {{ row.applyTime }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="物流单号" min-width="160">
+        <el-table-column label="物流单号" min-width="180">
           <template #default="{ row }">
-            <div class="tracking">{{ row.logisticsNo || '—' }}</div>
-            <div v-if="row.carrier" class="sub">{{ row.carrier }}</div>
-            <div v-if="row.logistics" class="sub">{{ row.logistics }}</div>
+            <el-popover
+              placement="left-start"
+              :width="360"
+              trigger="hover"
+              :disabled="!hasTracks(row)"
+              popper-class="return-track-popper"
+            >
+              <template #reference>
+                <div class="logistics-cell" :class="{ link: hasTracks(row) }">
+                  <div class="tracking">{{ row.logisticsNo || '—' }}</div>
+                  <div v-if="row.carrier" class="sub">{{ row.carrier }}</div>
+                  <div v-if="row.logistics" class="sub">{{ row.logistics }}</div>
+                </div>
+              </template>
+              <div class="track-pop">
+                <div v-if="row.logisticsNo || row.carrier" class="track-meta">
+                  {{ [row.carrier, row.logisticsNo].filter(Boolean).join(' ') }}
+                </div>
+                <ul class="track-list">
+                  <li v-for="(track, i) in (row.tracks || []).slice(0, 5)" :key="i">
+                    <div class="track-title">{{ track.title || '物流记录' }}</div>
+                    <div v-if="track.date" class="track-date">{{ track.date }}</div>
+                    <div v-if="trackDetail(track)" class="track-detail">{{ trackDetail(track) }}</div>
+                  </li>
+                </ul>
+              </div>
+            </el-popover>
           </template>
         </el-table-column>
         <el-table-column label="退回地" min-width="220">
@@ -204,7 +237,29 @@ onMounted(() => {
 .product-meta { min-width: 0; }
 .title { font-weight: 600; line-height: 1.4; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
+.logistics-cell.link { cursor: pointer; }
 .tracking { color: #409eff; word-break: break-all; }
 .location { white-space: pre-wrap; line-height: 1.5; word-break: break-word; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
+</style>
+
+<style>
+.return-track-popper .track-meta { color: #909399; font-size: 12px; margin-bottom: 8px; }
+.return-track-popper .track-list { margin: 0; padding: 0; list-style: none; }
+.return-track-popper .track-list li { position: relative; padding: 0 0 12px 14px; border-left: 2px solid #e4e7ed; }
+.return-track-popper .track-list li:last-child { padding-bottom: 0; border-left-color: transparent; }
+.return-track-popper .track-list li::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #c0c4cc;
+}
+.return-track-popper .track-list li:first-child::before { background: #409eff; }
+.return-track-popper .track-title { font-weight: 600; line-height: 1.4; }
+.return-track-popper .track-date { color: #909399; font-size: 12px; margin-top: 2px; }
+.return-track-popper .track-detail { color: #606266; font-size: 12px; margin-top: 2px; line-height: 1.5; word-break: break-word; }
 </style>

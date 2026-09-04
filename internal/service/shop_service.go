@@ -912,7 +912,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 				ReturnTime:          returnTime,
 				ReturnedAt:          returnedAt,
 				AppliedAt:           appliedAt,
-				TrackJSON:           item.TrackJSON,
+				TrackJSON:           LimitLogisticsTracksJSON(item.TrackJSON),
 				RawJSON:             item.RawJSON,
 			})
 		}
@@ -1154,6 +1154,7 @@ func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageI
 		Logistics: item.Logistics, LogisticsNo: item.LogisticsNo, Carrier: item.Carrier,
 		ReturnLocation: item.ReturnLocation, ShipTime: item.ShipTime,
 		ApplyTime: item.ApplyTime, ReturnTime: item.ReturnTime,
+		Tracks:   toDTOTracks(item.TrackJSON),
 		SyncedAt: formatTime(item.SyncedAt),
 	}
 }

@@ -12,7 +12,11 @@ const props = defineProps<{
   carrier?: string
 }>()
 
-const hasTracks = computed(() => Boolean(props.tracks?.length))
+const displayTracks = computed(() => (props.tracks || []).slice(0, 5))
+const hasTracks = computed(() => displayTracks.value.length > 0)
+/** 有退货单号时轨迹归属退货；仅发货时轨迹归属发货 */
+const shipTracksEnabled = computed(() => hasTracks.value && !props.returnNo)
+const returnTracksEnabled = computed(() => hasTracks.value && !!props.returnNo)
 
 function trackDetail(track: LogisticsTrack) {
   return track.detail || (track.title || track.date ? '' : track.text || '')
@@ -32,24 +36,24 @@ function trackDetail(track: LogisticsTrack) {
       </div>
     </template>
     <pre v-else class="logistics">{{ raw || '—' }}</pre>
-    <div v-if="shipNo" class="tracking">发货单号 {{ shipNo }}</div>
+
     <el-popover
-      v-if="returnNo"
+      v-if="shipNo"
       placement="left-start"
       :width="360"
       trigger="hover"
-      :disabled="!hasTracks"
+      :disabled="!shipTracksEnabled"
       popper-class="ticket-track-popper"
     >
       <template #reference>
-        <div class="tracking" :class="{ link: hasTracks }">退货单号 {{ returnNo }}</div>
+        <div class="tracking" :class="{ link: shipTracksEnabled }">发货单号 {{ shipNo }}</div>
       </template>
       <div class="track-pop">
-        <div v-if="returnNo || carrier" class="track-meta">
-          {{ [carrier, returnNo].filter(Boolean).join(' ') }}
+        <div v-if="shipNo || carrier" class="track-meta">
+          {{ [carrier, shipNo].filter(Boolean).join(' ') }}
         </div>
         <ul class="track-list">
-          <li v-for="(track, i) in (tracks || []).slice(0, 5)" :key="i">
+          <li v-for="(track, i) in displayTracks" :key="i">
             <div class="track-title">{{ track.title || '物流记录' }}</div>
             <div v-if="track.date" class="track-date">{{ track.date }}</div>
             <div v-if="trackDetail(track)" class="track-detail">{{ trackDetail(track) }}</div>
@@ -57,6 +61,32 @@ function trackDetail(track: LogisticsTrack) {
         </ul>
       </div>
     </el-popover>
+
+    <el-popover
+      v-if="returnNo"
+      placement="left-start"
+      :width="360"
+      trigger="hover"
+      :disabled="!returnTracksEnabled"
+      popper-class="ticket-track-popper"
+    >
+      <template #reference>
+        <div class="tracking" :class="{ link: returnTracksEnabled }">退货单号 {{ returnNo }}</div>
+      </template>
+      <div class="track-pop">
+        <div v-if="returnNo || carrier" class="track-meta">
+          {{ [carrier, returnNo].filter(Boolean).join(' ') }}
+        </div>
+        <ul class="track-list">
+          <li v-for="(track, i) in displayTracks" :key="i">
+            <div class="track-title">{{ track.title || '物流记录' }}</div>
+            <div v-if="track.date" class="track-date">{{ track.date }}</div>
+            <div v-if="trackDetail(track)" class="track-detail">{{ trackDetail(track) }}</div>
+          </li>
+        </ul>
+      </div>
+    </el-popover>
+
     <div v-if="carrier" class="sub">{{ carrier }}</div>
   </div>
 </template>

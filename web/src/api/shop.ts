@@ -200,6 +200,7 @@ export interface ReturnPackage {
   shipTime?: string
   applyTime?: string
   returnTime?: string
+  tracks?: LogisticsTrack[]
   syncedAt: string
 }
 
