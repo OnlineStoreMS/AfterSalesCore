@@ -52,6 +52,7 @@ func RegisterRoutes(
 	g.GET("/shops/:id/tickets", shopH.Tickets)
 	g.GET("/return-packages", shopH.Returns)
 	g.GET("/shipped-refunds", shopH.ShippedRefunds)
+	g.GET("/return-refunds", shopH.ReturnRefunds)
 	g.GET("/intercept-orders", shopH.Intercepts)
 	g.GET("/service-orders", shopH.ServiceOrders)
 	g.GET("/shop-tickets", shopH.ShopTickets)

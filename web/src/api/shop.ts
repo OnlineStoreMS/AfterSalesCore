@@ -230,7 +230,7 @@ export interface ShippedRefund {
   carrier?: string
   shipTime?: string
   tracks?: LogisticsTrack[]
-  alert: boolean
+  alert?: boolean
   applyTime?: string
   syncedAt: string
 }
@@ -246,6 +246,18 @@ export async function fetchReturnPackages(params?: {
   pageSize?: number
 }) {
   return unwrap<PageData<ReturnPackage>>(await client.get('/return-packages', { params }))
+}
+
+export async function fetchReturnRefunds(params?: {
+  shopId?: number
+  keyword?: string
+  status?: string
+  applyFrom?: string
+  applyTo?: string
+  page?: number
+  pageSize?: number
+}) {
+  return unwrap<PageData<ShippedRefund>>(await client.get('/return-refunds', { params }))
 }
 
 export async function fetchShippedRefunds(params?: {

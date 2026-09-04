@@ -683,6 +683,61 @@ func (s *ShopService) ListShippedRefunds(q dto.ShippedRefundListQuery) ([]dto.Sh
 	return out[start:end], total, nil
 }
 
+func (s *ShopService) ListReturnRefunds(q dto.ReturnRefundListQuery) ([]dto.ReturnRefundItem, int64, error) {
+	if q.ShopID > 0 {
+		if _, err := s.repo().Get(q.ShopID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, 0, ErrNotFound
+			}
+			return nil, 0, err
+		}
+	}
+	list, _, err := s.repo().ListReturnRefunds(repo.ReturnRefundListFilter{
+		ShopID:    q.ShopID,
+		Keyword:   q.Keyword,
+		ApplyFrom: ParseQueryDateTime(q.ApplyFrom, false),
+		ApplyTo:   ParseQueryDateTime(q.ApplyTo, true),
+		Unpaged:   true,
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	shops, err := s.repo().List()
+	if err != nil {
+		return nil, 0, err
+	}
+	names := make(map[uint64]string, len(shops))
+	for i := range shops {
+		names[shops[i].ID] = shops[i].Name
+	}
+	wantStatus := strings.TrimSpace(q.Status)
+	out := make([]dto.ReturnRefundItem, 0, len(list))
+	for i := range list {
+		item := toReturnRefundItem(&list[i], names[list[i].ShopID])
+		if wantStatus != "" && item.LogisticsStatus != wantStatus {
+			continue
+		}
+		out = append(out, item)
+	}
+	total := int64(len(out))
+	page, pageSize := q.Page, q.PageSize
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 20
+	}
+	start := (page - 1) * pageSize
+	if start >= len(out) {
+		return []dto.ReturnRefundItem{}, total, nil
+	}
+	end := start + pageSize
+	if end > len(out) {
+		end = len(out)
+	}
+	return out[start:end], total, nil
+}
+
 func (s *ShopService) Bind(bindCode string) (*dto.PluginBindResult, error) {
 	code := strings.ToUpper(strings.TrimSpace(bindCode))
 	if len(code) < 4 {
@@ -971,6 +1026,55 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 		shippedCount = len(shipped)
 	}
 
+	returnRefundCount := 0
+	if in.ReturnRefunds != nil {
+		refunds := make([]model.ReturnRefundSuccess, 0, len(*in.ReturnRefunds))
+		for _, item := range *in.ReturnRefunds {
+			aid := strings.TrimSpace(item.PlatformAftersaleID)
+			if aid == "" {
+				continue
+			}
+			logistics := strings.TrimSpace(item.Logistics)
+			trackJSON := LimitLogisticsTracksJSON(item.TrackJSON)
+			status := ClassifyLogisticsWithTracks(logistics, trackJSON)
+			if status == "" {
+				status = strings.TrimSpace(item.LogisticsStatus)
+			}
+			applyTime := strings.TrimSpace(item.ApplyTime)
+			refunds = append(refunds, model.ReturnRefundSuccess{
+				PlatformAftersaleID: aid,
+				OrderNo:             strings.TrimSpace(item.OrderNo),
+				ProductTitle:        strings.TrimSpace(item.ProductTitle),
+				ProductImage:        strings.TrimSpace(item.ProductImage),
+				SKU:                 strings.TrimSpace(item.SKU),
+				ProductTags:         strings.TrimSpace(item.ProductTags),
+				Tags:                strings.TrimSpace(item.Tags),
+				Qty:                 item.Qty,
+				BuyQty:              item.BuyQty,
+				PayAmount:           strings.TrimSpace(item.PayAmount),
+				RefundAmount:        strings.TrimSpace(item.RefundAmount),
+				AftersaleType:       firstNonEmpty(strings.TrimSpace(item.AftersaleType), "退货退款"),
+				Reason:              strings.TrimSpace(item.Reason),
+				Status:              firstNonEmpty(strings.TrimSpace(item.Status), "退款成功"),
+				OrderInfo:           strings.TrimSpace(item.OrderInfo),
+				AftersaleInfo:       strings.TrimSpace(item.AftersaleInfo),
+				Logistics:           logistics,
+				LogisticsStatus:     status,
+				LogisticsNo:         strings.TrimSpace(item.LogisticsNo),
+				Carrier:             strings.TrimSpace(item.Carrier),
+				ShipTime:            strings.TrimSpace(item.ShipTime),
+				TrackJSON:           trackJSON,
+				ApplyTime:           applyTime,
+				AppliedAt:           ParsePlatformDateTime(applyTime, 0),
+				RawJSON:             item.RawJSON,
+			})
+		}
+		if err := s.repos.Shop.UpsertReturnRefunds(shop, refunds); err != nil {
+			return nil, err
+		}
+		returnRefundCount = len(refunds)
+	}
+
 	serviceCount := 0
 	if in.ServiceOrders != nil {
 		orders := make([]model.ServiceOrder, 0, len(*in.ServiceOrders))
@@ -1017,7 +1121,8 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 
 	result := &dto.PluginSyncResult{
 		ShopID: shop.ID, CardCount: len(cards), TicketCount: len(tickets),
-		ReturnCount: returnCount, ShippedRefundCount: shippedCount, ServiceOrderCount: serviceCount,
+		ReturnCount: returnCount, ShippedRefundCount: shippedCount, ReturnRefundCount: returnRefundCount,
+		ServiceOrderCount: serviceCount,
 		LastSyncAt: formatTime(now),
 	}
 	if err := s.repos.Shop.Save(shop); err != nil {
@@ -1155,6 +1260,27 @@ func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageI
 		ReturnLocation: item.ReturnLocation, ShipTime: item.ShipTime,
 		ApplyTime: item.ApplyTime, ReturnTime: item.ReturnTime,
 		Tracks:   toDTOTracks(item.TrackJSON),
+		SyncedAt: formatTime(item.SyncedAt),
+	}
+}
+
+func toReturnRefundItem(item *model.ReturnRefundSuccess, shopName string) dto.ReturnRefundItem {
+	status := ClassifyLogisticsWithTracks(item.Logistics, item.TrackJSON)
+	if status == "" {
+		status = item.LogisticsStatus
+	}
+	return dto.ReturnRefundItem{
+		ID: item.ID, ShopID: item.ShopID, ShopName: shopName,
+		PlatformAftersaleID: item.PlatformAftersaleID, OrderNo: item.OrderNo,
+		ProductTitle: item.ProductTitle, ProductImage: item.ProductImage, SKU: item.SKU,
+		ProductTags: item.ProductTags, Tags: item.Tags,
+		Qty: item.Qty, BuyQty: item.BuyQty, PayAmount: item.PayAmount, RefundAmount: item.RefundAmount,
+		AftersaleType: firstNonEmpty(item.AftersaleType, "退货退款"), Reason: item.Reason,
+		Status: firstNonEmpty(item.Status, "退款成功"),
+		OrderInfo: item.OrderInfo, AftersaleInfo: item.AftersaleInfo,
+		Logistics: item.Logistics, LogisticsStatus: status,
+		LogisticsNo: item.LogisticsNo, Carrier: item.Carrier, ShipTime: item.ShipTime,
+		Tracks: toDTOTracks(item.TrackJSON), ApplyTime: item.ApplyTime,
 		SyncedAt: formatTime(item.SyncedAt),
 	}
 }

@@ -226,6 +226,33 @@ func (h *ShopHandler) ShippedRefunds(c *gin.Context) {
 	response.OK(c, response.PageResult(list, total, page, pageSize))
 }
 
+func (h *ShopHandler) ReturnRefunds(c *gin.Context) {
+	page, pageSize := httputil.ParsePage(c)
+	var shopID uint64
+	if raw := c.Query("shopId"); raw != "" {
+		id, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid shopId")
+			return
+		}
+		shopID = id
+	}
+	list, total, err := h.ss(c).ListReturnRefunds(dto.ReturnRefundListQuery{
+		ShopID:    shopID,
+		Keyword:   c.Query("keyword"),
+		Status:    c.Query("status"),
+		ApplyFrom: c.Query("applyFrom"),
+		ApplyTo:   c.Query("applyTo"),
+		Page:      page,
+		PageSize:  pageSize,
+	})
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, response.PageResult(list, total, page, pageSize))
+}
+
 func (h *ShopHandler) Intercepts(c *gin.Context) {
 	page, pageSize := httputil.ParsePage(c)
 	var shopID uint64

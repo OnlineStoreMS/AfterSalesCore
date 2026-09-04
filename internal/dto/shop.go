@@ -185,6 +185,7 @@ type PluginSyncInput struct {
 	Tickets          []PluginSyncTicket         `json:"tickets"`
 	Returns          *[]PluginSyncReturn        `json:"returns"`
 	ShippedRefunds   *[]PluginSyncShippedRefund `json:"shippedRefunds"`
+	ReturnRefunds    *[]PluginSyncShippedRefund `json:"returnRefunds"`
 	ServiceOrders    *[]PluginSyncServiceOrder  `json:"serviceOrders"`
 }
 
@@ -245,6 +246,7 @@ type PluginSyncResult struct {
 	TicketCount        int    `json:"ticketCount"`
 	ReturnCount        int    `json:"returnCount"`
 	ShippedRefundCount int    `json:"shippedRefundCount"`
+	ReturnRefundCount  int    `json:"returnRefundCount"`
 	ServiceOrderCount  int    `json:"serviceOrderCount"`
 	LastSyncAt         string `json:"lastSyncAt"`
 }
@@ -395,6 +397,46 @@ type LogisticsTrack struct {
 	Title  string `json:"title"`
 	Detail string `json:"detail"`
 	Text   string `json:"text"`
+}
+
+type ReturnRefundItem struct {
+	ID                  uint64           `json:"id"`
+	ShopID              uint64           `json:"shopId"`
+	ShopName            string           `json:"shopName"`
+	PlatformAftersaleID string           `json:"platformAftersaleId"`
+	OrderNo             string           `json:"orderNo"`
+	ProductTitle        string           `json:"productTitle"`
+	ProductImage        string           `json:"productImage,omitempty"`
+	SKU                 string           `json:"sku"`
+	ProductTags         string           `json:"productTags,omitempty"`
+	Tags                string           `json:"tags,omitempty"`
+	Qty                 int              `json:"qty"`
+	BuyQty              int              `json:"buyQty"`
+	PayAmount           string           `json:"payAmount"`
+	RefundAmount        string           `json:"refundAmount"`
+	AftersaleType       string           `json:"aftersaleType"`
+	Reason              string           `json:"reason"`
+	Status              string           `json:"status"`
+	OrderInfo           string           `json:"orderInfo,omitempty"`
+	AftersaleInfo       string           `json:"aftersaleInfo,omitempty"`
+	Logistics           string           `json:"logistics,omitempty"`
+	LogisticsStatus     string           `json:"logisticsStatus,omitempty"`
+	LogisticsNo         string           `json:"logisticsNo,omitempty"`
+	Carrier             string           `json:"carrier,omitempty"`
+	ShipTime            string           `json:"shipTime,omitempty"`
+	Tracks              []LogisticsTrack `json:"tracks,omitempty"`
+	ApplyTime           string           `json:"applyTime,omitempty"`
+	SyncedAt            string           `json:"syncedAt"`
+}
+
+type ReturnRefundListQuery struct {
+	ShopID    uint64
+	Keyword   string
+	Status    string
+	ApplyFrom string
+	ApplyTo   string
+	Page      int
+	PageSize  int
 }
 
 type ShippedRefundListQuery struct {

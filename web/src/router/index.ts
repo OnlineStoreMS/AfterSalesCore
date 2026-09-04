@@ -98,6 +98,12 @@ const router = createRouter({
           meta: { title: '已发货退款成功' },
         },
         {
+          path: 'returns/return-refund-success',
+          name: 'ReturnRefunds',
+          component: () => import('../views/shop/ReturnRefundList.vue'),
+          meta: { title: '退货退款成功' },
+        },
+        {
           path: 'returns/intercept',
           name: 'InterceptOrders',
           component: () => import('../views/shop/InterceptList.vue'),

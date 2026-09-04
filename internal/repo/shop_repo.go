@@ -118,6 +118,9 @@ func (r *ShopRepo) Delete(id uint64) error {
 		if err := tx.Where("shop_id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.ShippedRefundSuccess{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("shop_id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.ReturnRefundSuccess{}).Error; err != nil {
+			return err
+		}
 		return tx.Where("id = ? AND tenant_id = ?", id, r.tenantID).Delete(&model.MarketplaceShop{}).Error
 	})
 }
@@ -638,6 +641,131 @@ func (r *ShopRepo) UpsertShippedRefunds(shop *model.MarketplaceShop, items []mod
 		}
 		return tx.Where("shop_id = ? AND tenant_id = ? AND platform_aftersale_id NOT IN ?", shop.ID, shop.TenantID, ids).
 			Delete(&model.ShippedRefundSuccess{}).Error
+	})
+}
+
+type ReturnRefundListFilter struct {
+	ShopID    uint64
+	Keyword   string
+	Status    string
+	ApplyFrom *time.Time
+	ApplyTo   *time.Time
+	Page      int
+	PageSize  int
+	Unpaged   bool
+}
+
+func (r *ShopRepo) ListReturnRefunds(f ReturnRefundListFilter) ([]model.ReturnRefundSuccess, int64, error) {
+	q := r.db.Model(&model.ReturnRefundSuccess{}).Scopes(scopeTenant(r.tenantID))
+	if f.ShopID > 0 {
+		q = q.Where("shop_id = ?", f.ShopID)
+	}
+	if kw := strings.TrimSpace(f.Keyword); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where(
+			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR sku ILIKE ? OR logistics ILIKE ? OR order_info ILIKE ? OR aftersale_info ILIKE ? OR status ILIKE ? OR track_json ILIKE ? OR logistics_no ILIKE ?",
+			like, like, like, like, like, like, like, like, like, like,
+		)
+	}
+	if status := strings.TrimSpace(f.Status); status != "" {
+		q = q.Where("logistics_status = ?", status)
+	}
+	if f.ApplyFrom != nil {
+		q = q.Where("applied_at >= ?", f.ApplyFrom)
+	}
+	if f.ApplyTo != nil {
+		q = q.Where("applied_at <= ?", f.ApplyTo)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	q = q.Order("COALESCE(applied_at, synced_at) DESC NULLS LAST, id DESC")
+	var list []model.ReturnRefundSuccess
+	if f.Unpaged {
+		err := q.Find(&list).Error
+		return list, total, err
+	}
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 || f.PageSize > 200 {
+		f.PageSize = 20
+	}
+	err := q.Offset((f.Page - 1) * f.PageSize).Limit(f.PageSize).Find(&list).Error
+	return list, total, err
+}
+
+func (r *ShopRepo) UpsertReturnRefunds(shop *model.MarketplaceShop, items []model.ReturnRefundSuccess) error {
+	now := time.Now()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		ids := make([]string, 0, len(items))
+		for i := range items {
+			item := &items[i]
+			item.TenantID = shop.TenantID
+			item.ShopID = shop.ID
+			item.SyncedAt = now
+			aid := strings.TrimSpace(item.PlatformAftersaleID)
+			if aid == "" {
+				continue
+			}
+			ids = append(ids, aid)
+			var existing model.ReturnRefundSuccess
+			err := tx.Where("shop_id = ? AND platform_aftersale_id = ?", shop.ID, aid).
+				First(&existing).Error
+			if err == gorm.ErrRecordNotFound {
+				if err := tx.Create(item).Error; err != nil {
+					return err
+				}
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			updates := map[string]any{
+				"order_no":         item.OrderNo,
+				"product_title":    item.ProductTitle,
+				"product_image":    item.ProductImage,
+				"sku":              item.SKU,
+				"product_tags":     item.ProductTags,
+				"tags":             item.Tags,
+				"qty":              item.Qty,
+				"buy_qty":          item.BuyQty,
+				"pay_amount":       item.PayAmount,
+				"refund_amount":    item.RefundAmount,
+				"aftersale_type":   item.AftersaleType,
+				"reason":           item.Reason,
+				"status":           item.Status,
+				"order_info":       item.OrderInfo,
+				"aftersale_info":   item.AftersaleInfo,
+				"logistics":        item.Logistics,
+				"logistics_status": item.LogisticsStatus,
+				"apply_time":       item.ApplyTime,
+				"applied_at":       item.AppliedAt,
+				"raw_json":         item.RawJSON,
+				"synced_at":        now,
+			}
+			if item.LogisticsNo != "" {
+				updates["logistics_no"] = item.LogisticsNo
+			}
+			if item.Carrier != "" {
+				updates["carrier"] = item.Carrier
+			}
+			if item.ShipTime != "" {
+				updates["ship_time"] = item.ShipTime
+			}
+			if item.TrackJSON != "" {
+				updates["track_json"] = item.TrackJSON
+			}
+			if err := tx.Model(&existing).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+		q := tx.Where("shop_id = ? AND tenant_id = ?", shop.ID, shop.TenantID)
+		if len(ids) > 0 {
+			q = q.Where("platform_aftersale_id NOT IN ?", ids)
+		}
+		return q.Delete(&model.ReturnRefundSuccess{}).Error
 	})
 }
 
