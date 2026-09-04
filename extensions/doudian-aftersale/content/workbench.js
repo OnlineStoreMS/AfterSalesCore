@@ -1170,25 +1170,36 @@ function currentSelectValue(label) {
   )
 }
 
+function compactText(val) {
+  return String(val || '').replace(/\s+/g, '')
+}
+
+function optionTextMatches(text, want) {
+  const t = compactText(text)
+  const w = compactText(want)
+  if (!t || !w) return false
+  if (t === w) return true
+  if (w === '退货退款' && /已发货退款|未发货退款/.test(t)) return false
+  return t.includes(w)
+}
+
 async function pickSelectByLabel(label, want) {
   const sel = findSelectByLabel(label)
   if (!sel) return false
-  if (currentSelectValue(label) === want) return true
+  if (compactText(currentSelectValue(label)) === compactText(want)) return true
   fireClick(sel.querySelector('.auxo-select-selector, .aurora-select-content, .aurora-select-selector') || sel)
   const opt = await waitUntil(() => {
-    let hit = null
-    for (const el of queryAnyAll(
+    const shown = [...queryAnyAll(
       '.auxo-select-item, .auxo-select-item-option, .aurora-select-item, .aurora-select-item-option, [class*="select-item"]',
-    )) {
-      if (!isShown(el)) continue
-      const t = textOf(el)
-      if (t === want || t.includes(want)) hit = el
-    }
-    return hit
+    )].filter(isShown)
+    const exact = shown.find((el) => compactText(textOf(el)) === compactText(want))
+    if (exact) return exact
+    return shown.find((el) => optionTextMatches(textOf(el), want)) || null
   }, 20, 150)
   if (opt) fireClick(opt)
   await sleep(200)
-  return currentSelectValue(label) === want || currentSelectValue(label).includes(want)
+  const cur = currentSelectValue(label)
+  return compactText(cur) === compactText(want) || optionTextMatches(cur, want)
 }
 
 async function clearSelectedCards() {
@@ -1605,11 +1616,34 @@ function parseInputYmd(val) {
   return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`
 }
 
+function applyTimeMs(val) {
+  const m = String(val || '').match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/)
+  if (!m) return 0
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime()
+}
+
+function withinLast30Days(applyTime) {
+  const t = applyTimeMs(applyTime)
+  if (!t) return true
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - 29)
+  return t >= start.getTime()
+}
+
+function last30DayRange() {
+  const today = new Date()
+  const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29)
+  return { fromS: ymdOf(from), toS: ymdOf(today) }
+}
+
+function pickerCells() {
+  return [...queryAnyAll('.aurora-picker-cell, .auxo-picker-cell')].filter((el) => el.getAttribute('title') && isShown(el))
+}
+
 async function clickPickerDay(title) {
   for (let i = 0; i < 18; i++) {
-    const cell = [...queryAnyAll('.aurora-picker-cell, .auxo-picker-cell')].find(
-      (el) => el.getAttribute('title') === title && isShown(el),
-    )
+    const cell = pickerCells().find((el) => el.getAttribute('title') === title)
     if (cell) {
       fireClick(cell)
       return true
@@ -1617,7 +1651,7 @@ async function clickPickerDay(title) {
     const prev = queryAny('.aurora-picker-header-prev-btn, .auxo-picker-header-prev-btn')
     if (prev && isShown(prev) && getComputedStyle(prev).visibility !== 'hidden') {
       fireClick(prev)
-      await sleep(150)
+      await sleep(180)
       continue
     }
     return false
@@ -1625,50 +1659,53 @@ async function clickPickerDay(title) {
   return false
 }
 
+async function confirmDatePicker() {
+  const ok = [...queryAnyAll('button')].find((el) => textOf(el) === '确定' && isShown(el))
+  if (ok) fireClick(ok)
+  await sleep(200)
+}
+
 async function pickApplyTimeLast30Days() {
   await expandMoreFilters()
   const start = queryAny('input[placeholder="开始日期"]')
   const end = queryAny('input[placeholder="结束日期"]')
-  if (!start || !end) throw new Error('未找到申请时间')
-  const today = new Date()
-  const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29)
-  const fromS = ymdOf(from)
-  const toS = ymdOf(today)
-  if (parseInputYmd(start.value) === fromS && parseInputYmd(end.value) === toS) return true
+  if (!start || !end) return { ok: false, error: '未找到申请时间' }
+  const { fromS, toS } = last30DayRange()
+  if (parseInputYmd(start.value) === fromS && parseInputYmd(end.value) === toS) {
+    return { ok: true }
+  }
+  const picker = start.closest('.aurora-picker, .auxo-picker') || start
   fireClick(start)
-  await sleep(250)
+  fireClick(picker)
+  const opened = await waitUntil(() => (pickerCells().length ? true : null), 20, 150)
+  if (!opened) return { ok: false, error: '申请时间日历未打开' }
   const preset = [...queryAnyAll('button, a, span, li, div')].find((el) => {
     const t = textOf(el)
     return (t === '近30日' || t === '近30天') && isShown(el) && t.length <= 6
   })
   if (preset) {
     fireClick(preset)
-    await sleep(200)
-    const okPreset = [...queryAnyAll('button')].find((el) => textOf(el) === '确定' && isShown(el))
-    if (okPreset) fireClick(okPreset)
-    await sleep(150)
-    return true
+    await confirmDatePicker()
+    return { ok: true, via: 'preset' }
   }
-  if (!(await clickPickerDay(fromS))) throw new Error('无法选择申请开始日期')
-  await sleep(150)
-  if (!(await clickPickerDay(toS))) throw new Error('无法选择申请结束日期')
-  const ok = [...queryAnyAll('button')].find((el) => textOf(el) === '确定' && isShown(el))
-  if (ok) fireClick(ok)
-  await sleep(200)
-  return parseInputYmd(start.value) === fromS || !!start.value
+  if (!(await clickPickerDay(fromS))) return { ok: false, error: '无法选择申请开始日期' }
+  await sleep(180)
+  if (!(await clickPickerDay(toS))) return { ok: false, error: '无法选择申请结束日期' }
+  await confirmDatePicker()
+  if (parseInputYmd(start.value) === fromS || start.value) return { ok: true }
+  return { ok: false, error: '申请时间未生效' }
 }
 
 function isReturnRefundListReady() {
-  if (!currentSelectValue('售后类型').includes('退货退款')) return false
-  if (!currentSelectValue('售后状态').includes('退款成功')) return false
-  const now = ticketListFingerprint()
-  return now.total != null
+  const type = currentSelectValue('售后类型')
+  const status = currentSelectValue('售后状态')
+  if (!type.includes('退货退款') || type.includes('已发货退款') || type.includes('未发货退款')) return false
+  if (!status.includes('退款成功')) return false
+  return parseListTotal() != null
 }
 
 async function applyReturnRefundFilters() {
-  if (parseCards().some((c) => isCardSelected(c.el))) {
-    await resetAftersaleFilters()
-  }
+  await resetAftersaleFilters()
   await expandMoreFilters()
   const before = ticketListFingerprint()
   const typeOk = await pickSelectByLabel('售后类型', '退货退款')
@@ -1676,12 +1713,12 @@ async function applyReturnRefundFilters() {
   const statusOk = await pickSelectByLabel('售后状态', '退款成功')
   await sleep(300)
   if (!typeOk || !statusOk) {
-    throw new Error('无法设置售后类型/售后状态筛选')
+    throw new Error(`无法设置筛选（类型=${currentSelectValue('售后类型') || '空'} 状态=${currentSelectValue('售后状态') || '空'}）`)
   }
-  await pickApplyTimeLast30Days()
+  const datePick = await pickApplyTimeLast30Days()
   closeOpenSelects()
   await waitUntil(() => {
-    const open = queryAnyAll('.auxo-select-dropdown, .aurora-select-dropdown').some(isShown)
+    const open = queryAnyAll('.auxo-select-dropdown, .aurora-select-dropdown, .aurora-picker-dropdown').some(isShown)
     return open ? null : true
   }, 15, 150)
   const query = findButton(/查\s*询/)
@@ -1701,29 +1738,30 @@ async function applyReturnRefundFilters() {
     if (!retry) throw new Error('退货退款成功筛选未刷新列表')
   }
   await waitListSettled()
+  return datePick
 }
 
 async function collectReturnRefundSuccess() {
   locateWorkbenchPage()
   closeLogisticsDrawer()
   await sleep(400)
-  await applyReturnRefundFilters()
+  const datePick = await applyReturnRefundFilters()
   await ensureReturnPageSize()
   const expected = parseListTotal() ?? 0
   if (expected > 0) {
     await ensureFirstPage()
     await waitListSettled()
-    await waitReturnListReady(expected, { maxWait: 15000 })
     await sleep(400)
   }
   const pageSize = currentPageSize() || 10
   const pageCount = expected > 0 ? Math.max(1, Math.ceil(expected / pageSize)) : 1
   const seen = new Set()
-  const items = []
+  const raw = []
   let pages = 0
 
   async function collectCurrentPage() {
-    for (const t of collectVisibleTickets()) {
+    const rows = collectVisibleTickets()
+    for (const t of rows) {
       if (!t.platformAftersaleId || seen.has(t.platformAftersaleId)) continue
       seen.add(t.platformAftersaleId)
       let extra = { logisticsNo: '', carrier: '', shipTime: '', tracks: [] }
@@ -1732,7 +1770,7 @@ async function collectReturnRefundSuccess() {
       } catch {
         /* keep row without track */
       }
-      items.push({
+      raw.push({
         ...toShippedRefundItem(t, extra),
         aftersaleType: t.aftersaleType || '退货退款',
         status: t.status || '退款成功',
@@ -1751,7 +1789,6 @@ async function collectReturnRefundSuccess() {
         await waitForPageChange(prevIds)
       }
       await waitListSettled()
-      await waitReturnListReady(expected, { maxWait: 8000 })
     }
     pages++
     await collectCurrentPage()
@@ -1762,11 +1799,11 @@ async function collectReturnRefundSuccess() {
     fireClick(findNextPage())
     await waitForPageChange(prevIds)
     await waitListSettled()
-    await waitReturnListReady(expected, { maxWait: 8000 })
     pages++
     await collectCurrentPage()
   }
-  if (expected >= 10 && !items.length) {
+  const items = datePick?.ok ? raw : raw.filter((x) => withinLast30Days(x.applyTime))
+  if (expected >= 10 && !raw.length) {
     throw new Error(`退货退款/退款成功 ${expected} 条已出现，但列表未采到明细`)
   }
   return {
@@ -1778,6 +1815,9 @@ async function collectReturnRefundSuccess() {
       pageSize,
       pageCount,
       returned: items.length,
+      raw: raw.length,
+      dateFilter: datePick?.ok ? 'picker' : 'local-30d',
+      dateError: datePick?.ok ? '' : datePick?.error || '',
       withNo: items.filter((x) => x.logisticsNo).length,
     },
   }
@@ -2008,7 +2048,7 @@ async function collectAll() {
   try {
     const collected = await collectReturnRefundSuccess()
     returnRefundStats = collected.stats
-    if (collected.items?.length) returnRefunds = collected.items
+    returnRefunds = collected.items || []
   } catch (e) {
     returnRefundStats = { error: e instanceof Error ? e.message : String(e) }
   }

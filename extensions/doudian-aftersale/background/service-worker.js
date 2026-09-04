@@ -623,6 +623,14 @@ async function syncNow({ background = false } = {}) {
         'error',
       )
     }
+    if (collected.returnRefundStats?.error) {
+      await workLog(`退货退款采集失败：${collected.returnRefundStats.error}`, 'error')
+    } else if (collected.returnRefundStats?.dateError) {
+      await workLog(
+        `退货退款申请时间改本地近30日：${collected.returnRefundStats.dateError}`,
+        'error',
+      )
+    }
     if (collected.returnStats?.error) {
       await workLog(`退回件采集失败：${collected.returnStats.error}`, 'error')
     } else if (Array.isArray(payload.returns) || Array.isArray(payload.shippedRefunds)) {
