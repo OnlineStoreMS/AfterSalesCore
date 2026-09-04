@@ -327,6 +327,9 @@ func (s *ShopService) SidebarCounts() (*dto.SidebarCounts, error) {
 		if MatchShopTicketKind(&openTickets[i], dto.TicketKindReviewShippedRefund) {
 			out.ReviewShippedRefund++
 		}
+		if MatchShopTicketKind(&openTickets[i], dto.TicketKindBuyerReturnSigned) {
+			out.BuyerReturnSigned++
+		}
 	}
 	return out, nil
 }
@@ -344,6 +347,12 @@ func MatchShopTicketKind(t *model.AftersaleTicket, kind string) bool {
 		return view.HasBuyer && view.BuyerStatus == LogisticsAwaitPickup
 	case dto.TicketKindReviewShippedRefund:
 		return ticketHasCard(t, "待商家审核", "已发货退款")
+	case dto.TicketKindBuyerReturnSigned:
+		if !ticketHasCard(t, "待商家收/发货", "全部待收货/发货") {
+			return false
+		}
+		view := ParseTicketLogistics(t.Logistics)
+		return view.HasBuyer && view.BuyerStatus == LogisticsSigned
 	default:
 		return false
 	}
@@ -372,7 +381,7 @@ func ticketHasCard(t *model.AftersaleTicket, group, label string) bool {
 }
 
 func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, int64, error) {
-	if q.Kind != dto.TicketKindBuyerReturnPickup && q.Kind != dto.TicketKindReviewShippedRefund {
+	if q.Kind != dto.TicketKindBuyerReturnPickup && q.Kind != dto.TicketKindReviewShippedRefund && q.Kind != dto.TicketKindBuyerReturnSigned {
 		return nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
 	}
 	if q.ShopID > 0 {

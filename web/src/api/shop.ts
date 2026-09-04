@@ -163,7 +163,7 @@ export async function fetchShopTickets(id: number, params?: {
   return unwrap<PageData<AftersaleTicket>>(await client.get(`/shops/${id}/tickets`, { params }))
 }
 
-export type ShopTicketKind = 'buyer-return-pickup' | 'review-shipped-refund'
+export type ShopTicketKind = 'buyer-return-pickup' | 'review-shipped-refund' | 'buyer-return-signed'
 
 export async function fetchShopTicketsByKind(params: {
   kind: ShopTicketKind
@@ -360,6 +360,7 @@ export interface NavCounts {
   ticketTotal: number
   buyerReturnPickup: number
   reviewShippedRefund: number
+  buyerReturnSigned: number
 }
 
 export async function fetchNavCounts() {

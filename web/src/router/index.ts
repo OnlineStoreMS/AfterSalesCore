@@ -86,6 +86,16 @@ const router = createRouter({
           },
         },
         {
+          path: 'returns/signed-return',
+          name: 'SignedReturns',
+          component: () => import('../views/shop/ShopTicketList.vue'),
+          meta: {
+            title: '退货已签收',
+            kind: 'buyer-return-signed',
+            desc: '待商家收/发货 · 全部待收货/发货中，买家退货状态为已签收的售后单。',
+          },
+        },
+        {
           path: 'returns',
           name: 'Returns',
           component: () => import('../views/shop/ReturnList.vue'),

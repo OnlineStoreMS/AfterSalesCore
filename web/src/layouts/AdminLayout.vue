@@ -41,6 +41,7 @@ const breadcrumbs = computed(() => {
   if (route.path.startsWith('/shops/shipped-refund')) return ['售后中心', '店铺管理', '已发货退款']
   if (route.path.match(/^\/shops\/\d+/)) return ['售后中心', '店铺售后工作台']
   if (route.path.startsWith('/shops')) return ['售后中心', '店铺管理']
+  if (route.path.startsWith('/returns/signed-return')) return ['售后中心', '退回管理', '退货已签收']
   if (route.path.startsWith('/returns/intercept')) return ['售后中心', '退回管理', '需商家拦截快递']
   if (route.path.startsWith('/returns/shipped-success')) return ['售后中心', '退回管理', '已发货退款成功']
   if (route.path.startsWith('/returns/return-refund-success')) return ['售后中心', '退回管理', '退货退款成功']

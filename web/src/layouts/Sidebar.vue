@@ -15,6 +15,7 @@ const counts = ref<NavCounts>({
   ticketTotal: 0,
   buyerReturnPickup: 0,
   reviewShippedRefund: 0,
+  buyerReturnSigned: 0,
 })
 let pollTimer = 0
 
@@ -22,6 +23,7 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/shops/await-pickup')) return '/shops/await-pickup'
   if (route.path.startsWith('/shops/shipped-refund')) return '/shops/shipped-refund'
   if (route.path.startsWith('/shops')) return '/shops'
+  if (route.path.startsWith('/returns/signed-return')) return '/returns/signed-return'
   if (route.path.startsWith('/returns/intercept')) return '/returns/intercept'
   if (route.path.startsWith('/returns/shipped-success')) return '/returns/shipped-success'
   if (route.path.startsWith('/returns/return-refund-success')) return '/returns/return-refund-success'
@@ -122,11 +124,22 @@ watch(() => route.path, () => {
           <el-icon><RefreshLeft /></el-icon>
           <span>退回管理</span>
           <span
-            v-if="counts.interceptOrders"
+            v-if="counts.interceptOrders || counts.buyerReturnSigned"
             class="nav-badge"
-            :title="`需商家拦截 ${counts.interceptOrders}`"
-          >{{ badgeText(counts.interceptOrders) }}</span>
+            :title="[
+              counts.buyerReturnSigned ? `退货已签收 ${counts.buyerReturnSigned}` : '',
+              counts.interceptOrders ? `需商家拦截 ${counts.interceptOrders}` : '',
+            ].filter(Boolean).join(' / ')"
+          >{{ badgeText((counts.buyerReturnSigned || 0) + (counts.interceptOrders || 0)) }}</span>
         </template>
+        <el-menu-item index="/returns/signed-return" @click="navigate('/returns/signed-return')">
+          退货已签收
+          <span
+            v-if="counts.buyerReturnSigned"
+            class="nav-badge"
+            :title="`退货已签收 ${counts.buyerReturnSigned}`"
+          >{{ badgeText(counts.buyerReturnSigned) }}</span>
+        </el-menu-item>
         <el-menu-item index="/returns" @click="navigate('/returns')">退回件</el-menu-item>
         <el-menu-item index="/returns/shipped-success" @click="navigate('/returns/shipped-success')">
           已发货退款成功
