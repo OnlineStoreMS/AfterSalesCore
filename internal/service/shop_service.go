@@ -1184,6 +1184,9 @@ func nextSyncHint(shop *model.MarketplaceShop, interval time.Duration, now time.
 		return formatTime(shop.LastSyncAt.Add(interval)) + "（插件离线）"
 	}
 	if due {
+		if shop.SyncRequestedAt != nil {
+			return "已请求，等待采集"
+		}
 		return "下一次心跳"
 	}
 	return formatTime(shop.LastSyncAt.Add(interval))

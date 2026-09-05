@@ -53,6 +53,11 @@ func TestNextSyncHint(t *testing.T) {
 			want: "下一次心跳",
 		},
 		{
+			name: "online requested",
+			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &online, LastSyncAt: &staleSync, SyncRequestedAt: &online},
+			want: "已请求，等待采集",
+		},
+		{
 			name: "online waiting",
 			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &online, LastSyncAt: &recentSync},
 			want: formatTime(recentSync.Add(interval)),
