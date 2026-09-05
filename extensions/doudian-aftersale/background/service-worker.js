@@ -601,12 +601,7 @@ async function syncNow({ background = false } = {}) {
     await workLog('开始同步售后工作台')
     await prepareWorkbench(tab.id)
     await workLog('正在采集退回件、已发货退款成功、卡片与售后单')
-    const collected = await Promise.race([
-      collectFromTab(tab.id),
-      sleep(12 * 60 * 1000).then(() => {
-        throw new Error('采集超时（超过 12 分钟，可能卡在退货退款/物流）。已中止，下次心跳会重试')
-      }),
-    ])
+    const collected = await collectFromTab(tab.id)
     const payload = {
       platformShopId: collected.platformShopId || '',
       platformShopName: collected.platformShopName || '',
