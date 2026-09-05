@@ -812,7 +812,7 @@ func (s *ShopService) Heartbeat(shop *model.MarketplaceShop, in *dto.PluginHeart
 	if v := strings.TrimSpace(in.PlatformShopName); v != "" {
 		shop.PlatformShopName = v
 	}
-	if err := s.repos.Shop.Save(shop); err != nil {
+	if err := s.repos.Shop.TouchHeartbeat(shop); err != nil {
 		return nil, err
 	}
 	interval := s.pluginSyncInterval(shop.TenantID)

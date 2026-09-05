@@ -88,6 +88,25 @@ func (r *ShopRepo) Save(shop *model.MarketplaceShop) error {
 	return r.db.Save(shop).Error
 }
 
+// TouchHeartbeat 只更新在线状态，避免和 Sync 抢写 last_sync_at / sync_requested_at。
+func (r *ShopRepo) TouchHeartbeat(shop *model.MarketplaceShop) error {
+	if shop == nil || shop.ID == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	updates := map[string]any{
+		"last_seen_at":  shop.LastSeenAt,
+		"plugin_status": shop.PluginStatus,
+		"updated_at":    time.Now(),
+	}
+	if v := strings.TrimSpace(shop.PlatformShopID); v != "" {
+		updates["platform_shop_id"] = v
+	}
+	if v := strings.TrimSpace(shop.PlatformShopName); v != "" {
+		updates["platform_shop_name"] = v
+	}
+	return r.db.Model(&model.MarketplaceShop{}).Where("id = ?", shop.ID).Updates(updates).Error
+}
+
 func (r *ShopRepo) Delete(id uint64) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		var tickets []model.AftersaleTicket
