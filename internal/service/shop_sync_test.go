@@ -50,12 +50,12 @@ func TestNextSyncHint(t *testing.T) {
 		{
 			name: "online due",
 			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &online, LastSyncAt: &staleSync},
-			want: "下一次心跳",
+			want: "待自动下发",
 		},
 		{
 			name: "online requested",
 			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &online, LastSyncAt: &staleSync, SyncRequestedAt: &online},
-			want: "已请求，等待采集",
+			want: "已请求，等待 Agent 采集",
 		},
 		{
 			name: "online waiting",
@@ -65,7 +65,7 @@ func TestNextSyncHint(t *testing.T) {
 		{
 			name: "offline due",
 			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &offline, LastSyncAt: &staleSync},
-			want: "待插件上线后同步",
+			want: "待 Agent 领取后同步",
 		},
 	}
 	for _, tc := range cases {

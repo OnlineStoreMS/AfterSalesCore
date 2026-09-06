@@ -185,7 +185,7 @@ onMounted(load)
         :closable="false"
         show-icon
         class="hint"
-        title="通过飞书群机器人 Webhook 推送售后工作台提醒。配置按租户隔离；插件同步后会立即检查，同时按设定间隔定时复查时效升级。"
+        title="通过飞书群机器人 Webhook 推送售后工作台提醒。配置按租户隔离；Agent 同步后会立即检查，同时按设定间隔定时复查时效升级。"
       />
 
       <el-alert
@@ -194,7 +194,7 @@ onMounted(load)
         :closable="false"
         show-icon
         class="hint"
-        title="当前租户尚未添加店铺，请先在「店铺管理」添加并绑定插件后再启用通知。"
+        title="当前租户尚未添加店铺，请先在「店铺管理」添加并启用 Agent 采集后再启用通知。"
       />
 
       <el-form label-width="120px" class="form">

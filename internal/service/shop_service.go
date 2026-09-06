@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -14,6 +15,7 @@ import (
 
 	"aftersalescore/internal/dto"
 	"aftersalescore/internal/model"
+	"aftersalescore/internal/pkg/pluginsecret"
 	"aftersalescore/internal/repo"
 
 	"gorm.io/gorm"
@@ -25,7 +27,7 @@ const (
 
 var (
 	ErrPluginAuth      = errors.New("插件鉴权失败")
-	ErrAlreadyBound    = errors.New("店铺已绑定插件，请先重置绑定码")
+	ErrAlreadyBound    = errors.New("店铺已启用 Agent 采集，请先重置")
 	ErrBindCodeInvalid = errors.New("绑定码无效")
 )
 
@@ -36,16 +38,30 @@ var shopPlatforms = map[string]string{
 }
 
 type ShopService struct {
-	repos    *repo.Repos
-	tenantID uint64
+	repos         *repo.Repos
+	tenantID      uint64
+	codec         *pluginsecret.Codec
+	publicBaseURL string
+	agents        *AgentsCenterClient
 }
 
-func NewShopService(repos *repo.Repos) *ShopService {
-	return &ShopService{repos: repos}
+func NewShopService(repos *repo.Repos, codec *pluginsecret.Codec, publicBaseURL string, agents *AgentsCenterClient) *ShopService {
+	return &ShopService{
+		repos:         repos,
+		codec:         codec,
+		publicBaseURL: strings.TrimRight(strings.TrimSpace(publicBaseURL), "/"),
+		agents:        agents,
+	}
 }
 
 func (s *ShopService) ForTenant(tenantID uint64) *ShopService {
-	return &ShopService{repos: s.repos, tenantID: repo.NormalizeTenantID(tenantID)}
+	return &ShopService{
+		repos:         s.repos,
+		tenantID:      repo.NormalizeTenantID(tenantID),
+		codec:         s.codec,
+		publicBaseURL: s.publicBaseURL,
+		agents:        s.agents,
+	}
 }
 
 func (s *ShopService) repo() *repo.ShopRepo {
@@ -61,6 +77,84 @@ func PlatformLabel(platform string) string {
 
 func PluginAvailable(platform string) bool {
 	return platform == model.ShopPlatformDoudian
+}
+
+func (s *ShopService) ListOnlineAgentShops(platform string) ([]AgentsOnlineShop, error) {
+	if s.agents == nil {
+		return nil, fmt.Errorf("AgentsCenter 未配置")
+	}
+	return s.agents.ListOnlineShops(s.tenantID, platform)
+}
+
+func (s *ShopService) CreateFromAgent(in *dto.ShopFromAgentInput) (*dto.ShopItem, error) {
+	platform := strings.TrimSpace(in.Platform)
+	platformShopID := strings.TrimSpace(in.PlatformShopID)
+	if platform == "" || platformShopID == "" {
+		return nil, fmt.Errorf("%w: platform/platformShopId 必填", ErrBadRequest)
+	}
+	if !PluginAvailable(platform) {
+		return nil, fmt.Errorf("%w: 该平台暂不支持 Agent 采集", ErrBadRequest)
+	}
+	jobType := strings.TrimSpace(in.JobType)
+	if jobType == "" {
+		jobType = "doudian.aftersale"
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		name = strings.TrimSpace(in.PlatformShopName)
+	}
+	if name == "" {
+		name = platformShopID
+	}
+
+	shop, err := s.repo().GetByPlatformShopID(platform, platformShopID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		created, cErr := s.Create(&dto.ShopCreateInput{
+			Name:             name,
+			Platform:         platform,
+			PlatformShopID:   platformShopID,
+			PlatformShopName: strings.TrimSpace(in.PlatformShopName),
+		})
+		if cErr != nil {
+			return nil, cErr
+		}
+		shop, err = s.repo().Get(created.ID)
+		if err != nil {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
+	} else {
+		if v := strings.TrimSpace(in.PlatformShopName); v != "" {
+			shop.PlatformShopName = v
+		}
+		if name != "" && shop.Name == "" {
+			shop.Name = name
+		}
+		_ = s.repo().Save(shop)
+	}
+
+	if shop.PluginKey == "" || shop.PluginSecretEnc == "" {
+		if err := s.issuePluginCredentials(shop); err != nil {
+			return nil, err
+		}
+	}
+
+	if jobType == "doudian.aftersale" {
+		if err := s.dispatchAftersaleJob(shop); err != nil {
+			return nil, fmt.Errorf("下发 AgentsCenter 任务失败: %w", err)
+		}
+		now := time.Now()
+		shop.SyncRequestedAt = &now
+		_ = s.repo().Save(shop)
+	} else if s.agents != nil {
+		if err := s.agents.CreateJob(shop.TenantID, jobType, shop.Platform, shop.PlatformShopID, shop.PlatformShopName, "{}", "aftersales"); err != nil {
+			return nil, fmt.Errorf("下发 AgentsCenter 任务失败: %w", err)
+		}
+	}
+
+	item := s.toItem(shop)
+	return &item, nil
 }
 
 func (s *ShopService) List() ([]dto.ShopItem, error) {
@@ -110,6 +204,10 @@ func (s *ShopService) Create(in *dto.ShopCreateInput) (*dto.ShopItem, error) {
 	if _, ok := shopPlatforms[platform]; !ok {
 		return nil, fmt.Errorf("%w: 不支持的店铺平台", ErrBadRequest)
 	}
+	platformShopID := strings.TrimSpace(in.PlatformShopID)
+	if PluginAvailable(platform) && platformShopID == "" {
+		return nil, fmt.Errorf("%w: 请填写平台店铺 ID（需与 WindowsAgent 上报一致）", ErrBadRequest)
+	}
 	var shop *model.MarketplaceShop
 	var lastErr error
 	for i := 0; i < 6; i++ {
@@ -118,11 +216,13 @@ func (s *ShopService) Create(in *dto.ShopCreateInput) (*dto.ShopItem, error) {
 			return nil, err
 		}
 		shop = &model.MarketplaceShop{
-			Name:         name,
-			Platform:     platform,
-			BindCode:     code,
-			PluginStatus: model.ShopPluginUnbound,
-			Remark:       strings.TrimSpace(in.Remark),
+			Name:             name,
+			Platform:         platform,
+			BindCode:         code,
+			PluginStatus:     model.ShopPluginUnbound,
+			PlatformShopID:   platformShopID,
+			PlatformShopName: strings.TrimSpace(in.PlatformShopName),
+			Remark:           strings.TrimSpace(in.Remark),
 		}
 		lastErr = s.repo().Create(shop)
 		if lastErr == nil {
@@ -147,6 +247,12 @@ func (s *ShopService) Update(id uint64, in *dto.ShopUpdateInput) (*dto.ShopItem,
 	}
 	if name := strings.TrimSpace(in.Name); name != "" {
 		shop.Name = name
+	}
+	if v := strings.TrimSpace(in.PlatformShopID); v != "" {
+		shop.PlatformShopID = v
+	}
+	if v := strings.TrimSpace(in.PlatformShopName); v != "" {
+		shop.PlatformShopName = v
 	}
 	shop.Remark = strings.TrimSpace(in.Remark)
 	if err := s.repo().Save(shop); err != nil {
@@ -182,10 +288,35 @@ func (s *ShopService) ResetBind(id uint64) (*dto.ShopItem, error) {
 	shop.BindCode = code
 	shop.PluginKey = ""
 	shop.PluginSecretHash = ""
+	shop.PluginSecretEnc = ""
 	shop.PluginStatus = model.ShopPluginUnbound
 	shop.LastSeenAt = nil
 	shop.SyncRequestedAt = nil
 	if err := s.repo().Save(shop); err != nil {
+		return nil, err
+	}
+	item := s.toItem(shop)
+	return &item, nil
+}
+
+func (s *ShopService) EnableAgentCollect(id uint64) (*dto.ShopItem, error) {
+	shop, err := s.repo().Get(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !PluginAvailable(shop.Platform) {
+		return nil, fmt.Errorf("%w: 该平台暂不支持 Agent 采集", ErrBadRequest)
+	}
+	if strings.TrimSpace(shop.PlatformShopID) == "" {
+		return nil, fmt.Errorf("%w: 请先填写平台店铺 ID", ErrBadRequest)
+	}
+	if shop.PluginKey != "" && shop.PluginSecretEnc != "" {
+		return nil, ErrAlreadyBound
+	}
+	if err := s.issuePluginCredentials(shop); err != nil {
 		return nil, err
 	}
 	item := s.toItem(shop)
@@ -762,26 +893,118 @@ func (s *ShopService) Bind(bindCode string) (*dto.PluginBindResult, error) {
 	if shop.PluginKey != "" {
 		return nil, ErrAlreadyBound
 	}
-	key, err := randomHex(16)
-	if err != nil {
+	if err := s.ForTenant(shop.TenantID).issuePluginCredentials(shop); err != nil {
 		return nil, err
 	}
-	secret, err := randomHex(24)
+	secret, err := s.codec.Decrypt(shop.PluginSecretEnc)
 	if err != nil {
-		return nil, err
-	}
-	now := time.Now()
-	shop.PluginKey = key
-	shop.PluginSecretHash = hashSecret(secret)
-	shop.PluginStatus = model.ShopPluginBound
-	shop.LastSeenAt = &now
-	if err := s.repos.Shop.Save(shop); err != nil {
 		return nil, err
 	}
 	return &dto.PluginBindResult{
 		ShopID: shop.ID, ShopName: shop.Name, Platform: shop.Platform,
-		PluginKey: key, PluginSecret: secret,
+		PluginKey: shop.PluginKey, PluginSecret: secret,
 	}, nil
+}
+
+func (s *ShopService) issuePluginCredentials(shop *model.MarketplaceShop) error {
+	key, err := randomHex(16)
+	if err != nil {
+		return err
+	}
+	secret, err := randomHex(24)
+	if err != nil {
+		return err
+	}
+	if s.codec == nil {
+		return fmt.Errorf("plugin secret codec 未初始化")
+	}
+	enc, err := s.codec.Encrypt(secret)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	shop.PluginKey = key
+	shop.PluginSecretHash = hashSecret(secret)
+	shop.PluginSecretEnc = enc
+	shop.PluginStatus = model.ShopPluginBound
+	shop.LastSeenAt = &now
+	return s.repo().Save(shop)
+}
+
+func (s *ShopService) AgentCredentialByPlatformShop(tenantID uint64, platform, platformShopID string) (*dto.AgentShopCredential, error) {
+	platform = strings.TrimSpace(platform)
+	platformShopID = strings.TrimSpace(platformShopID)
+	if platform == "" || platformShopID == "" {
+		return nil, fmt.Errorf("%w: platform/platformShopId 必填", ErrBadRequest)
+	}
+	shop, err := s.repos.Shop.ForTenant(tenantID).GetByPlatformShopID(platform, platformShopID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.credentialFromShop(shop)
+}
+
+func (s *ShopService) credentialFromShop(shop *model.MarketplaceShop) (*dto.AgentShopCredential, error) {
+	if shop.PluginKey == "" || shop.PluginSecretEnc == "" {
+		return nil, fmt.Errorf("%w: 店铺尚未启用 Agent 采集", ErrBadRequest)
+	}
+	if s.codec == nil {
+		return nil, fmt.Errorf("plugin secret codec 未初始化")
+	}
+	secret, err := s.codec.Decrypt(shop.PluginSecretEnc)
+	if err != nil {
+		return nil, fmt.Errorf("解密采集凭证失败: %w", err)
+	}
+	return &dto.AgentShopCredential{
+		TenantID:         shop.TenantID,
+		ShopID:           shop.ID,
+		ShopName:         shop.Name,
+		Platform:         shop.Platform,
+		PlatformShopID:   shop.PlatformShopID,
+		PlatformShopName: shop.PlatformShopName,
+		PluginKey:        shop.PluginKey,
+		PluginSecret:     secret,
+		APIBase:          s.publicBaseURL,
+	}, nil
+}
+
+func (s *ShopService) buildAftersaleParamsJSON(shop *model.MarketplaceShop) (string, error) {
+	cred, err := s.credentialFromShop(shop)
+	if err != nil {
+		return "", err
+	}
+	payload := map[string]any{
+		"apiBase":          cred.APIBase,
+		"shopId":           cred.ShopID,
+		"shopName":         cred.ShopName,
+		"platform":         cred.Platform,
+		"pluginKey":        cred.PluginKey,
+		"pluginSecret":     cred.PluginSecret,
+		"platformShopId":   cred.PlatformShopID,
+		"platformShopName": cred.PlatformShopName,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func (s *ShopService) dispatchAftersaleJob(shop *model.MarketplaceShop) error {
+	if s.agents == nil {
+		return fmt.Errorf("AgentsCenter 未配置")
+	}
+	if strings.TrimSpace(shop.PlatformShopID) == "" {
+		return fmt.Errorf("%w: 平台店铺 ID 为空", ErrBadRequest)
+	}
+	params, err := s.buildAftersaleParamsJSON(shop)
+	if err != nil {
+		return err
+	}
+	return s.agents.CreateAftersaleJob(shop.TenantID, shop.Platform, shop.PlatformShopID, shop.PlatformShopName, params)
 }
 
 func (s *ShopService) AuthenticatePlugin(key, secret string) (*model.MarketplaceShop, error) {
@@ -848,16 +1071,46 @@ func (s *ShopService) RequestSync(id uint64) (*dto.ShopItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	if shop.PluginKey == "" {
-		return nil, fmt.Errorf("%w: 店铺尚未绑定插件", ErrBadRequest)
+	if shop.PluginKey == "" || shop.PluginSecretEnc == "" {
+		return nil, fmt.Errorf("%w: 店铺尚未启用 Agent 采集", ErrBadRequest)
+	}
+	if strings.TrimSpace(shop.PlatformShopID) == "" {
+		return nil, fmt.Errorf("%w: 请先填写平台店铺 ID", ErrBadRequest)
 	}
 	now := time.Now()
 	shop.SyncRequestedAt = &now
 	if err := s.repo().Save(shop); err != nil {
 		return nil, err
 	}
+	if err := s.dispatchAftersaleJob(shop); err != nil {
+		return nil, fmt.Errorf("下发 AgentsCenter 任务失败: %w", err)
+	}
 	item := s.toItem(shop)
 	return &item, nil
+}
+
+// DispatchDueAgentJobs creates AgentsCenter jobs for shops whose sync interval elapsed.
+func (s *ShopService) DispatchDueAgentJobs() (int, error) {
+	list, err := s.repos.Shop.ListBoundAgentCollectable()
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now()
+	n := 0
+	for i := range list {
+		shop := &list[i]
+		interval := s.pluginSyncInterval(shop.TenantID)
+		if !pluginShouldSync(shop, now, interval) {
+			continue
+		}
+		if err := s.dispatchAftersaleJob(shop); err != nil {
+			continue
+		}
+		shop.SyncRequestedAt = &now
+		_ = s.repos.Shop.ForTenant(shop.TenantID).Save(shop)
+		n++
+	}
+	return n, nil
 }
 
 func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput) (*dto.PluginSyncResult, error) {
@@ -1179,15 +1432,15 @@ func nextSyncHint(shop *model.MarketplaceShop, interval time.Duration, now time.
 	due := pluginShouldSync(shop, now, interval)
 	if !online {
 		if due || shop.LastSyncAt == nil {
-			return "待插件上线后同步"
+			return "待 Agent 领取后同步"
 		}
-		return formatTime(shop.LastSyncAt.Add(interval)) + "（插件离线）"
+		return formatTime(shop.LastSyncAt.Add(interval)) + "（Agent 离线）"
 	}
 	if due {
 		if shop.SyncRequestedAt != nil {
-			return "已请求，等待采集"
+			return "已请求，等待 Agent 采集"
 		}
-		return "下一次心跳"
+		return "待自动下发"
 	}
 	return formatTime(shop.LastSyncAt.Add(interval))
 }

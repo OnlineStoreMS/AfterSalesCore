@@ -8,10 +8,12 @@ import (
 	adminmw "aftersalescore/admin/middleware"
 	"aftersalescore/internal/config"
 	jwtmgr "aftersalescore/internal/pkg/jwt"
+	"aftersalescore/internal/pkg/pluginsecret"
 	"aftersalescore/internal/repo"
 	"aftersalescore/internal/scheduler"
 	"aftersalescore/internal/service"
 	"aftersalescore/internal/storage"
+	"aftersalescore/internalapi"
 	"aftersalescore/plugin"
 
 	"github.com/gin-gonic/gin"
@@ -48,7 +50,12 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	_ = edgeDeviceSvc.EnsureDefaults()
 	_ = edgeDeviceSvc.SyncFromRecords()
 
-	shopSvc := service.NewShopService(repos)
+	codec, err := pluginsecret.NewCodec(cfg.Auth.PluginSecretKey)
+	if err != nil {
+		panic(err)
+	}
+	agentsClient := service.NewAgentsCenterClient(cfg.AgentsCenter.BaseURL, cfg.AgentsCenter.InternalToken)
+	shopSvc := service.NewShopService(repos, codec, cfg.Apps.PublicBaseURL, agentsClient)
 	notifySvc := service.NewNotificationService(repos)
 	unboxingH := admin.NewUnboxingHandler(unboxingSvc)
 	edgeRecordH := admin.NewEdgeRecordHandler(edgeRecordSvc)
@@ -56,9 +63,11 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	shopH := admin.NewShopHandler(shopSvc)
 	notifyH := admin.NewNotificationHandler(notifySvc)
 	pluginH := plugin.NewHandler(shopSvc, notifySvc)
+	internalH := internalapi.NewHandler(shopSvc, cfg.Auth.InternalToken)
 
 	go edgeDeviceSvc.StartHealthPoller(context.Background())
 	scheduler.NewNotificationScheduler(notifySvc).Start()
+	scheduler.NewAgentSyncScheduler(shopSvc).Start()
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "service": "aftersalescore"})
@@ -76,6 +85,10 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	authed.Use(pluginH.AuthRequired())
 	authed.POST("/heartbeat", pluginH.Heartbeat)
 	authed.POST("/sync", pluginH.Sync)
+
+	internalGroup := v1.Group("/internal")
+	internalGroup.Use(internalH.AuthRequired())
+	internalGroup.GET("/agent-shops", internalH.AgentShopCredential)
 
 	return r
 }
@@ -95,7 +108,7 @@ func corsMiddleware(cfg *config.Config) gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", origin)
 		}
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Plugin-Key,X-Plugin-Secret")
+		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Plugin-Key,X-Plugin-Secret,X-Internal-Token")
 		c.Header("Access-Control-Allow-Credentials", "true")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)

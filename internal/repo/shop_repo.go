@@ -79,6 +79,26 @@ func (r *ShopRepo) GetByPluginKey(key string) (*model.MarketplaceShop, error) {
 	return &shop, nil
 }
 
+func (r *ShopRepo) GetByPlatformShopID(platform, platformShopID string) (*model.MarketplaceShop, error) {
+	var shop model.MarketplaceShop
+	q := r.db.Where("platform = ? AND platform_shop_id = ?", strings.TrimSpace(platform), strings.TrimSpace(platformShopID))
+	if r.tenantID > 0 {
+		q = q.Scopes(scopeTenant(r.tenantID))
+	}
+	err := q.First(&shop).Error
+	if err != nil {
+		return nil, err
+	}
+	return &shop, nil
+}
+
+func (r *ShopRepo) ListBoundAgentCollectable() ([]model.MarketplaceShop, error) {
+	var list []model.MarketplaceShop
+	err := r.db.Where("plugin_key <> '' AND plugin_secret_enc <> '' AND platform_shop_id <> ''").
+		Order("id asc").Find(&list).Error
+	return list, err
+}
+
 func (r *ShopRepo) Create(shop *model.MarketplaceShop) error {
 	shop.TenantID = r.tenantID
 	return r.db.Create(shop).Error

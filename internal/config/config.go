@@ -8,12 +8,14 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Auth     AuthConfig
-	Storage  StorageConfig
-	Edge     EdgeConfig
-	CORS     CORSConfig
+	Server       ServerConfig
+	Database     DatabaseConfig
+	Auth         AuthConfig
+	Storage      StorageConfig
+	Edge         EdgeConfig
+	CORS         CORSConfig
+	Apps         AppsConfig
+	AgentsCenter AgentsCenterConfig `mapstructure:"agentscenter"`
 }
 
 type ServerConfig struct {
@@ -28,8 +30,19 @@ type DatabaseConfig struct {
 }
 
 type AuthConfig struct {
-	Enabled   bool
-	JWTSecret string `mapstructure:"jwt_secret"`
+	Enabled         bool
+	JWTSecret       string `mapstructure:"jwt_secret"`
+	PluginSecretKey string `mapstructure:"plugin_secret_key"`
+	InternalToken   string `mapstructure:"internal_token"`
+}
+
+type AppsConfig struct {
+	PublicBaseURL string `mapstructure:"public_base_url"`
+}
+
+type AgentsCenterConfig struct {
+	BaseURL       string `mapstructure:"base_url"`
+	InternalToken string `mapstructure:"internal_token"`
 }
 
 type StorageConfig struct {
@@ -95,6 +108,21 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Auth.JWTSecret == "" {
 		cfg.Auth.JWTSecret = "change-me-in-production-use-long-random-string"
+	}
+	if cfg.Auth.PluginSecretKey == "" {
+		cfg.Auth.PluginSecretKey = cfg.Auth.JWTSecret
+	}
+	if cfg.Auth.InternalToken == "" {
+		cfg.Auth.InternalToken = cfg.Auth.JWTSecret
+	}
+	if cfg.Apps.PublicBaseURL == "" {
+		cfg.Apps.PublicBaseURL = "http://localhost:5176"
+	}
+	if cfg.AgentsCenter.BaseURL == "" {
+		cfg.AgentsCenter.BaseURL = "http://localhost:5192"
+	}
+	if cfg.AgentsCenter.InternalToken == "" {
+		cfg.AgentsCenter.InternalToken = cfg.Auth.InternalToken
 	}
 	if cfg.Storage.Driver == "" {
 		cfg.Storage.Driver = "minio"

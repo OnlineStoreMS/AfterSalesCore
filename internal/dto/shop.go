@@ -1,14 +1,38 @@
 package dto
 
 type ShopCreateInput struct {
-	Name     string `json:"name" binding:"required"`
-	Platform string `json:"platform"`
-	Remark   string `json:"remark"`
+	Name             string `json:"name" binding:"required"`
+	Platform         string `json:"platform"`
+	PlatformShopID   string `json:"platformShopId"`
+	PlatformShopName string `json:"platformShopName"`
+	Remark           string `json:"remark"`
 }
 
 type ShopUpdateInput struct {
-	Name   string `json:"name"`
-	Remark string `json:"remark"`
+	Name             string `json:"name"`
+	PlatformShopID   string `json:"platformShopId"`
+	PlatformShopName string `json:"platformShopName"`
+	Remark           string `json:"remark"`
+}
+
+type AgentShopCredential struct {
+	TenantID         uint64 `json:"tenantId"`
+	ShopID           uint64 `json:"shopId"`
+	ShopName         string `json:"shopName"`
+	Platform         string `json:"platform"`
+	PlatformShopID   string `json:"platformShopId"`
+	PlatformShopName string `json:"platformShopName"`
+	PluginKey        string `json:"pluginKey"`
+	PluginSecret     string `json:"pluginSecret"`
+	APIBase          string `json:"apiBase"`
+}
+
+type ShopFromAgentInput struct {
+	Platform         string `json:"platform" binding:"required"`
+	PlatformShopID   string `json:"platformShopId" binding:"required"`
+	PlatformShopName string `json:"platformShopName"`
+	JobType          string `json:"jobType"`
+	Name             string `json:"name"`
 }
 
 type ShopItem struct {

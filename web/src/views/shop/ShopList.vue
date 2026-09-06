@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CopyDocument, Plus, Shop } from '@element-plus/icons-vue'
+import { Plus, Shop } from '@element-plus/icons-vue'
 import {
   PLATFORM_OPTIONS,
   PLUGIN_STATUS_MAP,
   PLUGIN_SYNC_OPTIONS,
-  createShop,
+  createShopFromAgent,
   deleteShop,
+  enableAgentCollect,
+  fetchAgentOnlineShops,
   fetchPluginSetting,
   fetchShops,
   resetShopBind,
@@ -24,9 +26,29 @@ const loading = ref(false)
 const tableData = ref<MarketplaceShop[]>([])
 const dialogVisible = ref(false)
 const editing = ref<MarketplaceShop | null>(null)
-const form = ref({ name: '', platform: 'doudian' as ShopPlatform, remark: '' })
 const syncMinutes = ref(30)
 const savingSync = ref(false)
+const onlineShops = ref<Array<{
+  platform: string
+  platformShopId: string
+  platformShopName: string
+  browserChannel: string
+  agentName: string
+}>>([])
+const loadingOnline = ref(false)
+
+const form = ref({
+  platform: 'doudian' as ShopPlatform,
+  platformShopId: '',
+  platformShopName: '',
+  jobType: 'doudian.aftersale',
+  name: '',
+  remark: '',
+})
+
+const jobOptions = [
+  { value: 'doudian.aftersale', label: '抖店售后单抓取' },
+]
 
 async function loadData() {
   loading.value = true
@@ -41,12 +63,30 @@ async function loadData() {
   }
 }
 
+async function loadOnlineShops() {
+  loadingOnline.value = true
+  try {
+    onlineShops.value = await fetchAgentOnlineShops(form.value.platform)
+  } catch (e) {
+    onlineShops.value = []
+    ElMessage.error((e as Error).message || '加载 Agents 上线店铺失败')
+  } finally {
+    loadingOnline.value = false
+  }
+}
+
+watch(() => form.value.platform, () => {
+  form.value.platformShopId = ''
+  form.value.platformShopName = ''
+  if (dialogVisible.value && !editing.value) loadOnlineShops()
+})
+
 async function saveSyncInterval() {
   savingSync.value = true
   try {
     const setting = await savePluginSetting({ pluginSyncIntervalMin: syncMinutes.value })
     syncMinutes.value = setting.pluginSyncIntervalMin
-    ElMessage.success('已保存，插件下次心跳后按新间隔自动同步')
+    ElMessage.success('已保存，到期后自动向 Agents 中心下发采集任务')
   } catch (e) {
     ElMessage.error((e as Error).message || '保存失败')
   } finally {
@@ -64,26 +104,65 @@ function statusType(s: string) {
   return PLUGIN_STATUS_MAP[s as keyof typeof PLUGIN_STATUS_MAP]?.type || 'info'
 }
 
-function openCreate() {
+async function openCreate() {
   editing.value = null
-  form.value = { name: '', platform: 'doudian', remark: '' }
+  form.value = {
+    platform: 'doudian',
+    platformShopId: '',
+    platformShopName: '',
+    jobType: 'doudian.aftersale',
+    name: '',
+    remark: '',
+  }
   dialogVisible.value = true
+  await loadOnlineShops()
 }
 
 function openEdit(row: MarketplaceShop) {
   editing.value = row
-  form.value = { name: row.name, platform: row.platform, remark: row.remark || '' }
+  form.value = {
+    platform: row.platform,
+    platformShopId: row.platformShopId || '',
+    platformShopName: row.platformShopName || '',
+    jobType: 'doudian.aftersale',
+    name: row.name,
+    remark: row.remark || '',
+  }
   dialogVisible.value = true
+}
+
+function onPickShop(id: string) {
+  form.value.platformShopId = id
+  const s = onlineShops.value.find((x) => x.platformShopId === id)
+  if (s) {
+    form.value.platformShopName = s.platformShopName
+    if (!form.value.name) form.value.name = s.platformShopName || s.platformShopId
+  }
 }
 
 async function handleSave() {
   try {
     if (editing.value) {
-      await updateShop(editing.value.id, { name: form.value.name, remark: form.value.remark })
+      await updateShop(editing.value.id, {
+        name: form.value.name,
+        platformShopId: form.value.platformShopId,
+        platformShopName: form.value.platformShopName,
+        remark: form.value.remark,
+      })
       ElMessage.success('已更新')
     } else {
-      const shop = await createShop(form.value)
-      ElMessage.success(shop.pluginAvailable ? '已添加，请用绑定码连接插件' : '已添加。该平台插件尚未提供，可先保存店铺')
+      if (!form.value.platformShopId) {
+        ElMessage.error('请选择 Agents 中心已上线店铺')
+        return
+      }
+      await createShopFromAgent({
+        platform: form.value.platform,
+        platformShopId: form.value.platformShopId,
+        platformShopName: form.value.platformShopName,
+        jobType: form.value.jobType,
+        name: form.value.name,
+      })
+      ElMessage.success('已添加并下发 Agents 采集任务')
     }
     dialogVisible.value = false
     loadData()
@@ -92,20 +171,21 @@ async function handleSave() {
   }
 }
 
-async function copyBind(row: MarketplaceShop) {
+async function handleEnable(row: MarketplaceShop) {
   try {
-    await navigator.clipboard.writeText(row.bindCode)
-    ElMessage.success('绑定码已复制')
-  } catch {
-    ElMessage.info(row.bindCode)
+    await enableAgentCollect(row.id)
+    ElMessage.success('已启用 Agent 采集')
+    loadData()
+  } catch (e) {
+    ElMessage.error((e as Error).message || '启用失败')
   }
 }
 
 async function handleReset(row: MarketplaceShop) {
   try {
-    await ElMessageBox.confirm('重置后原插件密钥立即失效，需要重新填写绑定码。', '重置绑定码')
-    const shop = await resetShopBind(row.id)
-    ElMessage.success(`新绑定码：${shop.bindCode}`)
+    await ElMessageBox.confirm('重置后原采集凭证立即失效，需重新启用。', '重置采集')
+    await resetShopBind(row.id)
+    ElMessage.success('已重置')
     loadData()
   } catch (e) {
     if (e !== 'cancel') ElMessage.error((e as Error).message || '重置失败')
@@ -130,7 +210,7 @@ function openWorkbench(row: MarketplaceShop) {
 async function handleRequestSync(row: MarketplaceShop) {
   try {
     await requestShopSync(row.id)
-    ElMessage.success('已请求同步，插件下次心跳（约 1 分钟内）会采集')
+    ElMessage.success('已向 Agents 中心下发采集任务')
     loadData()
   } catch (e) {
     ElMessage.error((e as Error).message || '请求失败')
@@ -143,16 +223,16 @@ async function handleRequestSync(row: MarketplaceShop) {
     <el-card v-loading="loading">
       <template #header>
         <div class="header">
-          <span><el-icon><Shop /></el-icon> 店铺管理</span>
-          <el-button type="primary" :icon="Plus" @click="openCreate">添加店铺</el-button>
+          <span><el-icon><Shop /></el-icon> 店铺采集</span>
+          <el-button type="primary" :icon="Plus" @click="openCreate">添加采集</el-button>
         </div>
       </template>
 
       <p class="hint">
-        新增店铺后生成绑定码。抖店插件安装后填入售后管理地址和绑定码，即可把售后工作台卡片与售后单同步到这里。
+        从 Agents 中心「已上线店铺会话」中选择店铺，并选择任务（如抖店售后单抓取）。添加后会自动启用采集凭证并向 Agents 中心下发任务；WindowsAgent 按本机店铺会话领取执行。
       </p>
       <div class="sync-setting">
-        <span class="sync-label">插件自动同步</span>
+        <span class="sync-label">自动采集间隔</span>
         <el-select v-model="syncMinutes" style="width: 160px">
           <el-option
             v-for="opt in PLUGIN_SYNC_OPTIONS"
@@ -162,7 +242,7 @@ async function handleRequestSync(row: MarketplaceShop) {
           />
         </el-select>
         <el-button type="primary" plain :loading="savingSync" @click="saveSyncInterval">保存间隔</el-button>
-        <span class="sync-tip">到点后由插件心跳触发并自动打开抖店工作台采集。需保持 Chrome 已启动、插件已绑定、抖店已登录。「请求同步」会在下一次心跳马上采一次。</span>
+        <span class="sync-tip">到期后自动再向 Agents 中心创建采集任务。</span>
       </div>
 
       <el-table :data="tableData" stripe border>
@@ -176,17 +256,11 @@ async function handleRequestSync(row: MarketplaceShop) {
                 :title="`待处理售后 ${row.pendingTicketCount} 单`"
               >{{ row.pendingTicketCount > 99 ? '99+' : row.pendingTicketCount }}</span>
             </div>
-            <div v-if="row.platformShopName" class="sub">平台店铺：{{ row.platformShopName }}</div>
+            <div v-if="row.platformShopId" class="sub">店铺 ID：{{ row.platformShopId }}</div>
           </template>
         </el-table-column>
         <el-table-column prop="platformLabel" label="平台" width="100" />
-        <el-table-column label="绑定码" width="180">
-          <template #default="{ row }">
-            <code class="bind-code">{{ row.bindCode }}</code>
-            <el-button type="primary" link :icon="CopyDocument" @click="copyBind(row)">复制</el-button>
-          </template>
-        </el-table-column>
-        <el-table-column label="插件" width="100" align="center">
+        <el-table-column label="采集" width="100" align="center">
           <template #default="{ row }">
             <el-tag v-if="!row.pluginAvailable" type="warning" size="small">未提供</el-tag>
             <el-tag v-else :type="statusType(row.pluginStatus)" size="small">{{ statusLabel(row.pluginStatus) }}</el-tag>
@@ -198,12 +272,15 @@ async function handleRequestSync(row: MarketplaceShop) {
         <el-table-column prop="nextSyncAt" label="下次同步" width="190">
           <template #default="{ row }">{{ row.nextSyncAt || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="lastSeenAt" label="最近在线" width="170">
-          <template #default="{ row }">{{ row.lastSeenAt || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openWorkbench(row)">工作台</el-button>
+            <el-button
+              v-if="row.pluginAvailable && row.pluginStatus === 'unbound'"
+              type="primary"
+              link
+              @click="handleEnable(row)"
+            >启用采集</el-button>
             <el-button
               v-if="row.pluginStatus !== 'unbound'"
               type="primary"
@@ -213,69 +290,81 @@ async function handleRequestSync(row: MarketplaceShop) {
               {{ row.syncRequested ? '已请求同步' : '请求同步' }}
             </el-button>
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
-            <el-button type="primary" link @click="handleReset(row)">重置绑定</el-button>
+            <el-button type="primary" link @click="handleReset(row)">重置采集</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editing ? '编辑店铺' : '添加店铺'" width="480px">
-      <el-form label-width="100px">
-        <el-form-item label="店铺名称" required>
-          <el-input v-model="form.name" placeholder="如 甄选美妆抖店" />
-        </el-form-item>
-        <el-form-item label="平台类型" required>
-          <el-select v-model="form.platform" :disabled="!!editing" style="width: 100%">
-            <el-option v-for="p in PLATFORM_OPTIONS" :key="p.value" :label="p.label" :value="p.value" />
-          </el-select>
-        </el-form-item>
-        <el-alert
-          v-if="!editing && form.platform !== 'doudian'"
-          type="warning"
-          :closable="false"
-          show-icon
-          title="该平台插件尚未提供，可先创建店铺，绑定与同步暂不可用。"
-          style="margin-bottom: 12px"
-        />
-        <el-form-item label="备注">
-          <el-input v-model="form.remark" type="textarea" :rows="2" />
-        </el-form-item>
+    <el-dialog v-model="dialogVisible" :title="editing ? '编辑店铺' : '添加采集任务'" width="560px">
+      <el-form label-width="120px">
+        <template v-if="!editing">
+          <el-form-item label="平台类型" required>
+            <el-select v-model="form.platform" style="width: 100%">
+              <el-option v-for="p in PLATFORM_OPTIONS" :key="p.value" :label="p.label" :value="p.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="上线店铺" required>
+            <el-select
+              :model-value="form.platformShopId"
+              filterable
+              :loading="loadingOnline"
+              placeholder="选择 Agents 中心已上线店铺"
+              style="width: 100%"
+              @change="onPickShop"
+            >
+              <el-option
+                v-for="s in onlineShops"
+                :key="s.platformShopId"
+                :label="`${s.platformShopName || s.platformShopId}（${s.platformShopId} · ${s.agentName || '节点'} · ${s.browserChannel || '-'}）`"
+                :value="s.platformShopId"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="任务类型" required>
+            <el-select v-model="form.jobType" style="width: 100%">
+              <el-option v-for="j in jobOptions" :key="j.value" :label="j.label" :value="j.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="显示名称">
+            <el-input v-model="form.name" placeholder="默认用店铺名称" />
+          </el-form-item>
+        </template>
+        <template v-else>
+          <el-form-item label="店铺名称" required>
+            <el-input v-model="form.name" />
+          </el-form-item>
+          <el-form-item label="平台店铺 ID">
+            <el-input v-model="form.platformShopId" />
+          </el-form-item>
+          <el-form-item label="平台店铺名">
+            <el-input v-model="form.platformShopName" />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="form.remark" type="textarea" :rows="2" />
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
+        <el-button type="primary" @click="handleSave">{{ editing ? '保存' : '添加并下发' }}</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.hint { color: #909399; margin: 0 0 12px; font-size: 13px; line-height: 1.6; }
-.sync-setting { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; flex-wrap: wrap; }
-.sync-label { color: #303133; font-size: 13px; white-space: nowrap; }
-.sync-tip { color: #909399; font-size: 12px; }
-.bind-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.08em;
-  margin-right: 4px;
-}
-.shop-title { display: inline-flex; align-items: center; gap: 6px; }
-.shop-name { font-weight: 600; }
+.header { display: flex; justify-content: space-between; align-items: center; }
+.hint { color: #606266; margin: 0 0 12px; line-height: 1.6; }
+.sync-setting { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.sync-label { font-weight: 500; }
+.sync-tip { color: #909399; font-size: 13px; }
+.shop-title { display: flex; align-items: center; gap: 6px; }
+.shop-name { font-weight: 500; }
 .count-dot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: #f56c6c;
-  color: #fff;
-  font-size: 12px;
-  line-height: 1;
-  flex-shrink: 0;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: #f56c6c; color: #fff; font-size: 12px; line-height: 18px; text-align: center;
 }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
 </style>

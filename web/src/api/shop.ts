@@ -90,9 +90,9 @@ export const PLATFORM_OPTIONS: { value: ShopPlatform; label: string }[] = [
 ]
 
 export const PLUGIN_STATUS_MAP: Record<PluginStatus, { label: string; type: '' | 'success' | 'warning' | 'info' | 'danger' }> = {
-  unbound: { label: '未绑定', type: 'info' },
-  online: { label: '在线', type: 'success' },
-  offline: { label: '离线', type: 'danger' },
+  unbound: { label: '未启用', type: 'info' },
+  online: { label: '已启用', type: 'success' },
+  offline: { label: '已启用', type: 'success' },
 }
 
 export interface PluginSetting {
@@ -125,11 +125,34 @@ export async function fetchShop(id: number) {
   return unwrap<MarketplaceShop>(await client.get(`/shops/${id}`))
 }
 
-export async function createShop(data: { name: string; platform?: ShopPlatform; remark?: string }) {
-  return unwrap<MarketplaceShop>(await client.post('/shops', data))
+export async function fetchAgentOnlineShops(platform?: string) {
+  return unwrap<Array<{
+    platform: string
+    platformShopId: string
+    platformShopName: string
+    browserChannel: string
+    agentId: number
+    agentName: string
+    agentOnline: boolean
+  }>>(await client.get('/agent-online-shops', { params: { platform } }))
 }
 
-export async function updateShop(id: number, data: { name?: string; remark?: string }) {
+export async function createShopFromAgent(data: {
+  platform: string
+  platformShopId: string
+  platformShopName?: string
+  jobType?: string
+  name?: string
+}) {
+  return unwrap<MarketplaceShop>(await client.post('/shops/from-agent', data))
+}
+
+export async function updateShop(id: number, data: {
+  name?: string
+  platformShopId?: string
+  platformShopName?: string
+  remark?: string
+}) {
   return unwrap<MarketplaceShop>(await client.put(`/shops/${id}`, data))
 }
 
@@ -139,6 +162,10 @@ export async function deleteShop(id: number) {
 
 export async function resetShopBind(id: number) {
   return unwrap<MarketplaceShop>(await client.post(`/shops/${id}/reset-bind`))
+}
+
+export async function enableAgentCollect(id: number) {
+  return unwrap<MarketplaceShop>(await client.post(`/shops/${id}/enable-agent-collect`))
 }
 
 export async function requestShopSync(id: number) {

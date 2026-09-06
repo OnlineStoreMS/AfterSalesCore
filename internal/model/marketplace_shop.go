@@ -21,8 +21,9 @@ type MarketplaceShop struct {
 	BindCode         string     `gorm:"size:16;uniqueIndex;not null" json:"bindCode"`
 	PluginKey        string     `gorm:"size:64;index" json:"pluginKey"`
 	PluginSecretHash string     `gorm:"size:128" json:"-"`
+	PluginSecretEnc  string     `gorm:"size:512" json:"-"` // AES-GCM, for AgentsCenter job params
 	PluginStatus     string     `gorm:"size:32;not null;default:unbound" json:"pluginStatus"`
-	PlatformShopID   string     `gorm:"size:64" json:"platformShopId"`
+	PlatformShopID   string     `gorm:"size:64;index" json:"platformShopId"`
 	PlatformShopName string     `gorm:"size:128" json:"platformShopName"`
 	LastSyncAt       *time.Time `json:"lastSyncAt"`
 	LastSeenAt       *time.Time `json:"lastSeenAt"`

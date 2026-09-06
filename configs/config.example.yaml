@@ -9,6 +9,8 @@ database:
 auth:
   enabled: true
   jwt_secret: "与 UserCore 一致"
+  plugin_secret_key: "change-me-plugin-secret-key"
+  internal_token: "change-me-internal-token"
 
 storage:
   driver: minio
@@ -44,3 +46,11 @@ cors:
     - "http://127.0.0.1:5176"
     - "http://localhost:5174"
     - "http://127.0.0.1:5174"
+
+apps:
+  public_base_url: "http://localhost:5176"
+
+agentscenter:
+  base_url: "http://localhost:8107"
+  internal_token: "change-me-internal-token"
+
