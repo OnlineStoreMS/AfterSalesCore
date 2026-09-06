@@ -143,6 +143,7 @@ export async function createShopFromAgent(data: {
   platformShopName?: string
   jobType?: string
   name?: string
+  intervalMinutes?: number
 }) {
   return unwrap<MarketplaceShop>(await client.post('/shops/from-agent', data))
 }

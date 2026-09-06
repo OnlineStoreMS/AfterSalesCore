@@ -141,8 +141,12 @@ func (s *ShopService) CreateFromAgent(in *dto.ShopFromAgentInput) (*dto.ShopItem
 	}
 
 	if jobType == "doudian.aftersale" {
-		if err := s.dispatchAftersaleJob(shop); err != nil {
-			return nil, fmt.Errorf("下发 AgentsCenter 任务失败: %w", err)
+		interval := in.IntervalMinutes
+		if interval <= 0 {
+			interval = s.repos.Shop.ForTenant(shop.TenantID).PluginSyncMinutes()
+		}
+		if err := s.upsertAftersaleAssignment(shop, interval, true); err != nil {
+			return nil, fmt.Errorf("写入 AgentsCenter 采集订阅失败: %w", err)
 		}
 		now := time.Now()
 		shop.SyncRequestedAt = &now
@@ -318,6 +322,10 @@ func (s *ShopService) EnableAgentCollect(id uint64) (*dto.ShopItem, error) {
 	}
 	if err := s.issuePluginCredentials(shop); err != nil {
 		return nil, err
+	}
+	interval := s.repos.Shop.ForTenant(shop.TenantID).PluginSyncMinutes()
+	if err := s.upsertAftersaleAssignment(shop, interval, true); err != nil {
+		return nil, fmt.Errorf("写入 AgentsCenter 采集订阅失败: %w", err)
 	}
 	item := s.toItem(shop)
 	return &item, nil
@@ -994,6 +1002,11 @@ func (s *ShopService) buildAftersaleParamsJSON(shop *model.MarketplaceShop) (str
 }
 
 func (s *ShopService) dispatchAftersaleJob(shop *model.MarketplaceShop) error {
+	interval := s.repos.Shop.ForTenant(shop.TenantID).PluginSyncMinutes()
+	return s.upsertAftersaleAssignment(shop, interval, true)
+}
+
+func (s *ShopService) upsertAftersaleAssignment(shop *model.MarketplaceShop, intervalMinutes int, triggerNow bool) error {
 	if s.agents == nil {
 		return fmt.Errorf("AgentsCenter 未配置")
 	}
@@ -1004,7 +1017,15 @@ func (s *ShopService) dispatchAftersaleJob(shop *model.MarketplaceShop) error {
 	if err != nil {
 		return err
 	}
-	return s.agents.CreateAftersaleJob(shop.TenantID, shop.Platform, shop.PlatformShopID, shop.PlatformShopName, params)
+	return s.agents.UpsertAftersaleAssignment(
+		shop.TenantID,
+		shop.Platform,
+		shop.PlatformShopID,
+		shop.PlatformShopName,
+		params,
+		intervalMinutes,
+		triggerNow,
+	)
 }
 
 func (s *ShopService) AuthenticatePlugin(key, secret string) (*model.MarketplaceShop, error) {
@@ -1055,7 +1076,33 @@ func (s *ShopService) SavePluginSetting(in dto.PluginSetting) (dto.PluginSetting
 	if err != nil {
 		return dto.PluginSetting{}, err
 	}
-	return dto.PluginSetting{PluginSyncIntervalMin: item.PluginSyncIntervalMin}, nil
+	minutes := item.PluginSyncIntervalMin
+	if err := s.syncAgentAssignmentsInterval(minutes); err != nil {
+		return dto.PluginSetting{PluginSyncIntervalMin: minutes}, fmt.Errorf("间隔已保存，但同步 Agents 任务失败: %w", err)
+	}
+	return dto.PluginSetting{PluginSyncIntervalMin: minutes}, nil
+}
+
+// syncAgentAssignmentsInterval 将本租户已启用采集的店铺订阅间隔/参数同步到 Agents 中心。
+func (s *ShopService) syncAgentAssignmentsInterval(intervalMinutes int) error {
+	if s.agents == nil {
+		return nil
+	}
+	list, err := s.repo().List()
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for i := range list {
+		shop := &list[i]
+		if shop.PluginKey == "" || shop.PluginSecretEnc == "" || strings.TrimSpace(shop.PlatformShopID) == "" {
+			continue
+		}
+		if err := s.upsertAftersaleAssignment(shop, intervalMinutes, false); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func (s *ShopService) pluginSyncInterval(tenantID uint64) time.Duration {
@@ -1083,13 +1130,13 @@ func (s *ShopService) RequestSync(id uint64) (*dto.ShopItem, error) {
 		return nil, err
 	}
 	if err := s.dispatchAftersaleJob(shop); err != nil {
-		return nil, fmt.Errorf("下发 AgentsCenter 任务失败: %w", err)
+		return nil, fmt.Errorf("触发 AgentsCenter 采集失败: %w", err)
 	}
 	item := s.toItem(shop)
 	return &item, nil
 }
 
-// DispatchDueAgentJobs creates AgentsCenter jobs for shops whose sync interval elapsed.
+// DispatchDueAgentJobs 售后中心按间隔向 Agents 下发执行单（参数含上报地址等）。
 func (s *ShopService) DispatchDueAgentJobs() (int, error) {
 	list, err := s.repos.Shop.ListBoundAgentCollectable()
 	if err != nil {

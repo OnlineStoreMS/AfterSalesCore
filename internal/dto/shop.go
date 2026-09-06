@@ -33,6 +33,7 @@ type ShopFromAgentInput struct {
 	PlatformShopName string `json:"platformShopName"`
 	JobType          string `json:"jobType"`
 	Name             string `json:"name"`
+	IntervalMinutes  int    `json:"intervalMinutes"`
 }
 
 type ShopItem struct {

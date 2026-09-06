@@ -44,6 +44,7 @@ const form = ref({
   jobType: 'doudian.aftersale',
   name: '',
   remark: '',
+  intervalMinutes: 30,
 })
 
 const jobOptions = [
@@ -86,7 +87,7 @@ async function saveSyncInterval() {
   try {
     const setting = await savePluginSetting({ pluginSyncIntervalMin: syncMinutes.value })
     syncMinutes.value = setting.pluginSyncIntervalMin
-    ElMessage.success('已保存，到期后自动向 Agents 中心下发采集任务')
+    ElMessage.success('已保存，并已更新各店铺采集任务的执行间隔')
   } catch (e) {
     ElMessage.error((e as Error).message || '保存失败')
   } finally {
@@ -113,6 +114,7 @@ async function openCreate() {
     jobType: 'doudian.aftersale',
     name: '',
     remark: '',
+    intervalMinutes: syncMinutes.value || 30,
   }
   dialogVisible.value = true
   await loadOnlineShops()
@@ -127,6 +129,7 @@ function openEdit(row: MarketplaceShop) {
     jobType: 'doudian.aftersale',
     name: row.name,
     remark: row.remark || '',
+    intervalMinutes: syncMinutes.value || 30,
   }
   dialogVisible.value = true
 }
@@ -161,8 +164,9 @@ async function handleSave() {
         platformShopName: form.value.platformShopName,
         jobType: form.value.jobType,
         name: form.value.name,
+        intervalMinutes: form.value.intervalMinutes,
       })
-      ElMessage.success('已添加并下发 Agents 采集任务')
+      ElMessage.success('已创建采集任务并触发首次执行')
     }
     dialogVisible.value = false
     loadData()
@@ -210,7 +214,7 @@ function openWorkbench(row: MarketplaceShop) {
 async function handleRequestSync(row: MarketplaceShop) {
   try {
     await requestShopSync(row.id)
-    ElMessage.success('已向 Agents 中心下发采集任务')
+    ElMessage.success('已请求立即执行采集')
     loadData()
   } catch (e) {
     ElMessage.error((e as Error).message || '请求失败')
@@ -229,7 +233,7 @@ async function handleRequestSync(row: MarketplaceShop) {
       </template>
 
       <p class="hint">
-        从 Agents 中心「已上线店铺会话」中选择店铺，并选择任务（如抖店售后单抓取）。添加后会自动启用采集凭证并向 Agents 中心下发任务；WindowsAgent 按本机店铺会话领取执行。
+        选择 Agents 已上线店铺，创建一次「售后单采集」任务即可（含上报地址等参数）。之后按间隔反复执行同一任务，不会每次新建任务；「请求同步」是立即再执行一次。
       </p>
       <div class="sync-setting">
         <span class="sync-label">自动采集间隔</span>
@@ -242,7 +246,7 @@ async function handleRequestSync(row: MarketplaceShop) {
           />
         </el-select>
         <el-button type="primary" plain :loading="savingSync" @click="saveSyncInterval">保存间隔</el-button>
-        <span class="sync-tip">到期后自动再向 Agents 中心创建采集任务。</span>
+        <span class="sync-tip">到期后触发已有采集任务再执行，不会重复创建任务。</span>
       </div>
 
       <el-table :data="tableData" stripe border>
@@ -287,7 +291,7 @@ async function handleRequestSync(row: MarketplaceShop) {
               link
               @click="handleRequestSync(row)"
             >
-              {{ row.syncRequested ? '已请求同步' : '请求同步' }}
+              {{ row.syncRequested ? '已请求执行' : '立即执行' }}
             </el-button>
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="primary" link @click="handleReset(row)">重置采集</el-button>
@@ -327,6 +331,16 @@ async function handleRequestSync(row: MarketplaceShop) {
               <el-option v-for="j in jobOptions" :key="j.value" :label="j.label" :value="j.value" />
             </el-select>
           </el-form-item>
+          <el-form-item v-if="form.jobType === 'doudian.aftersale'" label="采集间隔" required>
+            <el-select v-model="form.intervalMinutes" style="width: 100%">
+              <el-option
+                v-for="opt in PLUGIN_SYNC_OPTIONS"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
+              />
+            </el-select>
+          </el-form-item>
           <el-form-item label="显示名称">
             <el-input v-model="form.name" placeholder="默认用店铺名称" />
           </el-form-item>
@@ -348,7 +362,7 @@ async function handleRequestSync(row: MarketplaceShop) {
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave">{{ editing ? '保存' : '添加并下发' }}</el-button>
+        <el-button type="primary" @click="handleSave">{{ editing ? '保存' : '创建采集任务' }}</el-button>
       </template>
     </el-dialog>
   </div>

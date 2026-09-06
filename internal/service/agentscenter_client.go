@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// AgentsCenterClient creates aftersale scrape jobs on AgentsCenter.
+// AgentsCenterClient creates aftersale scrape jobs / assignments on AgentsCenter.
 type AgentsCenterClient struct {
 	BaseURL string
 	Token   string
@@ -41,6 +41,21 @@ type agentsCreateJobBody struct {
 	Priority         int    `json:"priority"`
 }
 
+type agentsUpsertAssignmentBody struct {
+	TenantID         uint64 `json:"tenantId"`
+	JobType          string `json:"jobType"`
+	Platform         string `json:"platform"`
+	PlatformShopID   string `json:"platformShopId"`
+	PlatformShopName string `json:"platformShopName"`
+	Enabled          *bool  `json:"enabled,omitempty"`
+	RunPolicy        string `json:"runPolicy"`
+	IntervalMinutes  *int   `json:"intervalMinutes,omitempty"`
+	TriggerNow       bool   `json:"triggerNow"`
+	ParamsJSON       string `json:"paramsJson"`
+	Source           string `json:"source"`
+	Priority         int    `json:"priority"`
+}
+
 type AgentsOnlineShop struct {
 	Platform         string `json:"platform"`
 	PlatformShopID   string `json:"platformShopId"`
@@ -53,6 +68,49 @@ type AgentsOnlineShop struct {
 
 func (c *AgentsCenterClient) CreateAftersaleJob(tenantID uint64, platform, platformShopID, platformShopName, paramsJSON string) error {
 	return c.CreateJob(tenantID, "doudian.aftersale", platform, platformShopID, platformShopName, paramsJSON, "aftersales")
+}
+
+// UpsertAftersaleAssignment 写入售后采集订阅，并可选立即下发执行单。
+func (c *AgentsCenterClient) UpsertAftersaleAssignment(tenantID uint64, platform, platformShopID, platformShopName, paramsJSON string, intervalMinutes int, triggerNow bool) error {
+	if c == nil {
+		return fmt.Errorf("AgentsCenter 未配置")
+	}
+	enabled := true
+	mins := intervalMinutes
+	if mins <= 0 {
+		mins = 30
+	}
+	body := agentsUpsertAssignmentBody{
+		TenantID:         tenantID,
+		JobType:          "doudian.aftersale",
+		Platform:         platform,
+		PlatformShopID:   platformShopID,
+		PlatformShopName: platformShopName,
+		Enabled:          &enabled,
+		RunPolicy:        "interval",
+		IntervalMinutes:  &mins,
+		TriggerNow:       triggerNow,
+		ParamsJSON:       paramsJSON,
+		Source:           "aftersales",
+		Priority:         100,
+	}
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v1/internal/assignments", bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Token", c.Token)
+	res, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	if res.StatusCode >= 300 {
+		return fmt.Errorf("AgentsCenter HTTP %d: %s", res.StatusCode, strings.TrimSpace(string(b)))
+	}
+	return nil
 }
 
 func (c *AgentsCenterClient) CreateJob(tenantID uint64, jobType, platform, platformShopID, platformShopName, paramsJSON, source string) error {

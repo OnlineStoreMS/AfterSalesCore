@@ -145,7 +145,7 @@ async function handleRequestSync() {
   try {
     const item = await requestShopSync(shopId.value)
     shop.value = item
-    ElMessage.success('已向 Agents 中心下发采集任务')
+    ElMessage.success('已请求立即执行采集')
   } catch (e) {
     ElMessage.error((e as Error).message || '请求失败')
   } finally {
@@ -174,7 +174,7 @@ async function handleRequestSync() {
           :loading="requestingSync"
           @click="handleRequestSync"
         >
-          {{ shop.syncRequested ? '已请求同步' : '请求 Agent 同步' }}
+          {{ shop.syncRequested ? '已请求执行' : '立即执行采集' }}
         </el-button>
         <el-tag v-if="shop" :type="statusType(shop.pluginStatus)" size="large">
           {{ statusLabel(shop.pluginStatus) }}
@@ -184,7 +184,7 @@ async function handleRequestSync() {
 
     <el-card class="filter-card">
       <div class="filter-title">售后工作台</div>
-      <el-empty v-if="!groupedCards.length" description="暂无卡片数据，请通过 Agents 中心下发采集任务" :image-size="72" />
+      <el-empty v-if="!groupedCards.length" description="暂无卡片数据，请先创建采集任务并等待 Agent 执行" :image-size="72" />
       <div v-else class="groups">
         <div v-for="group in groupedCards" :key="group.name" class="group">
           <div class="group-title" :class="{ urgent: urgentGroup(group.name) }">{{ group.name }}</div>

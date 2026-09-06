@@ -7,6 +7,7 @@ import (
 	"aftersalescore/internal/service"
 )
 
+// AgentSyncScheduler 由售后中心按采集间隔向 Agents 中心下发执行单（含上报地址等参数）。
 type AgentSyncScheduler struct {
 	svc    *service.ShopService
 	stopCh chan struct{}
