@@ -145,11 +145,11 @@ func (s *ShopService) CreateFromAgent(in *dto.ShopFromAgentInput) (*dto.ShopItem
 		if interval <= 0 {
 			interval = s.repos.Shop.ForTenant(shop.TenantID).PluginSyncMinutes()
 		}
+		// 新建：立即执行一次，并预约下次 = 现在 + 间隔
 		if err := s.upsertAftersaleAssignment(shop, interval, true); err != nil {
-			return nil, fmt.Errorf("写入 AgentsCenter 采集订阅失败: %w", err)
+			return nil, fmt.Errorf("写入 AgentsCenter 采集任务失败: %w", err)
 		}
-		now := time.Now()
-		shop.SyncRequestedAt = &now
+		s.markCollectTriggered(shop, time.Duration(interval)*time.Minute, time.Now())
 		_ = s.repo().Save(shop)
 	} else if s.agents != nil {
 		if err := s.agents.CreateJob(shop.TenantID, jobType, shop.Platform, shop.PlatformShopID, shop.PlatformShopName, "{}", "aftersales"); err != nil {
@@ -325,8 +325,10 @@ func (s *ShopService) EnableAgentCollect(id uint64) (*dto.ShopItem, error) {
 	}
 	interval := s.repos.Shop.ForTenant(shop.TenantID).PluginSyncMinutes()
 	if err := s.upsertAftersaleAssignment(shop, interval, true); err != nil {
-		return nil, fmt.Errorf("写入 AgentsCenter 采集订阅失败: %w", err)
+		return nil, fmt.Errorf("写入 AgentsCenter 采集任务失败: %w", err)
 	}
+	s.markCollectTriggered(shop, time.Duration(interval)*time.Minute, time.Now())
+	_ = s.repo().Save(shop)
 	item := s.toItem(shop)
 	return &item, nil
 }
@@ -1062,7 +1064,7 @@ func (s *ShopService) Heartbeat(shop *model.MarketplaceShop, in *dto.PluginHeart
 	interval := s.pluginSyncInterval(shop.TenantID)
 	return &dto.PluginHeartbeatResult{
 		ShopItem:        s.toItem(shop),
-		SyncNow:         pluginShouldSync(shop, now, interval),
+		SyncNow:         agentCollectDue(shop, now),
 		SyncIntervalSec: int(interval.Seconds()),
 	}, nil
 }
@@ -1092,12 +1094,28 @@ func (s *ShopService) syncAgentAssignmentsInterval(intervalMinutes int) error {
 	if err != nil {
 		return err
 	}
+	now := time.Now()
+	interval := time.Duration(intervalMinutes) * time.Minute
 	var firstErr error
 	for i := range list {
 		shop := &list[i]
 		if shop.PluginKey == "" || shop.PluginSecretEnc == "" || strings.TrimSpace(shop.PlatformShopID) == "" {
 			continue
 		}
+		// 按新间隔重算下次执行：从最近一次触发/同步起算，过期则改为 now+间隔
+		base := now
+		if shop.SyncRequestedAt != nil {
+			base = *shop.SyncRequestedAt
+		} else if shop.LastSyncAt != nil {
+			base = *shop.LastSyncAt
+		}
+		next := base.Add(interval)
+		if !next.After(now) {
+			next = now.Add(interval)
+		}
+		shop.AgentNextRunAt = &next
+		_ = s.repos.Shop.ForTenant(shop.TenantID).Save(shop)
+
 		if err := s.upsertAftersaleAssignment(shop, intervalMinutes, false); err != nil && firstErr == nil {
 			firstErr = err
 		}
@@ -1125,18 +1143,19 @@ func (s *ShopService) RequestSync(id uint64) (*dto.ShopItem, error) {
 		return nil, fmt.Errorf("%w: 请先填写平台店铺 ID", ErrBadRequest)
 	}
 	now := time.Now()
-	shop.SyncRequestedAt = &now
-	if err := s.repo().Save(shop); err != nil {
-		return nil, err
-	}
 	if err := s.dispatchAftersaleJob(shop); err != nil {
 		return nil, fmt.Errorf("触发 AgentsCenter 采集失败: %w", err)
+	}
+	interval := s.pluginSyncInterval(shop.TenantID)
+	s.markCollectTriggered(shop, interval, now)
+	if err := s.repo().Save(shop); err != nil {
+		return nil, err
 	}
 	item := s.toItem(shop)
 	return &item, nil
 }
 
-// DispatchDueAgentJobs 售后中心按间隔向 Agents 下发执行单（参数含上报地址等）。
+// DispatchDueAgentJobs 按 AgentNextRunAt 到期触发已有采集任务再执行。
 func (s *ShopService) DispatchDueAgentJobs() (int, error) {
 	list, err := s.repos.Shop.ListBoundAgentCollectable()
 	if err != nil {
@@ -1147,13 +1166,14 @@ func (s *ShopService) DispatchDueAgentJobs() (int, error) {
 	for i := range list {
 		shop := &list[i]
 		interval := s.pluginSyncInterval(shop.TenantID)
-		if !pluginShouldSync(shop, now, interval) {
+		s.ensureAgentNextRunAt(shop, interval, now)
+		if !agentCollectDue(shop, now) {
 			continue
 		}
 		if err := s.dispatchAftersaleJob(shop); err != nil {
 			continue
 		}
-		shop.SyncRequestedAt = &now
+		s.markCollectTriggered(shop, interval, now)
 		_ = s.repos.Shop.ForTenant(shop.TenantID).Save(shop)
 		n++
 	}
@@ -1475,34 +1495,64 @@ func nextSyncHint(shop *model.MarketplaceShop, interval time.Duration, now time.
 	if shop == nil || shop.PluginKey == "" {
 		return ""
 	}
-	online := shop.LastSeenAt != nil && now.Sub(*shop.LastSeenAt) <= pluginOnlineSkew
-	due := pluginShouldSync(shop, now, interval)
-	if !online {
-		if due || shop.LastSyncAt == nil {
-			return "待 Agent 领取后同步"
+	if shop.AgentNextRunAt != nil {
+		if !shop.AgentNextRunAt.After(now) {
+			if shop.SyncRequestedAt != nil {
+				return "已请求，等待 Agent 执行"
+			}
+			return "待自动执行"
 		}
-		return formatTime(shop.LastSyncAt.Add(interval)) + "（Agent 离线）"
+		return formatTime(*shop.AgentNextRunAt)
 	}
-	if due {
-		if shop.SyncRequestedAt != nil {
-			return "已请求，等待 Agent 采集"
-		}
-		return "待自动下发"
+	if shop.LastSyncAt != nil {
+		return formatTime(shop.LastSyncAt.Add(interval))
 	}
-	return formatTime(shop.LastSyncAt.Add(interval))
+	return "创建后将按间隔执行"
 }
 
-func pluginShouldSync(shop *model.MarketplaceShop, now time.Time, interval time.Duration) bool {
-	if shop == nil {
+// agentCollectDue 新框架：仅当预约的下次执行时间已到。
+func agentCollectDue(shop *model.MarketplaceShop, now time.Time) bool {
+	if shop == nil || shop.AgentNextRunAt == nil {
 		return false
 	}
-	if shop.SyncRequestedAt != nil {
-		return true
+	return !shop.AgentNextRunAt.After(now)
+}
+
+// markCollectTriggered 记录本次触发，并预约下次执行。
+func (s *ShopService) markCollectTriggered(shop *model.MarketplaceShop, interval time.Duration, now time.Time) {
+	if shop == nil {
+		return
 	}
-	if shop.LastSyncAt == nil {
-		return true
+	if interval <= 0 {
+		interval = 30 * time.Minute
 	}
-	return now.Sub(*shop.LastSyncAt) >= interval
+	shop.SyncRequestedAt = &now
+	next := now.Add(interval)
+	shop.AgentNextRunAt = &next
+}
+
+// ensureAgentNextRunAt 给老数据补下次执行时间，避免再按「从未同步」狂触发。
+func (s *ShopService) ensureAgentNextRunAt(shop *model.MarketplaceShop, interval time.Duration, now time.Time) {
+	if shop == nil || shop.AgentNextRunAt != nil {
+		return
+	}
+	if interval <= 0 {
+		interval = 30 * time.Minute
+	}
+	var next time.Time
+	switch {
+	case shop.LastSyncAt != nil:
+		next = shop.LastSyncAt.Add(interval)
+	case shop.SyncRequestedAt != nil:
+		next = shop.SyncRequestedAt.Add(interval)
+	default:
+		next = now.Add(interval)
+	}
+	if !next.After(now) {
+		next = now.Add(interval)
+	}
+	shop.AgentNextRunAt = &next
+	_ = s.repos.Shop.ForTenant(shop.TenantID).Save(shop)
 }
 
 func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {

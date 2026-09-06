@@ -13,7 +13,6 @@ import {
   fetchAgentOnlineShops,
   fetchPluginSetting,
   fetchShops,
-  resetShopBind,
   requestShopSync,
   savePluginSetting,
   updateShop,
@@ -185,17 +184,6 @@ async function handleEnable(row: MarketplaceShop) {
   }
 }
 
-async function handleReset(row: MarketplaceShop) {
-  try {
-    await ElMessageBox.confirm('重置后原采集凭证立即失效，需重新启用。', '重置采集')
-    await resetShopBind(row.id)
-    ElMessage.success('已重置')
-    loadData()
-  } catch (e) {
-    if (e !== 'cancel') ElMessage.error((e as Error).message || '重置失败')
-  }
-}
-
 async function handleDelete(row: MarketplaceShop) {
   try {
     await ElMessageBox.confirm(`确定删除店铺「${row.name}」及其售后数据？`, '删除')
@@ -233,7 +221,7 @@ async function handleRequestSync(row: MarketplaceShop) {
       </template>
 
       <p class="hint">
-        选择 Agents 已上线店铺，创建一次「售后单采集」任务即可（含上报地址等参数）。之后按间隔反复执行同一任务，不会每次新建任务；「请求同步」是立即再执行一次。
+        选择 Agents 已上线店铺创建一次采集任务：创建时立即执行一次，之后按间隔到点再执行同一任务。「立即执行」可手动再跑一次。
       </p>
       <div class="sync-setting">
         <span class="sync-label">自动采集间隔</span>
@@ -246,7 +234,6 @@ async function handleRequestSync(row: MarketplaceShop) {
           />
         </el-select>
         <el-button type="primary" plain :loading="savingSync" @click="saveSyncInterval">保存间隔</el-button>
-        <span class="sync-tip">到期后触发已有采集任务再执行，不会重复创建任务。</span>
       </div>
 
       <el-table :data="tableData" stripe border>
@@ -276,7 +263,7 @@ async function handleRequestSync(row: MarketplaceShop) {
         <el-table-column prop="nextSyncAt" label="下次同步" width="190">
           <template #default="{ row }">{{ row.nextSyncAt || '—' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="360" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openWorkbench(row)">工作台</el-button>
             <el-button
@@ -294,7 +281,6 @@ async function handleRequestSync(row: MarketplaceShop) {
               {{ row.syncRequested ? '已请求执行' : '立即执行' }}
             </el-button>
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
-            <el-button type="primary" link @click="handleReset(row)">重置采集</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -373,7 +359,6 @@ async function handleRequestSync(row: MarketplaceShop) {
 .hint { color: #606266; margin: 0 0 12px; line-height: 1.6; }
 .sync-setting { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
 .sync-label { font-weight: 500; }
-.sync-tip { color: #909399; font-size: 13px; }
 .shop-title { display: flex; align-items: center; gap: 6px; }
 .shop-name { font-weight: 500; }
 .count-dot {

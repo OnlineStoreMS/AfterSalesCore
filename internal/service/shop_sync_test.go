@@ -8,38 +8,30 @@ import (
 	"aftersalescore/internal/repo"
 )
 
-func TestPluginShouldSync(t *testing.T) {
-	now := time.Date(2026, 8, 23, 8, 0, 0, 0, time.Local)
-	interval := 5 * time.Minute
-	req := now.Add(-time.Minute)
-	recent := now.Add(-2 * time.Minute)
-	stale := now.Add(-6 * time.Minute)
+func TestAgentCollectDue(t *testing.T) {
+	now := time.Date(2026, 9, 7, 8, 0, 0, 0, time.Local)
+	past := now.Add(-time.Minute)
+	future := now.Add(time.Minute)
 
-	cases := []struct {
-		name string
-		shop *model.MarketplaceShop
-		want bool
-	}{
-		{name: "nil shop", shop: nil, want: false},
-		{name: "never synced", shop: &model.MarketplaceShop{}, want: true},
-		{name: "requested", shop: &model.MarketplaceShop{LastSyncAt: &recent, SyncRequestedAt: &req}, want: true},
-		{name: "interval not reached", shop: &model.MarketplaceShop{LastSyncAt: &recent}, want: false},
-		{name: "interval elapsed", shop: &model.MarketplaceShop{LastSyncAt: &stale}, want: true},
+	if agentCollectDue(nil, now) {
+		t.Fatal("nil shop")
 	}
-	for _, tc := range cases {
-		if got := pluginShouldSync(tc.shop, now, interval); got != tc.want {
-			t.Fatalf("%s: got %v want %v", tc.name, got, tc.want)
-		}
+	if agentCollectDue(&model.MarketplaceShop{}, now) {
+		t.Fatal("nil next run should not be due")
+	}
+	if !agentCollectDue(&model.MarketplaceShop{AgentNextRunAt: &past}, now) {
+		t.Fatal("past next run should be due")
+	}
+	if agentCollectDue(&model.MarketplaceShop{AgentNextRunAt: &future}, now) {
+		t.Fatal("future next run should not be due")
 	}
 }
 
 func TestNextSyncHint(t *testing.T) {
-	now := time.Date(2026, 8, 31, 8, 0, 0, 0, time.Local)
+	now := time.Date(2026, 9, 7, 8, 0, 0, 0, time.Local)
 	interval := 30 * time.Minute
-	online := now.Add(-10 * time.Second)
-	offline := now.Add(-10 * time.Minute)
-	recentSync := now.Add(-10 * time.Minute)
-	staleSync := now.Add(-40 * time.Minute)
+	next := now.Add(interval)
+	past := now.Add(-time.Minute)
 
 	cases := []struct {
 		name string
@@ -48,24 +40,19 @@ func TestNextSyncHint(t *testing.T) {
 	}{
 		{name: "unbound", shop: &model.MarketplaceShop{}, want: ""},
 		{
-			name: "online due",
-			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &online, LastSyncAt: &staleSync},
-			want: "待自动下发",
+			name: "scheduled",
+			shop: &model.MarketplaceShop{PluginKey: "k", AgentNextRunAt: &next},
+			want: formatTime(next),
 		},
 		{
-			name: "online requested",
-			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &online, LastSyncAt: &staleSync, SyncRequestedAt: &online},
-			want: "已请求，等待 Agent 采集",
+			name: "due requested",
+			shop: &model.MarketplaceShop{PluginKey: "k", AgentNextRunAt: &past, SyncRequestedAt: &past},
+			want: "已请求，等待 Agent 执行",
 		},
 		{
-			name: "online waiting",
-			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &online, LastSyncAt: &recentSync},
-			want: formatTime(recentSync.Add(interval)),
-		},
-		{
-			name: "offline due",
-			shop: &model.MarketplaceShop{PluginKey: "k", LastSeenAt: &offline, LastSyncAt: &staleSync},
-			want: "待 Agent 领取后同步",
+			name: "due idle",
+			shop: &model.MarketplaceShop{PluginKey: "k", AgentNextRunAt: &past},
+			want: "待自动执行",
 		},
 	}
 	for _, tc := range cases {
