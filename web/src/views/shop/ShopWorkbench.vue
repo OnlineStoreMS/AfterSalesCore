@@ -174,7 +174,7 @@ async function handleRequestSync() {
           :loading="requestingSync"
           @click="handleRequestSync"
         >
-          {{ shop.syncRequested ? '已请求执行' : '立即执行采集' }}
+          立即执行
         </el-button>
         <el-tag v-if="shop" :type="statusType(shop.pluginStatus)" size="large">
           {{ statusLabel(shop.pluginStatus) }}

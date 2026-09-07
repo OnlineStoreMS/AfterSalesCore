@@ -278,7 +278,7 @@ async function handleRequestSync(row: MarketplaceShop) {
               link
               @click="handleRequestSync(row)"
             >
-              {{ row.syncRequested ? '已请求执行' : '立即执行' }}
+              立即执行
             </el-button>
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
