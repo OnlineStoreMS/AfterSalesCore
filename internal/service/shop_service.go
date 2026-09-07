@@ -1052,12 +1052,8 @@ func (s *ShopService) Heartbeat(shop *model.MarketplaceShop, in *dto.PluginHeart
 	now := time.Now()
 	shop.LastSeenAt = &now
 	shop.PluginStatus = model.ShopPluginBound
-	if v := strings.TrimSpace(in.PlatformShopID); v != "" {
-		shop.PlatformShopID = v
-	}
-	if v := strings.TrimSpace(in.PlatformShopName); v != "" {
-		shop.PlatformShopName = v
-	}
+	// 不覆盖 platform_shop_*：心跳携带的是 Agent 本地缓存，可能已被串店污染。
+	_ = in
 	if err := s.repos.Shop.TouchHeartbeat(shop); err != nil {
 		return nil, err
 	}
@@ -1181,17 +1177,16 @@ func (s *ShopService) DispatchDueAgentJobs() (int, error) {
 }
 
 func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput) (*dto.PluginSyncResult, error) {
+	if err := assertScrapedShopMatches(shop, in.PlatformShopID, in.PlatformShopName); err != nil {
+		return nil, err
+	}
+
 	now := time.Now()
 	shop.LastSeenAt = &now
 	shop.LastSyncAt = &now
 	shop.SyncRequestedAt = nil
 	shop.PluginStatus = model.ShopPluginBound
-	if v := strings.TrimSpace(in.PlatformShopID); v != "" {
-		shop.PlatformShopID = v
-	}
-	if v := strings.TrimSpace(in.PlatformShopName); v != "" {
-		shop.PlatformShopName = v
-	}
+	// 不再用页面抓取结果覆盖店铺绑定的 platform_shop_id/name（串店根因之一）。
 
 	cards := make([]model.AftersaleFilterCard, 0, len(in.Cards))
 	for i, c := range in.Cards {
@@ -1489,6 +1484,43 @@ func (s *ShopService) toItem(shop *model.MarketplaceShop) dto.ShopItem {
 	interval := s.pluginSyncInterval(shop.TenantID)
 	item.NextSyncAt = nextSyncHint(shop, interval, time.Now())
 	return item
+}
+
+// assertScrapedShopMatches 防止 Agent 用 A 店凭证上报 B 店页面数据。
+// 规则：已绑定 platform_shop_id 时，抓到的 id 必须一致；抓到的店名若与绑定名明显不符也拒绝。
+func assertScrapedShopMatches(shop *model.MarketplaceShop, scrapedID, scrapedName string) error {
+	if shop == nil {
+		return ErrBadRequest
+	}
+	expectedID := strings.TrimSpace(shop.PlatformShopID)
+	gotID := strings.TrimSpace(scrapedID)
+	if expectedID != "" && gotID != "" && !strings.EqualFold(expectedID, gotID) {
+		return fmt.Errorf("%w: 页面店铺 ID=%s 与绑定店铺 ID=%s 不一致，疑似串店登录，已拒绝入库", ErrBadRequest, gotID, expectedID)
+	}
+
+	gotName := strings.TrimSpace(scrapedName)
+	if gotName == "" {
+		return nil
+	}
+	expectedName := strings.TrimSpace(shop.PlatformShopName)
+	if expectedName == "" {
+		expectedName = strings.TrimSpace(shop.Name)
+	}
+	if expectedName == "" {
+		return nil
+	}
+	// 店名完全一致，或一方包含另一方（抖店 header 偶发后缀差异）则放行。
+	if strings.EqualFold(expectedName, gotName) ||
+		strings.Contains(expectedName, gotName) ||
+		strings.Contains(gotName, expectedName) {
+		return nil
+	}
+	// ID 已对齐时信任 ID（店名 header 偶发不准）；否则拒绝（含仅抓到店名的串店场景）。
+	if expectedID != "" && gotID != "" && strings.EqualFold(expectedID, gotID) {
+		return nil
+	}
+	return fmt.Errorf("%w: 页面店铺「%s」与绑定店铺「%s」(id=%s) 不一致，疑似串店登录，已拒绝入库",
+		ErrBadRequest, gotName, expectedName, expectedID)
 }
 
 func nextSyncHint(shop *model.MarketplaceShop, interval time.Duration, now time.Time) string {
