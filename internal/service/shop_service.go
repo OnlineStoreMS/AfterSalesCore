@@ -21,10 +21,6 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	pluginOnlineSkew = 3 * time.Minute
-)
-
 var (
 	ErrPluginAuth      = errors.New("插件鉴权失败")
 	ErrAlreadyBound    = errors.New("店铺已启用 Agent 采集，请先重置")
@@ -1456,12 +1452,10 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 }
 
 func (s *ShopService) toItem(shop *model.MarketplaceShop) dto.ShopItem {
-	status := model.ShopPluginUnbound
+		status := model.ShopPluginUnbound
 	if shop.PluginKey != "" {
-		status = model.ShopPluginOffline
-		if shop.LastSeenAt != nil && time.Since(*shop.LastSeenAt) <= pluginOnlineSkew {
-			status = model.ShopPluginOnline
-		}
+		// Agents 模式下不再依赖插件心跳判断在线；有凭证即视为已启用采集。
+		status = model.ShopPluginOnline
 	}
 	item := dto.ShopItem{
 		ID: shop.ID, Name: shop.Name, Platform: shop.Platform,
