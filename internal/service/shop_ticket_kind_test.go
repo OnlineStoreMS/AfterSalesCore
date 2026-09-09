@@ -67,4 +67,19 @@ func TestMatchShopTicketKind(t *testing.T) {
 	if MatchShopTicketKind(signedOtherCard, dto.TicketKindBuyerReturnSigned) {
 		t.Fatal("signed without 全部待收货/发货 should not match")
 	}
+
+	stalePickup := &model.AftersaleTicket{
+		Logistics: "买家退货 待取件\n订单发货 已签收",
+		TrackJSON: `[{"title":"已签收","text":"09/09 23:18:34 已签收 快件已领取"},{"title":"待取件","text":"09/08 10:57:13 待取件"}]`,
+		CardKeys: []model.AftersaleTicketCard{
+			{CardKey: "待商家收/发货:全部待收货/发货"},
+			{CardKey: "待商家收/发货:退货待收货"},
+		},
+	}
+	if MatchShopTicketKind(stalePickup, dto.TicketKindBuyerReturnPickup) {
+		t.Fatal("stale 待取件 text with latest track 已签收 should leave pickup")
+	}
+	if !MatchShopTicketKind(stalePickup, dto.TicketKindBuyerReturnSigned) {
+		t.Fatal("stale 待取件 text with latest track 已签收 should match signed")
+	}
 }

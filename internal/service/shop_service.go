@@ -480,19 +480,30 @@ func MatchShopTicketKind(t *model.AftersaleTicket, kind string) bool {
 		if !ticketHasGroup(t, "待商家收/发货") {
 			return false
 		}
-		view := ParseTicketLogistics(t.Logistics)
-		return view.HasBuyer && view.BuyerStatus == LogisticsAwaitPickup
+		hasBuyer, buyer := ticketBuyerReturnStatus(t)
+		return hasBuyer && buyer == LogisticsAwaitPickup
 	case dto.TicketKindReviewShippedRefund:
 		return ticketHasCard(t, "待商家审核", "已发货退款")
 	case dto.TicketKindBuyerReturnSigned:
 		if !ticketHasCard(t, "待商家收/发货", "全部待收货/发货") {
 			return false
 		}
-		view := ParseTicketLogistics(t.Logistics)
-		return view.HasBuyer && view.BuyerStatus == LogisticsSigned
+		hasBuyer, buyer := ticketBuyerReturnStatus(t)
+		return hasBuyer && buyer == LogisticsSigned
 	default:
 		return false
 	}
+}
+
+func ticketBuyerReturnStatus(t *model.AftersaleTicket) (bool, string) {
+	view := ParseTicketLogistics(t.Logistics)
+	if !view.HasBuyer {
+		return false, ""
+	}
+	if s := LatestTrackStatus(t.TrackJSON); s != "" {
+		return true, s
+	}
+	return true, view.BuyerStatus
 }
 
 func ticketHasGroup(t *model.AftersaleTicket, group string) bool {

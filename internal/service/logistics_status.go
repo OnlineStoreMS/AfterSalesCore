@@ -66,6 +66,14 @@ func ClassifyLogisticsStatus(text string) string {
 	return matchLogisticsKeyword(text)
 }
 
+func LatestTrackStatus(trackJSON string) string {
+	tracks := ParseLogisticsTracks(trackJSON)
+	if len(tracks) == 0 {
+		return ""
+	}
+	return matchLogisticsKeyword(firstNonEmpty(tracks[0].Title, tracks[0].Text))
+}
+
 func ClassifyLogisticsWithTracks(logistics, trackJSON string) string {
 	if strings.Contains(logistics, LogisticsCancelled) {
 		return LogisticsCancelled
