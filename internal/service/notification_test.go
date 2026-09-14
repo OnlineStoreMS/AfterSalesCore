@@ -61,6 +61,20 @@ func TestSanitizeScenariosDropsServiceAndAggregate(t *testing.T) {
 	}
 }
 
+func TestKeepActiveShopIDs(t *testing.T) {
+	shops := []model.MarketplaceShop{{ID: 7}, {ID: 9}, {ID: 10}}
+	if got := keepActiveShopIDs(nil, shops); len(got) != 0 {
+		t.Fatalf("empty selected should stay empty (all shops): %+v", got)
+	}
+	got := keepActiveShopIDs([]string{"1", "9", "6", "7", "7"}, shops)
+	if len(got) != 2 || got[0] != "9" || got[1] != "7" {
+		t.Fatalf("should drop missing and keep order: %+v", got)
+	}
+	if got := keepActiveShopIDs([]string{"1", "6", "5"}, shops); len(got) != 0 {
+		t.Fatalf("all stale should fall back to empty/all shops: %+v", got)
+	}
+}
+
 func TestPruneServiceNotified(t *testing.T) {
 	m := map[string]string{
 		"2:service:SO1:service:待处理":                 "2026-08-01T00:00:00Z",

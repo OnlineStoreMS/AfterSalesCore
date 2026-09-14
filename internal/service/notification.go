@@ -37,13 +37,16 @@ func (s *NotificationService) GetView() (*dto.NotificationView, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.dropLegacyServiceNotification(data); err != nil {
+	if err := s.dropLegacyServiceNotification(&data); err != nil {
+		return nil, err
+	}
+	if err := s.dropStaleNotificationShops(&data); err != nil {
 		return nil, err
 	}
 	return s.buildView(data)
 }
 
-func (s *NotificationService) dropLegacyServiceNotification(data dto.NotificationData) error {
+func (s *NotificationService) dropLegacyServiceNotification(data *dto.NotificationData) error {
 	cards, err := s.shopRepo().ListCardsForTenant()
 	if err != nil {
 		return err
@@ -65,6 +68,50 @@ func (s *NotificationService) dropLegacyServiceNotification(data dto.Notificatio
 		})
 	}
 	return nil
+}
+
+// dropStaleNotificationShops removes shop IDs that no longer exist, e.g. after
+// Agent rebind recreates marketplace_shops with new IDs. If every configured
+// ID is gone, the list is cleared so poll falls back to all current shops.
+func (s *NotificationService) dropStaleNotificationShops(data *dto.NotificationData) error {
+	shops, err := s.shopRepo().List()
+	if err != nil {
+		return err
+	}
+	cleaned := keepActiveShopIDs(data.Config.ShopIDs, shops)
+	if stringSlicesEqual(data.Config.ShopIDs, cleaned) {
+		return nil
+	}
+	data.Config.ShopIDs = cleaned
+	_, err = s.repos.Notification.SaveConfig(s.tenantID, data.Config)
+	return err
+}
+
+func keepActiveShopIDs(selected []string, shops []model.MarketplaceShop) []string {
+	known := make(map[string]struct{}, len(shops))
+	for _, shop := range shops {
+		known[strconv.FormatUint(shop.ID, 10)] = struct{}{}
+	}
+	if len(selected) == 0 {
+		return selected
+	}
+	kept := make([]string, 0, len(selected))
+	seen := make(map[string]struct{}, len(selected))
+	for _, raw := range selected {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		if _, ok := known[id]; !ok {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		kept = append(kept, id)
+	}
+	return kept
 }
 
 func stringSlicesEqual(a, b []string) bool {
@@ -315,6 +362,12 @@ func (s *NotificationService) RunPoll(ctx context.Context, onlyShopID uint64) (*
 		updateState(true, 0, "", "")
 		return result, nil
 	}
+
+	if err := s.dropStaleNotificationShops(&data); err != nil {
+		updateState(false, 0, err.Error(), "")
+		return nil, err
+	}
+	cfg = data.Config
 
 	shopIDs, err := s.resolveShopIDs(cfg.ShopIDs)
 	if err != nil {
