@@ -939,12 +939,19 @@ const (
 )
 
 func NormalizeRefundApplyRange(raw string) string {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	s = strings.ReplaceAll(s, " ", "")
+	s = strings.ReplaceAll(s, "最", "")
+	s = strings.ReplaceAll(s, "日", "天")
+	if len(s) >= 2 && strings.HasSuffix(s, "d") && s[0] >= '0' && s[0] <= '9' {
+		s = strings.TrimSuffix(s, "d")
+	}
+	switch s {
 	case "all", "0", "全部", "unlimited":
 		return "all"
-	case "7", "7d", "近7天", "近7日":
+	case "7", "7天", "近7天":
 		return "7"
-	case "90", "90d", "近90天", "近90日":
+	case "90", "90天", "近90天", "近3个月", "3个月":
 		return "90"
 	default:
 		return defaultRefundApplyRange

@@ -78,16 +78,24 @@ func TestClampPluginSyncMinutes(t *testing.T) {
 }
 
 func TestNormalizeRefundApplyRange(t *testing.T) {
-	if repo.NormalizeRefundApplyRange("") != "30" {
-		t.Fatal("empty defaults to 30")
+	cases := map[string]string{
+		"":       "30",
+		"30":     "30",
+		"近30天":  "30",
+		"最近30天": "30",
+		"全部":    "all",
+		"all":    "all",
+		"7":      "7",
+		"7d":     "7",
+		"近7天":   "7",
+		"最近7天":  "7",
+		"90d":    "90",
+		"近90日":  "90",
+		"最近90天": "90",
 	}
-	if repo.NormalizeRefundApplyRange("全部") != "all" {
-		t.Fatal("全部")
-	}
-	if repo.NormalizeRefundApplyRange("7") != "7" {
-		t.Fatal("7")
-	}
-	if repo.NormalizeRefundApplyRange("90d") != "90" {
-		t.Fatal("90d")
+	for in, want := range cases {
+		if got := repo.NormalizeRefundApplyRange(in); got != want {
+			t.Fatalf("%q => %q, want %q", in, got, want)
+		}
 	}
 }
