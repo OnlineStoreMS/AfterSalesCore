@@ -38,11 +38,17 @@ type MarketplaceShop struct {
 func (MarketplaceShop) TableName() string { return "marketplace_shops" }
 
 type TenantSetting struct {
-	ID                    uint64    `gorm:"primaryKey" json:"id"`
-	TenantID              uint64    `gorm:"uniqueIndex;not null" json:"tenantId"`
-	PluginSyncIntervalMin int       `gorm:"not null;default:30" json:"pluginSyncIntervalMin"`
-	CreatedAt             time.Time `json:"createdAt"`
-	UpdatedAt             time.Time `json:"updatedAt"`
+	ID                    uint64 `gorm:"primaryKey" json:"id"`
+	TenantID              uint64 `gorm:"uniqueIndex;not null" json:"tenantId"`
+	PluginSyncIntervalMin int    `gorm:"not null;default:30" json:"pluginSyncIntervalMin"`
+	// RefundApplyRange 旧字段，读取时作为两路范围的回退。
+	RefundApplyRange string `gorm:"size:16;not null;default:30" json:"refundApplyRange"`
+	// ShippedRefundApplyRange 已发货退款/退款成功的申请时间：all / 7 / 30 / 90。
+	ShippedRefundApplyRange string `gorm:"size:16;not null;default:30" json:"shippedRefundApplyRange"`
+	// ReturnRefundApplyRange 退货退款/退款成功的申请时间：all / 7 / 30 / 90。
+	ReturnRefundApplyRange string    `gorm:"size:16;not null;default:30" json:"returnRefundApplyRange"`
+	CreatedAt              time.Time `json:"createdAt"`
+	UpdatedAt              time.Time `json:"updatedAt"`
 }
 
 func (TenantSetting) TableName() string { return "tenant_settings" }

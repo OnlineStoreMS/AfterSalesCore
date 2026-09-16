@@ -7,6 +7,7 @@ import {
   PLATFORM_OPTIONS,
   PLUGIN_STATUS_MAP,
   PLUGIN_SYNC_OPTIONS,
+  REFUND_APPLY_RANGE_OPTIONS,
   createShopFromAgent,
   deleteShop,
   enableAgentCollect,
@@ -26,6 +27,8 @@ const tableData = ref<MarketplaceShop[]>([])
 const dialogVisible = ref(false)
 const editing = ref<MarketplaceShop | null>(null)
 const syncMinutes = ref(30)
+const shippedRefundApplyRange = ref('30')
+const returnRefundApplyRange = ref('30')
 const savingSync = ref(false)
 const onlineShops = ref<Array<{
   platform: string
@@ -56,6 +59,8 @@ async function loadData() {
     const [shops, setting] = await Promise.all([fetchShops(), fetchPluginSetting()])
     tableData.value = shops
     syncMinutes.value = setting.pluginSyncIntervalMin || 30
+    shippedRefundApplyRange.value = setting.shippedRefundApplyRange || setting.refundApplyRange || '30'
+    returnRefundApplyRange.value = setting.returnRefundApplyRange || setting.refundApplyRange || '30'
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {
@@ -84,9 +89,15 @@ watch(() => form.value.platform, () => {
 async function saveSyncInterval() {
   savingSync.value = true
   try {
-    const setting = await savePluginSetting({ pluginSyncIntervalMin: syncMinutes.value })
+    const setting = await savePluginSetting({
+      pluginSyncIntervalMin: syncMinutes.value,
+      shippedRefundApplyRange: shippedRefundApplyRange.value,
+      returnRefundApplyRange: returnRefundApplyRange.value,
+    })
     syncMinutes.value = setting.pluginSyncIntervalMin
-    ElMessage.success('已保存，并已更新各店铺采集任务的执行间隔')
+    shippedRefundApplyRange.value = setting.shippedRefundApplyRange || '30'
+    returnRefundApplyRange.value = setting.returnRefundApplyRange || '30'
+    ElMessage.success('已保存，并已更新各店铺采集任务')
   } catch (e) {
     ElMessage.error((e as Error).message || '保存失败')
   } finally {
@@ -233,8 +244,29 @@ async function handleRequestSync(row: MarketplaceShop) {
             :value="opt.value"
           />
         </el-select>
-        <el-button type="primary" plain :loading="savingSync" @click="saveSyncInterval">保存间隔</el-button>
+        <span class="sync-label">已发货退款成功</span>
+        <el-select v-model="shippedRefundApplyRange" style="width: 140px">
+          <el-option
+            v-for="opt in REFUND_APPLY_RANGE_OPTIONS"
+            :key="'s-' + opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
+        <span class="sync-label">退货退款成功</span>
+        <el-select v-model="returnRefundApplyRange" style="width: 140px">
+          <el-option
+            v-for="opt in REFUND_APPLY_RANGE_OPTIONS"
+            :key="'r-' + opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
+        <el-button type="primary" plain :loading="savingSync" @click="saveSyncInterval">保存采集设置</el-button>
       </div>
+      <p class="hint range-hint">
+        这两块按申请时间分别采集并增量写入。首次可把某一块设成「全部」回填历史，日常再改成近 7 天或近 30 天。工作台卡片仍每次全量刷新。
+      </p>
 
       <el-table :data="tableData" stripe border>
         <el-table-column prop="name" label="店铺" min-width="180">
@@ -357,8 +389,9 @@ async function handleRequestSync(row: MarketplaceShop) {
 <style scoped>
 .header { display: flex; justify-content: space-between; align-items: center; }
 .hint { color: #606266; margin: 0 0 12px; line-height: 1.6; }
-.sync-setting { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.sync-setting { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .sync-label { font-weight: 500; }
+.range-hint { margin-top: 0; }
 .shop-title { display: flex; align-items: center; gap: 6px; }
 .shop-name { font-weight: 500; }
 .count-dot {

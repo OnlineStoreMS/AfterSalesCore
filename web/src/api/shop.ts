@@ -97,6 +97,9 @@ export const PLUGIN_STATUS_MAP: Record<PluginStatus, { label: string; type: '' |
 
 export interface PluginSetting {
   pluginSyncIntervalMin: number
+  refundApplyRange?: string
+  shippedRefundApplyRange: string
+  returnRefundApplyRange: string
 }
 
 export const PLUGIN_SYNC_OPTIONS: { value: number; label: string }[] = [
@@ -107,6 +110,13 @@ export const PLUGIN_SYNC_OPTIONS: { value: number; label: string }[] = [
   { value: 360, label: '每 6 小时' },
   { value: 720, label: '每 12 小时' },
   { value: 1440, label: '每 24 小时' },
+]
+
+export const REFUND_APPLY_RANGE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: '7', label: '近 7 天' },
+  { value: '30', label: '近 30 天' },
+  { value: '90', label: '近 90 天' },
 ]
 
 export async function fetchPluginSetting() {

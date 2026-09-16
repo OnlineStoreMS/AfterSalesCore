@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"aftersalescore/internal/dto"
 	"aftersalescore/internal/model"
 
 	"gorm.io/gorm"
@@ -439,6 +440,16 @@ func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64
 	return list, total, err
 }
 
+func findRefundByIdentity(tx *gorm.DB, shopID uint64, aftersaleID, orderNo string, dest any) error {
+	aftersaleID = strings.TrimSpace(aftersaleID)
+	orderNo = strings.TrimSpace(orderNo)
+	q := tx.Where("shop_id = ? AND platform_aftersale_id = ?", shopID, aftersaleID)
+	if orderNo != "" {
+		q = q.Where("(order_no = ? OR COALESCE(order_no, '') = '')", orderNo)
+	}
+	return q.First(dest).Error
+}
+
 func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.ReturnPackage) error {
 	if len(items) == 0 {
 		return nil
@@ -455,8 +466,7 @@ func (r *ShopRepo) UpsertReturns(shop *model.MarketplaceShop, items []model.Retu
 				aftersaleIDs = append(aftersaleIDs, item.PlatformAftersaleID)
 			}
 			var existing model.ReturnPackage
-			err := tx.Where("shop_id = ? AND platform_aftersale_id = ?", shop.ID, item.PlatformAftersaleID).
-				First(&existing).Error
+			err := findRefundByIdentity(tx, shop.ID, item.PlatformAftersaleID, item.OrderNo, &existing)
 			if err == gorm.ErrRecordNotFound {
 				if err := tx.Create(item).Error; err != nil {
 					return err
@@ -619,8 +629,7 @@ func (r *ShopRepo) UpsertShippedRefunds(shop *model.MarketplaceShop, items []mod
 			item.ShopID = shop.ID
 			item.SyncedAt = now
 			var existing model.ShippedRefundSuccess
-			err := tx.Where("shop_id = ? AND platform_aftersale_id = ?", shop.ID, item.PlatformAftersaleID).
-				First(&existing).Error
+			err := findRefundByIdentity(tx, shop.ID, item.PlatformAftersaleID, item.OrderNo, &existing)
 			if err == gorm.ErrRecordNotFound {
 				if err := tx.Create(item).Error; err != nil {
 					return err
@@ -669,17 +678,7 @@ func (r *ShopRepo) UpsertShippedRefunds(shop *model.MarketplaceShop, items []mod
 				return err
 			}
 		}
-		ids := make([]string, 0, len(items))
-		for i := range items {
-			if id := strings.TrimSpace(items[i].PlatformAftersaleID); id != "" {
-				ids = append(ids, id)
-			}
-		}
-		if len(ids) == 0 {
-			return nil
-		}
-		return tx.Where("shop_id = ? AND tenant_id = ? AND platform_aftersale_id NOT IN ?", shop.ID, shop.TenantID, ids).
-			Delete(&model.ShippedRefundSuccess{}).Error
+		return nil
 	})
 }
 
@@ -736,9 +735,11 @@ func (r *ShopRepo) ListReturnRefunds(f ReturnRefundListFilter) ([]model.ReturnRe
 }
 
 func (r *ShopRepo) UpsertReturnRefunds(shop *model.MarketplaceShop, items []model.ReturnRefundSuccess) error {
+	if len(items) == 0 {
+		return nil
+	}
 	now := time.Now()
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		ids := make([]string, 0, len(items))
 		for i := range items {
 			item := &items[i]
 			item.TenantID = shop.TenantID
@@ -748,10 +749,8 @@ func (r *ShopRepo) UpsertReturnRefunds(shop *model.MarketplaceShop, items []mode
 			if aid == "" {
 				continue
 			}
-			ids = append(ids, aid)
 			var existing model.ReturnRefundSuccess
-			err := tx.Where("shop_id = ? AND platform_aftersale_id = ?", shop.ID, aid).
-				First(&existing).Error
+			err := findRefundByIdentity(tx, shop.ID, aid, item.OrderNo, &existing)
 			if err == gorm.ErrRecordNotFound {
 				if err := tx.Create(item).Error; err != nil {
 					return err
@@ -800,11 +799,7 @@ func (r *ShopRepo) UpsertReturnRefunds(shop *model.MarketplaceShop, items []mode
 				return err
 			}
 		}
-		q := tx.Where("shop_id = ? AND tenant_id = ?", shop.ID, shop.TenantID)
-		if len(ids) > 0 {
-			q = q.Where("platform_aftersale_id NOT IN ?", ids)
-		}
-		return q.Delete(&model.ReturnRefundSuccess{}).Error
+		return nil
 	})
 }
 
@@ -938,7 +933,23 @@ func (r *ShopRepo) UpsertServiceOrders(shop *model.MarketplaceShop, orders []mod
 	})
 }
 
-const defaultPluginSyncMinutes = 30
+const (
+	defaultPluginSyncMinutes = 30
+	defaultRefundApplyRange  = "30"
+)
+
+func NormalizeRefundApplyRange(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "all", "0", "全部", "unlimited":
+		return "all"
+	case "7", "7d", "近7天", "近7日":
+		return "7"
+	case "90", "90d", "近90天", "近90日":
+		return "90"
+	default:
+		return defaultRefundApplyRange
+	}
+}
 
 func ClampPluginSyncMinutes(n int) int {
 	if n <= 0 {
@@ -953,21 +964,73 @@ func ClampPluginSyncMinutes(n int) int {
 	return n
 }
 
-func (r *ShopRepo) PluginSyncMinutes() int {
-	var item model.TenantSetting
-	err := r.db.Where("tenant_id = ?", r.tenantID).First(&item).Error
-	if err != nil || item.PluginSyncIntervalMin <= 0 {
-		return defaultPluginSyncMinutes
+func coalesceRefundApplyRange(primary, fallback string) string {
+	if strings.TrimSpace(primary) != "" {
+		return NormalizeRefundApplyRange(primary)
 	}
-	return ClampPluginSyncMinutes(item.PluginSyncIntervalMin)
+	return NormalizeRefundApplyRange(fallback)
 }
 
-func (r *ShopRepo) SavePluginSyncMinutes(minutes int) (*model.TenantSetting, error) {
-	minutes = ClampPluginSyncMinutes(minutes)
+func (r *ShopRepo) PluginSyncMinutes() int {
+	return r.pluginSettingRow().PluginSyncIntervalMin
+}
+
+func (r *ShopRepo) RefundApplyRange() string {
+	return r.pluginSettingRow().ShippedRefundApplyRange
+}
+
+func (r *ShopRepo) PluginSetting() dto.PluginSetting {
+	row := r.pluginSettingRow()
+	return dto.PluginSetting{
+		PluginSyncIntervalMin:   row.PluginSyncIntervalMin,
+		RefundApplyRange:        row.ShippedRefundApplyRange,
+		ShippedRefundApplyRange: row.ShippedRefundApplyRange,
+		ReturnRefundApplyRange:  row.ReturnRefundApplyRange,
+	}
+}
+
+func (r *ShopRepo) pluginSettingRow() model.TenantSetting {
+	var item model.TenantSetting
+	err := r.db.Where("tenant_id = ?", r.tenantID).First(&item).Error
+	if err != nil {
+		return model.TenantSetting{
+			TenantID:                r.tenantID,
+			PluginSyncIntervalMin:   defaultPluginSyncMinutes,
+			RefundApplyRange:        defaultRefundApplyRange,
+			ShippedRefundApplyRange: defaultRefundApplyRange,
+			ReturnRefundApplyRange:  defaultRefundApplyRange,
+		}
+	}
+	item.PluginSyncIntervalMin = ClampPluginSyncMinutes(item.PluginSyncIntervalMin)
+	legacy := item.RefundApplyRange
+	item.ShippedRefundApplyRange = coalesceRefundApplyRange(item.ShippedRefundApplyRange, legacy)
+	item.ReturnRefundApplyRange = coalesceRefundApplyRange(item.ReturnRefundApplyRange, legacy)
+	item.RefundApplyRange = item.ShippedRefundApplyRange
+	return item
+}
+
+func (r *ShopRepo) SavePluginSetting(in dto.PluginSetting) (*model.TenantSetting, error) {
+	minutes := ClampPluginSyncMinutes(in.PluginSyncIntervalMin)
+	cur := r.pluginSettingRow()
+	legacy := strings.TrimSpace(in.RefundApplyRange)
+	shipped := cur.ShippedRefundApplyRange
+	returned := cur.ReturnRefundApplyRange
+	if strings.TrimSpace(in.ShippedRefundApplyRange) != "" || legacy != "" {
+		shipped = coalesceRefundApplyRange(in.ShippedRefundApplyRange, legacy)
+	}
+	if strings.TrimSpace(in.ReturnRefundApplyRange) != "" || legacy != "" {
+		returned = coalesceRefundApplyRange(in.ReturnRefundApplyRange, legacy)
+	}
 	var item model.TenantSetting
 	err := r.db.Where("tenant_id = ?", r.tenantID).First(&item).Error
 	if err == gorm.ErrRecordNotFound {
-		item = model.TenantSetting{TenantID: r.tenantID, PluginSyncIntervalMin: minutes}
+		item = model.TenantSetting{
+			TenantID:                r.tenantID,
+			PluginSyncIntervalMin:   minutes,
+			RefundApplyRange:        shipped,
+			ShippedRefundApplyRange: shipped,
+			ReturnRefundApplyRange:  returned,
+		}
 		if err := r.db.Create(&item).Error; err != nil {
 			return nil, err
 		}
@@ -977,10 +1040,19 @@ func (r *ShopRepo) SavePluginSyncMinutes(minutes int) (*model.TenantSetting, err
 		return nil, err
 	}
 	item.PluginSyncIntervalMin = minutes
+	item.RefundApplyRange = shipped
+	item.ShippedRefundApplyRange = shipped
+	item.ReturnRefundApplyRange = returned
 	if err := r.db.Save(&item).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil
+}
+
+func (r *ShopRepo) SavePluginSyncMinutes(minutes int) (*model.TenantSetting, error) {
+	cur := r.PluginSetting()
+	cur.PluginSyncIntervalMin = minutes
+	return r.SavePluginSetting(cur)
 }
 
 func (r *ShopRepo) ListTenantIDs() ([]uint64, error) {

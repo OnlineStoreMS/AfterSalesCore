@@ -76,3 +76,18 @@ func TestClampPluginSyncMinutes(t *testing.T) {
 		t.Fatal("60 should stay 60")
 	}
 }
+
+func TestNormalizeRefundApplyRange(t *testing.T) {
+	if repo.NormalizeRefundApplyRange("") != "30" {
+		t.Fatal("empty defaults to 30")
+	}
+	if repo.NormalizeRefundApplyRange("全部") != "all" {
+		t.Fatal("全部")
+	}
+	if repo.NormalizeRefundApplyRange("7") != "7" {
+		t.Fatal("7")
+	}
+	if repo.NormalizeRefundApplyRange("90d") != "90" {
+		t.Fatal("90d")
+	}
+}

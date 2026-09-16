@@ -63,7 +63,10 @@ type PluginHeartbeatResult struct {
 }
 
 type PluginSetting struct {
-	PluginSyncIntervalMin int `json:"pluginSyncIntervalMin"`
+	PluginSyncIntervalMin   int    `json:"pluginSyncIntervalMin"`
+	RefundApplyRange        string `json:"refundApplyRange,omitempty"`
+	ShippedRefundApplyRange string `json:"shippedRefundApplyRange"`
+	ReturnRefundApplyRange  string `json:"returnRefundApplyRange"`
 }
 
 type FilterCardItem struct {
@@ -75,27 +78,27 @@ type FilterCardItem struct {
 }
 
 type TicketItem struct {
-	ID                   uint64   `json:"id"`
-	PlatformAftersaleID  string   `json:"platformAftersaleId"`
-	OrderNo              string   `json:"orderNo"`
-	ProductTitle         string   `json:"productTitle"`
-	ProductImage         string   `json:"productImage,omitempty"`
-	SKU                  string   `json:"sku"`
-	ProductTags          string   `json:"productTags,omitempty"`
-	Tags                 string   `json:"tags,omitempty"`
-	Qty                  int      `json:"qty"`
-	BuyQty               int      `json:"buyQty"`
-	PayAmount            string   `json:"payAmount"`
-	RefundAmount         string   `json:"refundAmount"`
-	AftersaleType        string   `json:"aftersaleType"`
-	Reason               string   `json:"reason"`
-	Status               string   `json:"status"`
-	TimeoutText          string   `json:"timeoutText,omitempty"`
-	TimeoutAction        string   `json:"timeoutAction,omitempty"`
-	DeadlineAt           string   `json:"deadlineAt,omitempty"`
-	RemainSeconds        int      `json:"remainSeconds"`
-	Dispute              string   `json:"dispute,omitempty"`
-	Logistics            string   `json:"logistics,omitempty"`
+	ID                   uint64           `json:"id"`
+	PlatformAftersaleID  string           `json:"platformAftersaleId"`
+	OrderNo              string           `json:"orderNo"`
+	ProductTitle         string           `json:"productTitle"`
+	ProductImage         string           `json:"productImage,omitempty"`
+	SKU                  string           `json:"sku"`
+	ProductTags          string           `json:"productTags,omitempty"`
+	Tags                 string           `json:"tags,omitempty"`
+	Qty                  int              `json:"qty"`
+	BuyQty               int              `json:"buyQty"`
+	PayAmount            string           `json:"payAmount"`
+	RefundAmount         string           `json:"refundAmount"`
+	AftersaleType        string           `json:"aftersaleType"`
+	Reason               string           `json:"reason"`
+	Status               string           `json:"status"`
+	TimeoutText          string           `json:"timeoutText,omitempty"`
+	TimeoutAction        string           `json:"timeoutAction,omitempty"`
+	DeadlineAt           string           `json:"deadlineAt,omitempty"`
+	RemainSeconds        int              `json:"remainSeconds"`
+	Dispute              string           `json:"dispute,omitempty"`
+	Logistics            string           `json:"logistics,omitempty"`
 	LogisticsBuyerStatus string           `json:"logisticsBuyerStatus,omitempty"`
 	LogisticsShipStatus  string           `json:"logisticsShipStatus,omitempty"`
 	NeedIntercept        bool             `json:"needIntercept,omitempty"`
@@ -478,28 +481,28 @@ type ShippedRefundListQuery struct {
 }
 
 type InterceptItem struct {
-	ID                  uint64 `json:"id"`
-	ShopID              uint64 `json:"shopId"`
-	ShopName            string `json:"shopName"`
-	Source              string `json:"source"`
-	NeedIntercept       bool   `json:"needIntercept"`
-	AwaitPickup         bool   `json:"awaitPickup"`
-	PlatformAftersaleID string `json:"platformAftersaleId"`
-	OrderNo             string `json:"orderNo"`
-	ProductTitle        string `json:"productTitle"`
-	ProductImage        string `json:"productImage,omitempty"`
-	SKU                 string `json:"sku"`
-	Qty                 int    `json:"qty"`
-	BuyQty              int    `json:"buyQty"`
-	PayAmount           string `json:"payAmount"`
-	RefundAmount        string `json:"refundAmount"`
-	AftersaleType       string `json:"aftersaleType"`
-	Reason              string `json:"reason"`
-	Status              string `json:"status"`
-	Logistics           string `json:"logistics,omitempty"`
-	LogisticsStatus     string `json:"logisticsStatus,omitempty"`
-	LogisticsNo         string `json:"logisticsNo,omitempty"`
-	ShipLogisticsNo     string `json:"shipLogisticsNo,omitempty"`
+	ID                  uint64           `json:"id"`
+	ShopID              uint64           `json:"shopId"`
+	ShopName            string           `json:"shopName"`
+	Source              string           `json:"source"`
+	NeedIntercept       bool             `json:"needIntercept"`
+	AwaitPickup         bool             `json:"awaitPickup"`
+	PlatformAftersaleID string           `json:"platformAftersaleId"`
+	OrderNo             string           `json:"orderNo"`
+	ProductTitle        string           `json:"productTitle"`
+	ProductImage        string           `json:"productImage,omitempty"`
+	SKU                 string           `json:"sku"`
+	Qty                 int              `json:"qty"`
+	BuyQty              int              `json:"buyQty"`
+	PayAmount           string           `json:"payAmount"`
+	RefundAmount        string           `json:"refundAmount"`
+	AftersaleType       string           `json:"aftersaleType"`
+	Reason              string           `json:"reason"`
+	Status              string           `json:"status"`
+	Logistics           string           `json:"logistics,omitempty"`
+	LogisticsStatus     string           `json:"logisticsStatus,omitempty"`
+	LogisticsNo         string           `json:"logisticsNo,omitempty"`
+	ShipLogisticsNo     string           `json:"shipLogisticsNo,omitempty"`
 	ReturnLogisticsNo   string           `json:"returnLogisticsNo,omitempty"`
 	Carrier             string           `json:"carrier,omitempty"`
 	Tracks              []LogisticsTrack `json:"tracks,omitempty"`

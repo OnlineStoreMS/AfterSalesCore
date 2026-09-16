@@ -993,15 +993,19 @@ func (s *ShopService) buildAftersaleParamsJSON(shop *model.MarketplaceShop) (str
 	if err != nil {
 		return "", err
 	}
+	setting := s.repos.Shop.ForTenant(shop.TenantID).PluginSetting()
 	payload := map[string]any{
-		"apiBase":          cred.APIBase,
-		"shopId":           cred.ShopID,
-		"shopName":         cred.ShopName,
-		"platform":         cred.Platform,
-		"pluginKey":        cred.PluginKey,
-		"pluginSecret":     cred.PluginSecret,
-		"platformShopId":   cred.PlatformShopID,
-		"platformShopName": cred.PlatformShopName,
+		"apiBase":                 cred.APIBase,
+		"shopId":                  cred.ShopID,
+		"shopName":                cred.ShopName,
+		"platform":                cred.Platform,
+		"pluginKey":               cred.PluginKey,
+		"pluginSecret":            cred.PluginSecret,
+		"platformShopId":          cred.PlatformShopID,
+		"platformShopName":        cred.PlatformShopName,
+		"shippedRefundApplyRange": setting.ShippedRefundApplyRange,
+		"returnRefundApplyRange":  setting.ReturnRefundApplyRange,
+		"refundApplyRange":        setting.ShippedRefundApplyRange,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -1073,19 +1077,24 @@ func (s *ShopService) Heartbeat(shop *model.MarketplaceShop, in *dto.PluginHeart
 }
 
 func (s *ShopService) GetPluginSetting() dto.PluginSetting {
-	return dto.PluginSetting{PluginSyncIntervalMin: s.repo().PluginSyncMinutes()}
+	return s.repo().PluginSetting()
 }
 
 func (s *ShopService) SavePluginSetting(in dto.PluginSetting) (dto.PluginSetting, error) {
-	item, err := s.repo().SavePluginSyncMinutes(in.PluginSyncIntervalMin)
+	item, err := s.repo().SavePluginSetting(in)
 	if err != nil {
 		return dto.PluginSetting{}, err
 	}
-	minutes := item.PluginSyncIntervalMin
-	if err := s.syncAgentAssignmentsInterval(minutes); err != nil {
-		return dto.PluginSetting{PluginSyncIntervalMin: minutes}, fmt.Errorf("间隔已保存，但同步 Agents 任务失败: %w", err)
+	out := dto.PluginSetting{
+		PluginSyncIntervalMin:   item.PluginSyncIntervalMin,
+		RefundApplyRange:        item.ShippedRefundApplyRange,
+		ShippedRefundApplyRange: item.ShippedRefundApplyRange,
+		ReturnRefundApplyRange:  item.ReturnRefundApplyRange,
 	}
-	return dto.PluginSetting{PluginSyncIntervalMin: minutes}, nil
+	if err := s.syncAgentAssignmentsInterval(out.PluginSyncIntervalMin); err != nil {
+		return out, fmt.Errorf("设置已保存，但同步 Agents 任务失败: %w", err)
+	}
+	return out, nil
 }
 
 // syncAgentAssignmentsInterval 将本租户已启用采集的店铺订阅间隔/参数同步到 Agents 中心。
@@ -1454,7 +1463,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 		ShopID: shop.ID, CardCount: len(cards), TicketCount: len(tickets),
 		ReturnCount: returnCount, ShippedRefundCount: shippedCount, ReturnRefundCount: returnRefundCount,
 		ServiceOrderCount: serviceCount,
-		LastSyncAt: formatTime(now),
+		LastSyncAt:        formatTime(now),
 	}
 	if err := s.repos.Shop.Save(shop); err != nil {
 		return nil, err
@@ -1463,7 +1472,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 }
 
 func (s *ShopService) toItem(shop *model.MarketplaceShop) dto.ShopItem {
-		status := model.ShopPluginUnbound
+	status := model.ShopPluginUnbound
 	if shop.PluginKey != "" {
 		// Agents 模式下不再依赖插件心跳判断在线；有凭证即视为已启用采集。
 		status = model.ShopPluginOnline
@@ -1675,7 +1684,7 @@ func toReturnRefundItem(item *model.ReturnRefundSuccess, shopName string) dto.Re
 		ProductTags: item.ProductTags, Tags: item.Tags,
 		Qty: item.Qty, BuyQty: item.BuyQty, PayAmount: item.PayAmount, RefundAmount: item.RefundAmount,
 		AftersaleType: firstNonEmpty(item.AftersaleType, "退货退款"), Reason: item.Reason,
-		Status: firstNonEmpty(item.Status, "退款成功"),
+		Status:    firstNonEmpty(item.Status, "退款成功"),
 		OrderInfo: item.OrderInfo, AftersaleInfo: item.AftersaleInfo,
 		Logistics: item.Logistics, LogisticsStatus: status,
 		LogisticsNo: item.LogisticsNo, Carrier: item.Carrier, ShipTime: item.ShipTime,
