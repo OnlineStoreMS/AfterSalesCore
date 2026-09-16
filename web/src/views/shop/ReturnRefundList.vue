@@ -10,6 +10,7 @@ import {
   type ShippedRefund,
 } from '../../api/shop'
 import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
+import { displayTrackDetail } from '../../utils/ticketLogistics
 
 const loading = ref(false)
 const shops = ref<MarketplaceShop[]>([])
@@ -69,7 +70,7 @@ function hasTracks(row: ShippedRefund) {
 }
 
 function trackDetail(track: LogisticsTrack) {
-  return track.detail || (track.title || track.date ? '' : track.text || '')
+  return displayTrackDetail(track)
 }
 
 onMounted(() => {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { LogisticsTrack } from '../api/shop'
-import type { LogisticsLine } from '../utils/ticketLogistics'
+import { displayTrackDetail, type LogisticsLine } from '../utils/ticketLogistics'
 
 const props = defineProps<{
   lines: LogisticsLine[]
@@ -19,7 +19,7 @@ const shipTracksEnabled = computed(() => hasTracks.value && !props.returnNo)
 const returnTracksEnabled = computed(() => hasTracks.value && !!props.returnNo)
 
 function trackDetail(track: LogisticsTrack) {
-  return track.detail || (track.title || track.date ? '' : track.text || '')
+  return displayTrackDetail(track)
 }
 </script>
 

@@ -60,3 +60,40 @@ export function parseTicketLogistics(row: {
     returnNo: row.returnLogisticsNo || '',
   }
 }
+
+export function collapseDuplicatedText(s: string) {
+  const text = String(s || '').replace(/\s+/g, ' ').trim()
+  if (text.length < 24) return text
+  const almostSame = (a: string, b: string) => {
+    if (!a || !b) return false
+    const x = a.replace(/[。！!．.\s]+$/g, '')
+    const y = b.replace(/[。！!．.\s]+$/g, '')
+    if (x === y && x.length >= 12) return true
+    const longer = x.length >= y.length ? x : y
+    const shorter = x.length >= y.length ? y : x
+    return shorter.length >= 12 && longer.startsWith(shorter) && shorter.length / longer.length >= 0.85
+  }
+  const maxSplit = Math.min(text.length - 12, Math.floor(text.length * 0.6))
+  for (let len = maxSplit; len >= 12; len--) {
+    const a = text.slice(0, len).trim()
+    const b = text.slice(len).trim()
+    if (almostSame(a, b)) return a.length >= b.length ? a : b
+  }
+  return text
+}
+
+export function displayTrackDetail(track: {
+  date?: string
+  title?: string
+  detail?: string
+  text?: string
+}) {
+  const date = String(track.date || '').trim()
+  const title = String(track.title || '').trim()
+  let detail = String(track.detail || '').trim()
+  if (!detail) detail = title || date ? '' : String(track.text || '').trim()
+  for (const part of [date, title]) {
+    if (part && detail.startsWith(part)) detail = detail.slice(part.length).trim()
+  }
+  return collapseDuplicatedText(detail)
+}

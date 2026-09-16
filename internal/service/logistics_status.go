@@ -2,7 +2,9 @@ package service
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -30,6 +32,7 @@ func ParseLogisticsTracks(raw string) []LogisticsTrack {
 	if err := json.Unmarshal([]byte(raw), &tracks); err != nil || len(tracks) == 0 {
 		return nil
 	}
+<<<<<<< HEAD
 	return normalizeLogisticsTracks(tracks)
 }
 
@@ -85,6 +88,120 @@ func normalizeLogisticsTracks(tracks []LogisticsTrack) []LogisticsTrack {
 		out = append(out, t)
 	}
 	return out
+=======
+	out := make([]LogisticsTrack, 0, len(tracks))
+	for _, t := range tracks {
+		n := normalizeLogisticsTrack(t)
+		if n.Date == "" && n.Title == "" && n.Detail == "" && n.Text == "" {
+			continue
+		}
+		out = append(out, n)
+		if len(out) >= 5 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+var (
+	trackTimeRe  = regexp.MustCompile(`(\d{2}/\d{2}\s+\d{2}:\d{2}(?::\d{2})?)`)
+	trackTitleRe = regexp.MustCompile(`^(已签收|待取件|运输中|已发货|已揽件|派件中|已退回|已取消)`)
+)
+
+func collapseDuplicatedText(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if utf8.RuneCountInString(s) < 24 {
+		return s
+	}
+	runes := []rune(s)
+	almostSame := func(a, b string) bool {
+		if a == "" || b == "" {
+			return false
+		}
+		x := strings.TrimRight(a, "。！!．. ")
+		y := strings.TrimRight(b, "。！!．. ")
+		if x == y && utf8.RuneCountInString(x) >= 12 {
+			return true
+		}
+		longer, shorter := x, y
+		if len(y) > len(x) {
+			longer, shorter = y, x
+		}
+		return utf8.RuneCountInString(shorter) >= 12 &&
+			strings.HasPrefix(longer, shorter) &&
+			len(shorter)*100/len(longer) >= 85
+	}
+	maxSplit := len(runes) - 12
+	if capSplit := len(runes) * 3 / 5; maxSplit > capSplit {
+		maxSplit = capSplit
+	}
+	for lenChars := maxSplit; lenChars >= 12; lenChars-- {
+		a := strings.TrimSpace(string(runes[:lenChars]))
+		b := strings.TrimSpace(string(runes[lenChars:]))
+		if almostSame(a, b) {
+			if utf8.RuneCountInString(a) >= utf8.RuneCountInString(b) {
+				return a
+			}
+			return b
+		}
+	}
+	return s
+}
+
+func trackDateOf(raw string) string {
+	m := trackTimeRe.FindStringSubmatch(raw)
+	if len(m) > 1 {
+		return m[1]
+	}
+	return ""
+}
+
+func trackTitleOf(raw string) string {
+	s := strings.Join(strings.Fields(raw), " ")
+	if m := trackTitleRe.FindStringSubmatch(s); len(m) > 1 {
+		return m[1]
+	}
+	if utf8.RuneCountInString(s) <= 8 {
+		return s
+	}
+	return ""
+}
+
+func stripTrackPrefix(detail, date, title string) string {
+	s := strings.Join(strings.Fields(detail), " ")
+	for _, part := range []string{date, title} {
+		part = strings.TrimSpace(part)
+		if part != "" && strings.HasPrefix(s, part) {
+			s = strings.TrimSpace(s[len(part):])
+		}
+	}
+	return s
+}
+
+func normalizeLogisticsTrack(t LogisticsTrack) LogisticsTrack {
+	date := trackDateOf(t.Date)
+	if date == "" {
+		date = trackDateOf(t.Text)
+	}
+	title := trackTitleOf(t.Title)
+	if title == "" {
+		title = trackTitleOf(t.Text)
+	}
+	if title == "" {
+		title = trackTitleOf(t.Detail)
+	}
+	detail := strings.TrimSpace(t.Detail)
+	if detail == "" {
+		detail = t.Text
+	}
+	detail = collapseDuplicatedText(stripTrackPrefix(detail, date, title))
+	text := strings.TrimSpace(strings.Join([]string{date, title, detail}, " "))
+	text = strings.Join(strings.Fields(text), " ")
+	return LogisticsTrack{Date: date, Title: title, Detail: detail, Text: text}
+>>>>>>> da7b61f (update)
 }
 
 func matchLogisticsKeyword(s string) string {
