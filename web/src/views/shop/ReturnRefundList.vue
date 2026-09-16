@@ -10,7 +10,7 @@ import {
   type ShippedRefund,
 } from '../../api/shop'
 import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
-import { displayTrackDetail } from '../../utils/ticketLogistics
+import { displayTrackDetail } from '../../utils/ticketLogistics'
 
 const loading = ref(false)
 const shops = ref<MarketplaceShop[]>([])
@@ -84,7 +84,7 @@ onMounted(() => {
     <div class="page-head">
       <div>
         <h2 class="page-title">退货退款成功</h2>
-        <p class="desc">采集抖店售后类型「退货退款」、售后状态「退款成功」，申请时间为近 30 日。默认按申请时间最近的在前，悬停物流单号可看轨迹。</p>
+        <p class="desc">采集抖店售后类型「退货退款」、售后状态「退款成功」。申请时间窗口在店铺采集设置里单独配置。默认按申请时间最近的在前，悬停物流单号可看轨迹。</p>
       </div>
     </div>
 

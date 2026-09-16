@@ -1,6 +1,5 @@
 package service
 
-<<<<<<< HEAD
 import (
 	"encoding/json"
 	"testing"
@@ -38,8 +37,8 @@ func TestLimitLogisticsTracksJSONRewritesCleanCopy(t *testing.T) {
 	}
 	if len(tracks) != 1 || tracks[0].Detail != "已取出" {
 		t.Fatalf("got %+v", tracks)
-=======
-import "testing"
+	}
+}
 
 func TestParseLogisticsTracksCollapsesDuplicatedDetail(t *testing.T) {
 	msg := "您的快件已在代收点取出签收，签收代收点：菜鸟-杭州萧山利二花苑店，如遇问题请联系代收点电话【18613951558】。网点电话：0571-28150483，投诉电话：0571-28150483。感谢使用中通快递，期待再次为您服务！"
@@ -86,6 +85,13 @@ func TestParseLogisticsTracksKeepsFive(t *testing.T) {
 	}
 	if tracks[4].Detail != "【杭州市】快件已发往 萧山亚运村" {
 		t.Fatalf("last detail=%q", tracks[4].Detail)
->>>>>>> da7b61f (update)
+	}
+}
+
+func TestClassifyLogisticsWithTracksPrefersLatestDispatch(t *testing.T) {
+	raw := `[{"date":"09/12 07:23:57","title":"派件中","detail":"正在派件"},{"date":"09/12 02:46:51","title":"待取件","detail":"请及时取件"}]`
+	got := ClassifyLogisticsWithTracks("", raw)
+	if got != LogisticsInTransit {
+		t.Fatalf("got %q want %s", got, LogisticsInTransit)
 	}
 }

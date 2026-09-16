@@ -32,78 +32,7 @@ func ParseLogisticsTracks(raw string) []LogisticsTrack {
 	if err := json.Unmarshal([]byte(raw), &tracks); err != nil || len(tracks) == 0 {
 		return nil
 	}
-<<<<<<< HEAD
 	return normalizeLogisticsTracks(tracks)
-}
-
-func stripTrackPrefix(s, date, title string) string {
-	s = strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
-	for _, p := range []string{date, title} {
-		p = strings.Join(strings.Fields(strings.TrimSpace(p)), " ")
-		if p != "" && strings.HasPrefix(s, p) {
-			s = strings.TrimSpace(s[len(p):])
-		}
-	}
-	return s
-}
-
-func cleanLogisticsTrack(t LogisticsTrack) LogisticsTrack {
-	t.Date = strings.TrimSpace(t.Date)
-	t.Title = strings.TrimSpace(t.Title)
-	t.Detail = stripTrackPrefix(t.Detail, t.Date, t.Title)
-	t.Text = strings.TrimSpace(t.Text)
-	if t.Detail == "" && t.Text != "" {
-		t.Detail = stripTrackPrefix(t.Text, t.Date, t.Title)
-	}
-	if t.Detail == t.Title || t.Detail == t.Date {
-		t.Detail = ""
-	}
-	t.Text = strings.TrimSpace(strings.Join([]string{t.Date, t.Title, t.Detail}, " "))
-	return t
-}
-
-func normalizeLogisticsTracks(tracks []LogisticsTrack) []LogisticsTrack {
-	out := make([]LogisticsTrack, 0, len(tracks))
-	index := map[string]int{}
-	for _, raw := range tracks {
-		t := cleanLogisticsTrack(raw)
-		if t.Date == "" && t.Title == "" && t.Detail == "" && t.Text == "" {
-			continue
-		}
-		key := t.Date + "\x00" + t.Title
-		if t.Date == "" && t.Title == "" {
-			key = t.Text
-		}
-		if i, ok := index[key]; ok {
-			if len(t.Detail) > len(out[i].Detail) {
-				out[i].Detail = t.Detail
-				out[i].Text = strings.TrimSpace(strings.Join([]string{out[i].Date, out[i].Title, out[i].Detail}, " "))
-			}
-			continue
-		}
-		if len(out) >= 5 {
-			continue
-		}
-		index[key] = len(out)
-		out = append(out, t)
-	}
-	return out
-=======
-	out := make([]LogisticsTrack, 0, len(tracks))
-	for _, t := range tracks {
-		n := normalizeLogisticsTrack(t)
-		if n.Date == "" && n.Title == "" && n.Detail == "" && n.Text == "" {
-			continue
-		}
-		out = append(out, n)
-		if len(out) >= 5 {
-			break
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 var (
@@ -173,7 +102,7 @@ func trackTitleOf(raw string) string {
 func stripTrackPrefix(detail, date, title string) string {
 	s := strings.Join(strings.Fields(detail), " ")
 	for _, part := range []string{date, title} {
-		part = strings.TrimSpace(part)
+		part = strings.Join(strings.Fields(strings.TrimSpace(part)), " ")
 		if part != "" && strings.HasPrefix(s, part) {
 			s = strings.TrimSpace(s[len(part):])
 		}
@@ -198,10 +127,42 @@ func normalizeLogisticsTrack(t LogisticsTrack) LogisticsTrack {
 		detail = t.Text
 	}
 	detail = collapseDuplicatedText(stripTrackPrefix(detail, date, title))
-	text := strings.TrimSpace(strings.Join([]string{date, title, detail}, " "))
-	text = strings.Join(strings.Fields(text), " ")
+	if detail == title || detail == date {
+		detail = ""
+	}
+	text := strings.Join(strings.Fields(strings.Join([]string{date, title, detail}, " ")), " ")
 	return LogisticsTrack{Date: date, Title: title, Detail: detail, Text: text}
->>>>>>> da7b61f (update)
+}
+
+func normalizeLogisticsTracks(tracks []LogisticsTrack) []LogisticsTrack {
+	out := make([]LogisticsTrack, 0, len(tracks))
+	index := map[string]int{}
+	for _, raw := range tracks {
+		t := normalizeLogisticsTrack(raw)
+		if t.Date == "" && t.Title == "" && t.Detail == "" && t.Text == "" {
+			continue
+		}
+		key := t.Date + "\x00" + t.Title
+		if t.Date == "" && t.Title == "" {
+			key = t.Text
+		}
+		if i, ok := index[key]; ok {
+			if len(t.Detail) > len(out[i].Detail) {
+				out[i].Detail = t.Detail
+				out[i].Text = strings.Join(strings.Fields(strings.Join([]string{out[i].Date, out[i].Title, out[i].Detail}, " ")), " ")
+			}
+			continue
+		}
+		if len(out) >= 5 {
+			continue
+		}
+		index[key] = len(out)
+		out = append(out, t)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func matchLogisticsKeyword(s string) string {
@@ -222,6 +183,9 @@ func matchLogisticsKeyword(s string) string {
 		return LogisticsSigned
 	}
 	if strings.Contains(s, LogisticsInTransit) {
+		return LogisticsInTransit
+	}
+	if strings.Contains(s, "派件中") || strings.Contains(s, "已揽件") {
 		return LogisticsInTransit
 	}
 	if strings.Contains(s, LogisticsShipped) {

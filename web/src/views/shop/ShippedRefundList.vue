@@ -10,7 +10,7 @@ import {
   type ShippedRefund,
 } from '../../api/shop'
 import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
-import { displayTrackDetail } from '../../utils/ticketLogistics
+import { displayTrackDetail } from '../../utils/ticketLogistics'
 
 const loading = ref(false)
 const shops = ref<MarketplaceShop[]>([])
