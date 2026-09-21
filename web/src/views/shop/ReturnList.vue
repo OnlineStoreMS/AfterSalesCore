@@ -258,7 +258,7 @@ onMounted(() => {
       </el-table>
 
       <el-dialog v-model="exportVisible" title="导出 Excel" width="480px">
-        <p class="export-hint">按当前筛选条件导出，最多 1500 条。商品图片会嵌入图片；规格只导出规格；物流单号只导出单号；退回地默认导出最新两条轨迹。</p>
+        <p class="export-hint">按当前筛选条件导出，最多 1500 条。第一列为序号。商品图片会嵌入图片；规格只导出规格；物流单号只导出单号；退回地默认导出最新两条轨迹。</p>
         <el-checkbox-group v-model="exportFields" class="export-fields">
           <el-checkbox v-for="f in RETURN_EXPORT_FIELDS" :key="f.key" :label="f.key">
             {{ f.label }}

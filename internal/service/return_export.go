@@ -131,7 +131,8 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 	}
 	_ = f.SetSheetName(sheet, "退回管理")
 	sheet = "退回管理"
-	headers := make([]string, 0, len(fields))
+	headers := make([]string, 0, len(fields)+1)
+	headers = append(headers, "序号")
 	for _, key := range fields {
 		headers = append(headers, fieldLabel(key))
 	}
@@ -145,8 +146,13 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 	wrapStyle, _ := f.NewStyle(&excelize.Style{
 		Alignment: &excelize.Alignment{Vertical: "center", WrapText: true},
 	})
+	seqStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{Vertical: "center", Horizontal: "center"},
+	})
+	colCount := len(fields) + 1
 	_ = f.SetRowHeight(sheet, 1, 22)
-	_ = f.SetCellStyle(sheet, "A1", colName(len(fields))+"1", headerStyle)
+	_ = f.SetCellStyle(sheet, "A1", colName(colCount)+"1", headerStyle)
+	_ = f.SetColWidth(sheet, "A", "A", 8)
 	for i, key := range fields {
 		width := 18.0
 		switch key {
@@ -159,14 +165,15 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 		case "logisticsNo":
 			width = 22
 		}
-		_ = f.SetColWidth(sheet, colName(i+1), colName(i+1), width)
+		_ = f.SetColWidth(sheet, colName(i+2), colName(i+2), width)
 	}
 	imgHTTP := &http.Client{Timeout: 8 * time.Second}
 	imgCache := map[string]fetchedExportImage{}
 	embedImages := hasField(fields, "productImage")
 	for i, row := range list {
 		excelRow := i + 2
-		values := make([]any, 0, len(fields))
+		values := make([]any, 0, len(fields)+1)
+		values = append(values, i+1)
 		for _, key := range fields {
 			values = append(values, exportFieldValue(row, key))
 		}
@@ -175,10 +182,11 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 			return nil, "", err
 		}
 		_ = f.SetRowHeight(sheet, excelRow, 72)
-		_ = f.SetCellStyle(sheet, colName(1)+fmt.Sprint(excelRow), colName(len(fields))+fmt.Sprint(excelRow), wrapStyle)
+		_ = f.SetCellStyle(sheet, colName(1)+fmt.Sprint(excelRow), colName(colCount)+fmt.Sprint(excelRow), wrapStyle)
+		_ = f.SetCellStyle(sheet, "A"+fmt.Sprint(excelRow), "A"+fmt.Sprint(excelRow), seqStyle)
 		if embedImages {
 			if pic := loadExportImage(imgHTTP, imgCache, row.ProductImage); pic.OK() {
-				col := indexOfField(fields, "productImage") + 1
+				col := indexOfField(fields, "productImage") + 2
 				picCell, _ := excelize.CoordinatesToCellName(col, excelRow)
 				_ = addExportPicture(f, sheet, picCell, pic.Data, pic.Ext)
 			}
