@@ -247,6 +247,22 @@ func SignedTimeFromTrackJSON(raw string) string {
 	return SignedTimeFromTracks(ParseLogisticsTracks(raw))
 }
 
+func FormatTrackText(t LogisticsTrack) string {
+	line := strings.TrimSpace(strings.Join([]string{t.Date, t.Title, t.Detail}, " "))
+	if line != "" {
+		return line
+	}
+	return strings.TrimSpace(t.Text)
+}
+
+func LatestTrackText(raw string) string {
+	tracks := ParseLogisticsTracks(raw)
+	if len(tracks) == 0 {
+		return ""
+	}
+	return FormatTrackText(tracks[0])
+}
+
 func ClassifyLogisticsWithTracks(logistics, trackJSON string) string {
 	if strings.Contains(logistics, LogisticsCancelled) {
 		return LogisticsCancelled

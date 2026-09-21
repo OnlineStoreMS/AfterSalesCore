@@ -616,6 +616,7 @@ func shopTicketKeywordMatch(t *model.AftersaleTicket, shopName, kw string) bool 
 	blob := strings.ToLower(strings.Join([]string{
 		shopName, t.PlatformAftersaleID, t.OrderNo, t.ProductTitle, t.SKU, t.Status, t.Logistics,
 		t.ReturnLogisticsNo, t.ShipLogisticsNo, t.AftersaleType,
+		t.TrackJSON, LatestTrackText(t.TrackJSON),
 	}, " "))
 	return strings.Contains(blob, kw)
 }
@@ -1652,6 +1653,7 @@ func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {
 		ShipLogisticsNo:   t.ShipLogisticsNo,
 		Tracks:            toDTOTracks(t.TrackJSON),
 		SignedTime:        SignedTimeFromTrackJSON(t.TrackJSON),
+		PickupPoint:       LatestTrackText(t.TrackJSON),
 		ShopID:            t.ShopID,
 		ApplyTime:         t.ApplyTime, CardKeys: keys, SyncedAt: formatTime(t.SyncedAt),
 	}

@@ -11,15 +11,18 @@ import {
   createShopFromAgent,
   deleteShop,
   enableAgentCollect,
+  encodeRefundApplyRange,
   fetchAgentOnlineShops,
   fetchPluginSetting,
   fetchShops,
   requestShopSync,
   savePluginSetting,
+  splitRefundApplyRange,
   updateShop,
   type MarketplaceShop,
   type ShopPlatform,
 } from '../../api/shop'
+import { dateShortcuts } from '../../utils/date'
 
 const router = useRouter()
 const loading = ref(false)
@@ -27,8 +30,10 @@ const tableData = ref<MarketplaceShop[]>([])
 const dialogVisible = ref(false)
 const editing = ref<MarketplaceShop | null>(null)
 const syncMinutes = ref(30)
-const shippedRefundApplyRange = ref('30')
-const returnRefundApplyRange = ref('30')
+const shippedRangeMode = ref('30')
+const returnRangeMode = ref('30')
+const shippedCustomRange = ref<[string, string] | null>(null)
+const returnCustomRange = ref<[string, string] | null>(null)
 const savingSync = ref(false)
 const onlineShops = ref<Array<{
   platform: string
@@ -38,6 +43,33 @@ const onlineShops = ref<Array<{
   agentName: string
 }>>([])
 const loadingOnline = ref(false)
+
+function ymd(d: Date) {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+function last30Days(): [string, string] {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(start.getDate() - 29)
+  return [ymd(start), ymd(end)]
+}
+
+function applySettingRanges(shipped?: string, returned?: string) {
+  const s = splitRefundApplyRange(shipped)
+  const r = splitRefundApplyRange(returned)
+  shippedRangeMode.value = s.mode
+  shippedCustomRange.value = s.custom
+  returnRangeMode.value = r.mode
+  returnCustomRange.value = r.custom
+}
+
+function onRangeModeChange(which: 'shipped' | 'return', mode: string) {
+  if (mode !== 'custom') return
+  if (which === 'shipped' && !shippedCustomRange.value) shippedCustomRange.value = last30Days()
+  if (which === 'return' && !returnCustomRange.value) returnCustomRange.value = last30Days()
+}
 
 const form = ref({
   platform: 'doudian' as ShopPlatform,
@@ -59,8 +91,10 @@ async function loadData() {
     const [shops, setting] = await Promise.all([fetchShops(), fetchPluginSetting()])
     tableData.value = shops
     syncMinutes.value = setting.pluginSyncIntervalMin || 30
-    shippedRefundApplyRange.value = setting.shippedRefundApplyRange || setting.refundApplyRange || '30'
-    returnRefundApplyRange.value = setting.returnRefundApplyRange || setting.refundApplyRange || '30'
+    applySettingRanges(
+      setting.shippedRefundApplyRange || setting.refundApplyRange || '30',
+      setting.returnRefundApplyRange || setting.refundApplyRange || '30',
+    )
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {
@@ -87,16 +121,25 @@ watch(() => form.value.platform, () => {
 })
 
 async function saveSyncInterval() {
+  const shipped = encodeRefundApplyRange(shippedRangeMode.value, shippedCustomRange.value)
+  const returned = encodeRefundApplyRange(returnRangeMode.value, returnCustomRange.value)
+  if (shippedRangeMode.value === 'custom' && !shipped) {
+    ElMessage.error('请选择已发货退款成功的自定义日期')
+    return
+  }
+  if (returnRangeMode.value === 'custom' && !returned) {
+    ElMessage.error('请选择退货退款成功的自定义日期')
+    return
+  }
   savingSync.value = true
   try {
     const setting = await savePluginSetting({
       pluginSyncIntervalMin: syncMinutes.value,
-      shippedRefundApplyRange: shippedRefundApplyRange.value,
-      returnRefundApplyRange: returnRefundApplyRange.value,
+      shippedRefundApplyRange: shipped,
+      returnRefundApplyRange: returned,
     })
     syncMinutes.value = setting.pluginSyncIntervalMin
-    shippedRefundApplyRange.value = setting.shippedRefundApplyRange || '30'
-    returnRefundApplyRange.value = setting.returnRefundApplyRange || '30'
+    applySettingRanges(setting.shippedRefundApplyRange, setting.returnRefundApplyRange)
     ElMessage.success('已保存，并已更新各店铺采集任务')
   } catch (e) {
     ElMessage.error((e as Error).message || '保存失败')
@@ -244,28 +287,56 @@ async function handleRequestSync(row: MarketplaceShop) {
             :value="opt.value"
           />
         </el-select>
-        <span class="sync-label">已发货退款成功</span>
-        <el-select v-model="shippedRefundApplyRange" style="width: 140px">
-          <el-option
-            v-for="opt in REFUND_APPLY_RANGE_OPTIONS"
-            :key="'s-' + opt.value"
-            :label="opt.label"
-            :value="opt.value"
+        <span class="range-block">
+          <span class="sync-label">已发货退款成功</span>
+          <el-select v-model="shippedRangeMode" style="width: 120px" @change="onRangeModeChange('shipped', $event)">
+            <el-option
+              v-for="opt in REFUND_APPLY_RANGE_OPTIONS"
+              :key="'s-' + opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+          <el-date-picker
+            v-if="shippedRangeMode === 'custom'"
+            v-model="shippedCustomRange"
+            type="daterange"
+            unlink-panels
+            range-separator="至"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            value-format="YYYY-MM-DD"
+            :shortcuts="dateShortcuts"
+            style="width: 260px"
           />
-        </el-select>
-        <span class="sync-label">退货退款成功</span>
-        <el-select v-model="returnRefundApplyRange" style="width: 140px">
-          <el-option
-            v-for="opt in REFUND_APPLY_RANGE_OPTIONS"
-            :key="'r-' + opt.value"
-            :label="opt.label"
-            :value="opt.value"
+        </span>
+        <span class="range-block">
+          <span class="sync-label">退货退款成功</span>
+          <el-select v-model="returnRangeMode" style="width: 120px" @change="onRangeModeChange('return', $event)">
+            <el-option
+              v-for="opt in REFUND_APPLY_RANGE_OPTIONS"
+              :key="'r-' + opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+          <el-date-picker
+            v-if="returnRangeMode === 'custom'"
+            v-model="returnCustomRange"
+            type="daterange"
+            unlink-panels
+            range-separator="至"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            value-format="YYYY-MM-DD"
+            :shortcuts="dateShortcuts"
+            style="width: 260px"
           />
-        </el-select>
+        </span>
         <el-button type="primary" plain :loading="savingSync" @click="saveSyncInterval">保存采集设置</el-button>
       </div>
       <p class="hint range-hint">
-        这两块按申请时间分别采集并增量写入。首次可把某一块设成「全部」回填历史，日常再改成近 7 天或近 30 天。工作台卡片仍每次全量刷新。
+        这两块按申请时间分别采集并增量写入。首次可把某一块设成「全部」回填历史，日常用近 7/30 天或自定义起止日。工作台卡片仍每次全量刷新。
       </p>
 
       <el-table :data="tableData" stripe border>
@@ -389,7 +460,8 @@ async function handleRequestSync(row: MarketplaceShop) {
 <style scoped>
 .header { display: flex; justify-content: space-between; align-items: center; }
 .hint { color: #606266; margin: 0 0 12px; line-height: 1.6; }
-.sync-setting { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.sync-setting { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
+.range-block { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .sync-label { font-weight: 500; }
 .range-hint { margin-top: 0; }
 .shop-title { display: flex; align-items: center; gap: 6px; }

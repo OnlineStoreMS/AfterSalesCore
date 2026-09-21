@@ -106,6 +106,7 @@ type TicketItem struct {
 	ShipLogisticsNo      string           `json:"shipLogisticsNo,omitempty"`
 	Tracks               []LogisticsTrack `json:"tracks,omitempty"`
 	SignedTime           string           `json:"signedTime,omitempty"`
+	PickupPoint          string           `json:"pickupPoint,omitempty"`
 	ShopID               uint64           `json:"shopId,omitempty"`
 	ShopName             string           `json:"shopName,omitempty"`
 	ApplyTime            string           `json:"applyTime,omitempty"`

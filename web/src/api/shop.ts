@@ -67,6 +67,7 @@ export interface AftersaleTicket {
   shipLogisticsNo?: string
   tracks?: LogisticsTrack[]
   signedTime?: string
+  pickupPoint?: string
   shopId?: number
   shopName?: string
   applyTime?: string
@@ -118,7 +119,30 @@ export const REFUND_APPLY_RANGE_OPTIONS: { value: string; label: string }[] = [
   { value: '7', label: '近 7 天' },
   { value: '30', label: '近 30 天' },
   { value: '90', label: '近 90 天' },
+  { value: 'custom', label: '自定义' },
 ]
+
+const CUSTOM_RANGE_RE = /^(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})$/
+
+export function isCustomRefundApplyRange(raw?: string) {
+  return CUSTOM_RANGE_RE.test(String(raw || '').trim())
+}
+
+export function encodeRefundApplyRange(mode: string, custom?: [string, string] | null) {
+  if (mode !== 'custom') return mode || '30'
+  const from = String(custom?.[0] || '').trim()
+  const to = String(custom?.[1] || '').trim()
+  if (!from || !to) return ''
+  return from <= to ? `${from},${to}` : `${to},${from}`
+}
+
+export function splitRefundApplyRange(raw?: string): { mode: string; custom: [string, string] | null } {
+  const value = String(raw || '').trim()
+  const m = value.match(CUSTOM_RANGE_RE)
+  if (m) return { mode: 'custom', custom: [m[1], m[2]] }
+  if (value) return { mode: value, custom: null }
+  return { mode: '30', custom: null }
+}
 
 export async function fetchPluginSetting() {
   return unwrap<PluginSetting>(await client.get('/plugin-settings'))

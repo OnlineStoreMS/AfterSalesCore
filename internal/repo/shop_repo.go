@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -943,7 +945,40 @@ const (
 	defaultRefundApplyRange  = "30"
 )
 
+var customRefundApplyRangeRe = regexp.MustCompile(`(?i)^(?:custom[:：])?(\d{4})[-/](\d{1,2})[-/](\d{1,2})[,，~_至到](\d{4})[-/](\d{1,2})[-/](\d{1,2})$`)
+
+func padDatePart(s string) string {
+	if len(s) == 1 {
+		return "0" + s
+	}
+	return s
+}
+
+func parseCustomRefundApplyRange(raw string) (string, bool) {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	s = strings.ReplaceAll(s, " ", "")
+	m := customRefundApplyRangeRe.FindStringSubmatch(s)
+	if m == nil {
+		return "", false
+	}
+	from := m[1] + "-" + padDatePart(m[2]) + "-" + padDatePart(m[3])
+	to := m[4] + "-" + padDatePart(m[5]) + "-" + padDatePart(m[6])
+	if from > to {
+		from, to = to, from
+	}
+	if _, err := time.Parse("2006-01-02", from); err != nil {
+		return "", false
+	}
+	if _, err := time.Parse("2006-01-02", to); err != nil {
+		return "", false
+	}
+	return from + "," + to, true
+}
+
 func NormalizeRefundApplyRange(raw string) string {
+	if custom, ok := parseCustomRefundApplyRange(raw); ok {
+		return custom
+	}
 	s := strings.ToLower(strings.TrimSpace(raw))
 	s = strings.ReplaceAll(s, " ", "")
 	s = strings.ReplaceAll(s, "最", "")
@@ -958,7 +993,12 @@ func NormalizeRefundApplyRange(raw string) string {
 		return "7"
 	case "90", "90天", "近90天", "近3个月", "3个月":
 		return "90"
+	case "30", "30天", "近30天":
+		return "30"
 	default:
+		if _, err := strconv.Atoi(s); err == nil {
+			return defaultRefundApplyRange
+		}
 		return defaultRefundApplyRange
 	}
 }

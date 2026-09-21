@@ -11,7 +11,7 @@ import {
   type MarketplaceShop,
   type ShopTicketKind,
 } from '../../api/shop'
-import { parseTicketLogistics, signedTimeFromTracks } from '../../utils/ticketLogistics'
+import { parseTicketLogistics, signedTimeFromTracks, displayTrackDetail } from '../../utils/ticketLogistics'
 
 const route = useRoute()
 const kind = computed(() => (route.meta.kind as ShopTicketKind) || 'buyer-return-pickup')
@@ -94,6 +94,22 @@ function signedTimeOf(row: AftersaleTicket) {
   return signedTimeFromTracks(row.tracks, row.signedTime)
 }
 
+function pickupPointOf(row: AftersaleTicket) {
+  const direct = String(row.pickupPoint || '').trim()
+  if (direct) return direct
+  const track = row.tracks?.[0]
+  if (!track) return ''
+  const line = [track.date, track.title, displayTrackDetail(track)].filter(Boolean).join(' ').trim()
+  return line || String(track.text || '').trim()
+}
+
+const isPickupKind = computed(() => kind.value === 'buyer-return-pickup')
+const keywordPlaceholder = computed(() =>
+  isPickupKind.value
+    ? '售后编号 / 订单号 / 商品 / 退货单号 / 代收点'
+    : '售后编号 / 订单号 / 商品 / 退货单号',
+)
+
 onMounted(() => {
   loadShops()
   loadData()
@@ -139,8 +155,8 @@ watch(kind, () => {
         <el-input
           v-model="keyword"
           clearable
-          placeholder="售后编号 / 订单号 / 商品 / 退货单号"
-          style="width: 320px"
+          :placeholder="keywordPlaceholder"
+          style="width: 360px"
           @keyup.enter="handleSearch"
         />
         <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
@@ -209,6 +225,11 @@ watch(kind, () => {
             />
           </template>
         </el-table-column>
+        <el-table-column v-if="isPickupKind" label="代收点" min-width="220">
+          <template #default="{ row }">
+            <div class="location">{{ pickupPointOf(row) || '—' }}</div>
+          </template>
+        </el-table-column>
         <el-table-column v-if="kind === 'buyer-return-signed'" label="签收时间" width="170">
           <template #default="{ row }">{{ signedTimeOf(row) || '—' }}</template>
         </el-table-column>
@@ -244,5 +265,6 @@ watch(kind, () => {
 .timeout { color: #e6a23c; font-size: 12px; margin-top: 2px; line-height: 1.4; }
 .timeout.warning { color: #e6a23c; font-weight: 600; }
 .timeout.danger { color: #f56c6c; font-weight: 700; }
+.location { white-space: pre-wrap; line-height: 1.5; word-break: break-word; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

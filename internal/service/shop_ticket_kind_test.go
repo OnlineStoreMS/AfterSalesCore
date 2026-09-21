@@ -104,3 +104,20 @@ func TestInterceptFromTicketCopiesTimeout(t *testing.T) {
 		t.Fatalf("timeoutDisplay=%q deadlineAt=%q", item.TimeoutDisplay, item.DeadlineAt)
 	}
 }
+
+func TestShopTicketKeywordMatchPickupPoint(t *testing.T) {
+	ticket := &model.AftersaleTicket{
+		PlatformAftersaleID: "AS1",
+		OrderNo:             "O1",
+		TrackJSON: `[
+			{"date":"09/12 11:37:01","title":"待取件","detail":"快件已存放至菜鸟-杭州萧山利二花苑店，请及时取件"},
+			{"date":"09/12 07:23:57","title":"派件中","detail":"正在派件"}
+		]`,
+	}
+	if !shopTicketKeywordMatch(ticket, "", "利二花苑") {
+		t.Fatal("keyword should match latest track pickup point")
+	}
+	if shopTicketKeywordMatch(ticket, "", "不存在驿站") {
+		t.Fatal("unrelated keyword should not match")
+	}
+}

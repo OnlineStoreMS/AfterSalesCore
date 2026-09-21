@@ -108,6 +108,20 @@ func TestSignedTimeFromTracksUsesLatestSigned(t *testing.T) {
 	}
 }
 
+func TestLatestTrackTextUsesNewest(t *testing.T) {
+	got := LatestTrackText(`[
+		{"date":"09/12 11:37:01","title":"待取件","detail":"快件已存放至菜鸟-杭州萧山利二花苑店，请及时取件"},
+		{"date":"09/12 07:23:57","title":"派件中","detail":"正在派件"}
+	]`)
+	want := "09/12 11:37:01 待取件 快件已存放至菜鸟-杭州萧山利二花苑店，请及时取件"
+	if got != want {
+		t.Fatalf("got %q", got)
+	}
+	if LatestTrackText("") != "" {
+		t.Fatal("empty tracks should have empty pickup point")
+	}
+}
+
 func TestLastTwoTracksText(t *testing.T) {
 	got := LastTwoTracksText([]dto.LogisticsTrack{
 		{Date: "07/14 17:30:06", Title: "已退回", Detail: "已投递"},
