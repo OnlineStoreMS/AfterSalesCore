@@ -74,6 +74,9 @@ func AutoMigrate(db *gorm.DB) error {
 			return err
 		}
 		return db.Exec(`
+			ALTER TABLE tenant_settings ALTER COLUMN refund_apply_range TYPE varchar(64);
+			ALTER TABLE tenant_settings ALTER COLUMN shipped_refund_apply_range TYPE varchar(64);
+			ALTER TABLE tenant_settings ALTER COLUMN return_refund_apply_range TYPE varchar(64);
 			CREATE INDEX IF NOT EXISTS idx_unboxing_tenant_tracking ON unboxing_records (tenant_id, tracking_no);
 			CREATE INDEX IF NOT EXISTS idx_unboxing_created ON unboxing_records (tenant_id, created_at DESC);
 			CREATE INDEX IF NOT EXISTS idx_edge_devices_edge_id ON edge_devices (edge_id);

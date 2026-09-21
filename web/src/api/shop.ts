@@ -122,16 +122,36 @@ export const REFUND_APPLY_RANGE_OPTIONS: { value: string; label: string }[] = [
   { value: 'custom', label: '自定义' },
 ]
 
-const CUSTOM_RANGE_RE = /^(\d{4}-\d{2}-\d{2}),(\d{4}-\d{2}-\d{2})$/
+const CUSTOM_RANGE_RE = /(\d{4})[-/](\d{1,2})[-/](\d{1,2}).*?(\d{4})[-/](\d{1,2})[-/](\d{1,2})/
 
-export function isCustomRefundApplyRange(raw?: string) {
-  return CUSTOM_RANGE_RE.test(String(raw || '').trim())
+function padDate(n: string | number) {
+  return String(n).padStart(2, '0')
 }
 
-export function encodeRefundApplyRange(mode: string, custom?: [string, string] | null) {
+export function toRefundApplyYmd(raw: unknown): string {
+  if (raw == null || raw === '') return ''
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+    return `${raw.getFullYear()}-${padDate(raw.getMonth() + 1)}-${padDate(raw.getDate())}`
+  }
+  const s = String(raw).trim()
+  const m = s.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  if (m) return `${m[1]}-${padDate(m[2])}-${padDate(m[3])}`
+  const t = Date.parse(s)
+  if (!Number.isNaN(t)) {
+    const d = new Date(t)
+    return `${d.getFullYear()}-${padDate(d.getMonth() + 1)}-${padDate(d.getDate())}`
+  }
+  return ''
+}
+
+export function isCustomRefundApplyRange(raw?: string) {
+  return Boolean(splitRefundApplyRange(raw).custom)
+}
+
+export function encodeRefundApplyRange(mode: string, custom?: [unknown, unknown] | unknown[] | null) {
   if (mode !== 'custom') return mode || '30'
-  const from = String(custom?.[0] || '').trim()
-  const to = String(custom?.[1] || '').trim()
+  const from = toRefundApplyYmd(custom?.[0])
+  const to = toRefundApplyYmd(custom?.[1])
   if (!from || !to) return ''
   return from <= to ? `${from},${to}` : `${to},${from}`
 }
@@ -139,8 +159,12 @@ export function encodeRefundApplyRange(mode: string, custom?: [string, string] |
 export function splitRefundApplyRange(raw?: string): { mode: string; custom: [string, string] | null } {
   const value = String(raw || '').trim()
   const m = value.match(CUSTOM_RANGE_RE)
-  if (m) return { mode: 'custom', custom: [m[1], m[2]] }
-  if (value) return { mode: value, custom: null }
+  if (m) {
+    const from = `${m[1]}-${padDate(m[2])}-${padDate(m[3])}`
+    const to = `${m[4]}-${padDate(m[5])}-${padDate(m[6])}`
+    return { mode: 'custom', custom: from <= to ? [from, to] : [to, from] }
+  }
+  if (value && value !== 'custom') return { mode: value, custom: null }
   return { mode: '30', custom: null }
 }
 

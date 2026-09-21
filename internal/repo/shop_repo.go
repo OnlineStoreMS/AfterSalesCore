@@ -945,7 +945,7 @@ const (
 	defaultRefundApplyRange  = "30"
 )
 
-var customRefundApplyRangeRe = regexp.MustCompile(`(?i)^(?:custom[:：])?(\d{4})[-/](\d{1,2})[-/](\d{1,2})[,，~_至到](\d{4})[-/](\d{1,2})[-/](\d{1,2})$`)
+var customRefundApplyRangeRe = regexp.MustCompile(`(?i)(?:custom[:：])?\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?\s*[,，~_至到]\s*(\d{4})[-/](\d{1,2})[-/](\d{1,2})`)
 
 func padDatePart(s string) string {
 	if len(s) == 1 {
@@ -955,8 +955,7 @@ func padDatePart(s string) string {
 }
 
 func parseCustomRefundApplyRange(raw string) (string, bool) {
-	s := strings.ToLower(strings.TrimSpace(raw))
-	s = strings.ReplaceAll(s, " ", "")
+	s := strings.TrimSpace(raw)
 	m := customRefundApplyRangeRe.FindStringSubmatch(s)
 	if m == nil {
 		return "", false

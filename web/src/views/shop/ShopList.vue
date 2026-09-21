@@ -18,6 +18,7 @@ import {
   requestShopSync,
   savePluginSetting,
   splitRefundApplyRange,
+  toRefundApplyYmd,
   updateShop,
   type MarketplaceShop,
   type ShopPlatform,
@@ -69,6 +70,14 @@ function onRangeModeChange(which: 'shipped' | 'return', mode: string) {
   if (mode !== 'custom') return
   if (which === 'shipped' && !shippedCustomRange.value) shippedCustomRange.value = last30Days()
   if (which === 'return' && !returnCustomRange.value) returnCustomRange.value = last30Days()
+}
+
+function onCustomRangeChange(which: 'shipped' | 'return', raw: [string, string] | Date[] | null) {
+  const from = toRefundApplyYmd(raw?.[0])
+  const to = toRefundApplyYmd(raw?.[1])
+  const next = from && to ? (from <= to ? [from, to] as [string, string] : [to, from] as [string, string]) : null
+  if (which === 'shipped') shippedCustomRange.value = next
+  else returnCustomRange.value = next
 }
 
 const form = ref({
@@ -305,9 +314,11 @@ async function handleRequestSync(row: MarketplaceShop) {
             range-separator="至"
             start-placeholder="开始"
             end-placeholder="结束"
+            format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             :shortcuts="dateShortcuts"
             style="width: 260px"
+            @change="onCustomRangeChange('shipped', $event)"
           />
         </span>
         <span class="range-block">
@@ -328,9 +339,11 @@ async function handleRequestSync(row: MarketplaceShop) {
             range-separator="至"
             start-placeholder="开始"
             end-placeholder="结束"
+            format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
             :shortcuts="dateShortcuts"
             style="width: 260px"
+            @change="onCustomRangeChange('return', $event)"
           />
         </span>
         <el-button type="primary" plain :loading="savingSync" @click="saveSyncInterval">保存采集设置</el-button>
