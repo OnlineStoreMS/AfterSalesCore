@@ -295,7 +295,14 @@ func (h *ShopHandler) ShippedRefunds(c *gin.Context) {
 		httputil.HandleServiceError(c, err)
 		return
 	}
-	response.OK(c, response.PageResult(list, total, page, pageSize))
+	reasons, err := h.ss(c).ListShippedRefundReasons(shopID)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	data := response.PageResult(list, total, page, pageSize)
+	data["reasons"] = reasons
+	response.OK(c, data)
 }
 
 func (h *ShopHandler) ReturnRefunds(c *gin.Context) {

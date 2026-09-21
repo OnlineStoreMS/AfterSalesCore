@@ -34,11 +34,25 @@ async function loadShops() {
   }
 }
 
+function applyReasons(next?: string[], rows?: ShippedRefund[]) {
+  const fromApi = (next || []).map((x) => String(x || '').trim()).filter(Boolean)
+  if (fromApi.length) {
+    reasons.value = fromApi
+    return
+  }
+  const seen = new Set(reasons.value)
+  for (const row of rows || []) {
+    const item = String(row.reason || '').trim()
+    if (item) seen.add(item)
+  }
+  reasons.value = Array.from(seen).sort((a, b) => a.localeCompare(b, 'zh'))
+}
+
 async function loadReasons() {
   try {
-    reasons.value = await fetchShippedRefundReasons(shopId.value)
+    applyReasons(await fetchShippedRefundReasons(shopId.value), tableData.value)
   } catch {
-    reasons.value = []
+    applyReasons([], tableData.value)
   }
 }
 
@@ -57,6 +71,7 @@ async function loadData() {
     })
     tableData.value = data.list
     total.value = data.total
+    applyReasons(data.reasons, data.list)
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {

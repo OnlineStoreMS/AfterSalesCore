@@ -412,7 +412,7 @@ export async function fetchShippedRefunds(params?: {
   page?: number
   pageSize?: number
 }) {
-  return unwrap<PageData<ShippedRefund>>(await client.get('/shipped-refunds', {
+  return unwrap<PageData<ShippedRefund> & { reasons?: string[] }>(await client.get('/shipped-refunds', {
     params: {
       ...params,
       alertOnly: params?.alertOnly ? '1' : undefined,
