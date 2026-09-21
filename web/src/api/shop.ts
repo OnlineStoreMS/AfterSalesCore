@@ -238,9 +238,23 @@ export interface ReturnPackage {
   shipTime?: string
   applyTime?: string
   returnTime?: string
+  fenFaRemark?: string
   tracks?: LogisticsTrack[]
   syncedAt: string
 }
+
+export const RETURN_EXPORT_FIELDS: { key: string; label: string }[] = [
+  { key: 'shop', label: '店铺' },
+  { key: 'product', label: '商品信息' },
+  { key: 'order', label: '订单信息' },
+  { key: 'aftersale', label: '售后信息' },
+  { key: 'logisticsNo', label: '物流单号' },
+  { key: 'returnLocation', label: '退回地' },
+  { key: 'fenFaRemark', label: '分发备注' },
+  { key: 'returnTime', label: '物流退回时间' },
+  { key: 'applyTime', label: '申请时间' },
+  { key: 'syncedAt', label: '同步时间' },
+]
 
 export interface ShippedRefund {
   id: number
@@ -271,6 +285,37 @@ export interface ShippedRefund {
   alert?: boolean
   applyTime?: string
   syncedAt: string
+}
+
+export async function exportReturnPackages(data: {
+  shopId?: number
+  keyword?: string
+  returnFrom?: string
+  returnTo?: string
+  applyFrom?: string
+  applyTo?: string
+  fields: string[]
+}) {
+  const res = await client.post('/return-packages/export', data, {
+    responseType: 'blob',
+    timeout: 120000,
+  })
+  const blob = res.data as Blob
+  if (blob.type && blob.type.includes('application/json')) {
+    const text = await blob.text()
+    try {
+      const body = JSON.parse(text) as { message?: string }
+      throw new Error(body.message || '导出失败')
+    } catch (e) {
+      if (e instanceof Error && e.message !== '导出失败') throw e
+      throw new Error('导出失败')
+    }
+  }
+  const header = String(res.headers['content-disposition'] || '')
+  const star = header.match(/filename\*=UTF-8''([^;]+)/i)
+  const plain = header.match(/filename="?([^";]+)"?/i)
+  const filename = decodeURIComponent(star?.[1] || '') || plain?.[1] || '退回管理.xlsx'
+  return { blob, filename }
 }
 
 export async function fetchReturnPackages(params?: {

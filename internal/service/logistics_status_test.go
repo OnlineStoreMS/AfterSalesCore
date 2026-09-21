@@ -3,6 +3,8 @@ package service
 import (
 	"encoding/json"
 	"testing"
+
+	"aftersalescore/internal/dto"
 )
 
 func TestParseLogisticsTracksDedupesSignedCopies(t *testing.T) {
@@ -85,6 +87,18 @@ func TestParseLogisticsTracksKeepsFive(t *testing.T) {
 	}
 	if tracks[4].Detail != "【杭州市】快件已发往 萧山亚运村" {
 		t.Fatalf("last detail=%q", tracks[4].Detail)
+	}
+}
+
+func TestLastTwoTracksText(t *testing.T) {
+	got := LastTwoTracksText([]dto.LogisticsTrack{
+		{Date: "07/14 17:30:06", Title: "已退回", Detail: "已投递"},
+		{Date: "07/14 16:44:27", Title: "退回中", Detail: "【江苏省昆山市新花桥】派件"},
+		{Date: "07/14 07:32:56", Title: "", Detail: "已到达"},
+	}, "fallback")
+	want := "07/14 17:30:06 已退回 已投递\n07/14 16:44:27 退回中 【江苏省昆山市新花桥】派件"
+	if got != want {
+		t.Fatalf("got %q", got)
 	}
 }
 

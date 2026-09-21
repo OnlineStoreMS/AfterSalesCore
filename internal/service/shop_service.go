@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -8,12 +9,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"aftersalescore/internal/dto"
+	"aftersalescore/internal/integrations/ordercore"
 	"aftersalescore/internal/model"
 	"aftersalescore/internal/pkg/pluginsecret"
 	"aftersalescore/internal/repo"
@@ -39,25 +42,23 @@ type ShopService struct {
 	codec         *pluginsecret.Codec
 	publicBaseURL string
 	agents        *AgentsCenterClient
+	orders        *ordercore.Client
 }
 
-func NewShopService(repos *repo.Repos, codec *pluginsecret.Codec, publicBaseURL string, agents *AgentsCenterClient) *ShopService {
+func NewShopService(repos *repo.Repos, codec *pluginsecret.Codec, publicBaseURL string, agents *AgentsCenterClient, orders *ordercore.Client) *ShopService {
 	return &ShopService{
 		repos:         repos,
 		codec:         codec,
 		publicBaseURL: strings.TrimRight(strings.TrimSpace(publicBaseURL), "/"),
 		agents:        agents,
+		orders:        orders,
 	}
 }
 
 func (s *ShopService) ForTenant(tenantID uint64) *ShopService {
-	return &ShopService{
-		repos:         s.repos,
-		tenantID:      repo.NormalizeTenantID(tenantID),
-		codec:         s.codec,
-		publicBaseURL: s.publicBaseURL,
-		agents:        s.agents,
-	}
+	cp := *s
+	cp.tenantID = repo.NormalizeTenantID(tenantID)
+	return &cp
 }
 
 func (s *ShopService) repo() *repo.ShopRepo {
@@ -392,7 +393,7 @@ func (s *ShopService) ListTickets(id uint64, cardKey, keyword string, page, page
 	return out, total, nil
 }
 
-func (s *ShopService) ListReturns(q dto.ReturnListQuery) ([]dto.ReturnPackageItem, int64, error) {
+func (s *ShopService) ListReturns(q dto.ReturnListQuery, bearerToken string) ([]dto.ReturnPackageItem, int64, error) {
 	if q.ShopID > 0 {
 		if _, err := s.repo().Get(q.ShopID); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -410,6 +411,7 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery) ([]dto.ReturnPackageIte
 		ApplyTo:    ParseQueryDateTime(q.ApplyTo, true),
 		Page:       q.Page,
 		PageSize:   q.PageSize,
+		Unpaged:    q.Unpaged,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -426,7 +428,28 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery) ([]dto.ReturnPackageIte
 	for i := range list {
 		out = append(out, toReturnItem(&list[i], names[list[i].ShopID]))
 	}
+	s.attachFenFaRemarks(out, bearerToken)
 	return out, total, nil
+}
+
+func (s *ShopService) attachFenFaRemarks(items []dto.ReturnPackageItem, bearerToken string) {
+	if s.orders == nil || strings.TrimSpace(bearerToken) == "" || len(items) == 0 {
+		return
+	}
+	nos := make([]string, 0, len(items))
+	for i := range items {
+		if n := strings.TrimSpace(items[i].OrderNo); n != "" {
+			nos = append(nos, n)
+		}
+	}
+	remarks, err := s.orders.FenFaRemarks(context.Background(), bearerToken, nos)
+	if err != nil {
+		log.Printf("[aftersales] 同步分发备注失败: %v", err)
+		return
+	}
+	for i := range items {
+		items[i].FenFaRemark = strings.TrimSpace(remarks[strings.TrimSpace(items[i].OrderNo)])
+	}
 }
 
 func (s *ShopService) SidebarCounts() (*dto.SidebarCounts, error) {

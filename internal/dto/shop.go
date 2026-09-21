@@ -376,6 +376,7 @@ type ReturnPackageItem struct {
 	ShipTime            string           `json:"shipTime,omitempty"`
 	ApplyTime           string           `json:"applyTime,omitempty"`
 	ReturnTime          string           `json:"returnTime,omitempty"`
+	FenFaRemark         string           `json:"fenFaRemark,omitempty"`
 	Tracks              []LogisticsTrack `json:"tracks,omitempty"`
 	SyncedAt            string           `json:"syncedAt"`
 }
@@ -389,6 +390,17 @@ type ReturnListQuery struct {
 	ApplyTo    string
 	Page       int
 	PageSize   int
+	Unpaged    bool
+}
+
+type ReturnExportRequest struct {
+	ShopID     uint64   `json:"shopId"`
+	Keyword    string   `json:"keyword"`
+	ReturnFrom string   `json:"returnFrom"`
+	ReturnTo   string   `json:"returnTo"`
+	ApplyFrom  string   `json:"applyFrom"`
+	ApplyTo    string   `json:"applyTo"`
+	Fields     []string `json:"fields"`
 }
 
 type ShippedRefundItem struct {

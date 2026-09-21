@@ -54,3 +54,6 @@ agentscenter:
   base_url: "http://localhost:8107"
   internal_token: "change-me-internal-token"
 
+integrations:
+  ordercore_api_url: "http://127.0.0.1:8098"
+

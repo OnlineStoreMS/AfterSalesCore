@@ -397,6 +397,7 @@ type ReturnListFilter struct {
 	ApplyTo    *time.Time
 	Page       int
 	PageSize   int
+	Unpaged    bool
 }
 
 func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64, error) {
@@ -430,7 +431,11 @@ func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64
 	if f.Page < 1 {
 		f.Page = 1
 	}
-	if f.PageSize < 1 || f.PageSize > 200 {
+	if f.Unpaged {
+		if f.PageSize < 1 || f.PageSize > 1500 {
+			f.PageSize = 1500
+		}
+	} else if f.PageSize < 1 || f.PageSize > 200 {
 		f.PageSize = 20
 	}
 	var list []model.ReturnPackage

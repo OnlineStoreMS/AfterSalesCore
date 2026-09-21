@@ -7,6 +7,7 @@ import (
 	"aftersalescore/admin"
 	adminmw "aftersalescore/admin/middleware"
 	"aftersalescore/internal/config"
+	"aftersalescore/internal/integrations/ordercore"
 	jwtmgr "aftersalescore/internal/pkg/jwt"
 	"aftersalescore/internal/pkg/pluginsecret"
 	"aftersalescore/internal/repo"
@@ -55,7 +56,8 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		panic(err)
 	}
 	agentsClient := service.NewAgentsCenterClient(cfg.AgentsCenter.BaseURL, cfg.AgentsCenter.InternalToken)
-	shopSvc := service.NewShopService(repos, codec, cfg.Apps.PublicBaseURL, agentsClient)
+	orderClient := ordercore.NewClient(cfg.Integrations.OrderCoreAPIURL)
+	shopSvc := service.NewShopService(repos, codec, cfg.Apps.PublicBaseURL, agentsClient, orderClient)
 	notifySvc := service.NewNotificationService(repos)
 	unboxingH := admin.NewUnboxingHandler(unboxingSvc)
 	edgeRecordH := admin.NewEdgeRecordHandler(edgeRecordSvc)

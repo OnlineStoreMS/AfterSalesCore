@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Download, Search } from '@element-plus/icons-vue'
 import {
+  RETURN_EXPORT_FIELDS,
+  exportReturnPackages,
   fetchReturnPackages,
   fetchShops,
   type LogisticsTrack,
@@ -22,6 +24,9 @@ const shopId = ref<number | undefined>()
 const keyword = ref('')
 const returnRange = ref<[string, string] | null>(null)
 const applyRange = ref<[string, string] | null>(null)
+const exportVisible = ref(false)
+const exporting = ref(false)
+const exportFields = ref(RETURN_EXPORT_FIELDS.map((f) => f.key))
 
 async function loadShops() {
   try {
@@ -56,6 +61,41 @@ async function loadData() {
 function handleSearch() {
   page.value = 1
   loadData()
+}
+
+function openExport() {
+  exportVisible.value = true
+}
+
+async function confirmExport() {
+  if (!exportFields.value.length) {
+    ElMessage.warning('请至少勾选一个导出字段')
+    return
+  }
+  exporting.value = true
+  try {
+    const { blob, filename } = await exportReturnPackages({
+      shopId: shopId.value || undefined,
+      keyword: keyword.value || undefined,
+      returnFrom: returnRange.value?.[0] || undefined,
+      returnTo: returnRange.value?.[1] || undefined,
+      applyFrom: applyRange.value?.[0] || undefined,
+      applyTo: applyRange.value?.[1] || undefined,
+      fields: exportFields.value,
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    exportVisible.value = false
+    ElMessage.success('已开始下载')
+  } catch (e) {
+    ElMessage.error((e as Error).message || '导出失败')
+  } finally {
+    exporting.value = false
+  }
 }
 
 function hasTracks(row: ReturnPackage) {
@@ -133,6 +173,7 @@ onMounted(() => {
           @keyup.enter="handleSearch"
         />
         <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+        <el-button :icon="Download" @click="openExport">导出 Excel</el-button>
         <span class="total">共 {{ total }} 条退回件</span>
       </div>
 
@@ -197,6 +238,11 @@ onMounted(() => {
             </el-popover>
           </template>
         </el-table-column>
+        <el-table-column label="分发备注" min-width="200">
+          <template #default="{ row }">
+            <div class="location">{{ row.fenFaRemark || '—' }}</div>
+          </template>
+        </el-table-column>
         <el-table-column label="退回地" min-width="220">
           <template #default="{ row }">
             <div class="location">{{ row.returnLocation || '—' }}</div>
@@ -210,6 +256,19 @@ onMounted(() => {
         </el-table-column>
         <el-table-column prop="syncedAt" label="同步时间" width="170" />
       </el-table>
+
+      <el-dialog v-model="exportVisible" title="导出 Excel" width="480px">
+        <p class="export-hint">按当前筛选条件导出，最多 1500 条。商品信息会带上图片；退回地默认导出最新两条轨迹。</p>
+        <el-checkbox-group v-model="exportFields" class="export-fields">
+          <el-checkbox v-for="f in RETURN_EXPORT_FIELDS" :key="f.key" :label="f.key">
+            {{ f.label }}
+          </el-checkbox>
+        </el-checkbox-group>
+        <template #footer>
+          <el-button @click="exportVisible = false">取消</el-button>
+          <el-button type="primary" :loading="exporting" @click="confirmExport">导出</el-button>
+        </template>
+      </el-dialog>
 
       <div class="pager">
         <el-pagination
@@ -242,6 +301,8 @@ onMounted(() => {
 .tracking { color: #409eff; word-break: break-all; }
 .location { white-space: pre-wrap; line-height: 1.5; word-break: break-word; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
+.export-hint { margin: 0 0 12px; color: #606266; font-size: 13px; line-height: 1.5; }
+.export-fields { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 </style>
 
 <style>

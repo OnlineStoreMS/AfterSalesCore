@@ -16,6 +16,11 @@ type Config struct {
 	CORS         CORSConfig
 	Apps         AppsConfig
 	AgentsCenter AgentsCenterConfig `mapstructure:"agentscenter"`
+	Integrations IntegrationsConfig `mapstructure:"integrations"`
+}
+
+type IntegrationsConfig struct {
+	OrderCoreAPIURL string `mapstructure:"ordercore_api_url"`
 }
 
 type ServerConfig struct {
@@ -58,9 +63,9 @@ type MinIOConfig struct {
 	AccessKey  string `mapstructure:"access_key"`
 	SecretKey  string `mapstructure:"secret_key"`
 	Bucket     string
-	UseSSL     bool   `mapstructure:"use_ssl"`
+	UseSSL     bool `mapstructure:"use_ssl"`
 	Prefix     string
-	PublicRead bool   `mapstructure:"public_read"`
+	PublicRead bool `mapstructure:"public_read"`
 }
 
 type CORSConfig struct {
@@ -68,11 +73,11 @@ type CORSConfig struct {
 }
 
 type EdgeConfig struct {
-	Schema       string          `mapstructure:"schema"`
-	Table        string          `mapstructure:"table"`
-	CloudEdgeID  string          `mapstructure:"cloud_edge_id"`
-	HealthPollSec int            `mapstructure:"health_poll_sec"`
-	MinIO        EdgeMinIOConfig `mapstructure:"minio"`
+	Schema        string          `mapstructure:"schema"`
+	Table         string          `mapstructure:"table"`
+	CloudEdgeID   string          `mapstructure:"cloud_edge_id"`
+	HealthPollSec int             `mapstructure:"health_poll_sec"`
+	MinIO         EdgeMinIOConfig `mapstructure:"minio"`
 }
 
 type EdgeMinIOConfig struct {
@@ -123,6 +128,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.AgentsCenter.InternalToken == "" {
 		cfg.AgentsCenter.InternalToken = cfg.Auth.InternalToken
+	}
+	if cfg.Integrations.OrderCoreAPIURL == "" {
+		cfg.Integrations.OrderCoreAPIURL = "http://127.0.0.1:8098"
 	}
 	if cfg.Storage.Driver == "" {
 		cfg.Storage.Driver = "minio"

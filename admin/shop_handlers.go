@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"aftersalescore/internal/dto"
@@ -227,12 +228,27 @@ func (h *ShopHandler) Returns(c *gin.Context) {
 		ApplyTo:    c.Query("applyTo"),
 		Page:       page,
 		PageSize:   pageSize,
-	})
+	}, authcontext.BearerToken(c))
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
 	response.OK(c, response.PageResult(list, total, page, pageSize))
+}
+
+func (h *ShopHandler) ExportReturns(c *gin.Context) {
+	var in dto.ReturnExportRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "参数无效")
+		return
+	}
+	data, filename, err := h.ss(c).ExportReturns(in, authcontext.BearerToken(c))
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename="returns.xlsx"; filename*=UTF-8''`+url.PathEscape(filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
 }
 
 func (h *ShopHandler) ShippedRefunds(c *gin.Context) {
