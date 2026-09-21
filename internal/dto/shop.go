@@ -105,6 +105,7 @@ type TicketItem struct {
 	ReturnLogisticsNo    string           `json:"returnLogisticsNo,omitempty"`
 	ShipLogisticsNo      string           `json:"shipLogisticsNo,omitempty"`
 	Tracks               []LogisticsTrack `json:"tracks,omitempty"`
+	SignedTime           string           `json:"signedTime,omitempty"`
 	ShopID               uint64           `json:"shopId,omitempty"`
 	ShopName             string           `json:"shopName,omitempty"`
 	ApplyTime            string           `json:"applyTime,omitempty"`
@@ -467,6 +468,7 @@ type ReturnRefundItem struct {
 	Carrier             string           `json:"carrier,omitempty"`
 	ShipTime            string           `json:"shipTime,omitempty"`
 	Tracks              []LogisticsTrack `json:"tracks,omitempty"`
+	SignedTime          string           `json:"signedTime,omitempty"`
 	ApplyTime           string           `json:"applyTime,omitempty"`
 	SyncedAt            string           `json:"syncedAt"`
 }

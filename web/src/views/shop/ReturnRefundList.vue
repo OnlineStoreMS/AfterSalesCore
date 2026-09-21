@@ -206,6 +206,9 @@ onMounted(() => {
             </el-popover>
           </template>
         </el-table-column>
+        <el-table-column label="签收时间" width="170">
+          <template #default="{ row }">{{ row.signedTime || '—' }}</template>
+        </el-table-column>
         <el-table-column label="申请时间" width="170">
           <template #default="{ row }">{{ row.applyTime || '—' }}</template>
         </el-table-column>

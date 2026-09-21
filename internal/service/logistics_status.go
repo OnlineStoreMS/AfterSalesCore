@@ -206,6 +206,34 @@ func LatestTrackStatus(trackJSON string) string {
 	return matchLogisticsKeyword(firstNonEmpty(tracks[0].Title, tracks[0].Text))
 }
 
+func isSignedTrack(t LogisticsTrack) bool {
+	return strings.Contains(t.Title, LogisticsSigned) ||
+		strings.Contains(t.Text, LogisticsSigned) ||
+		strings.Contains(t.Detail, LogisticsSigned)
+}
+
+func SignedTimeFromTracks(tracks []LogisticsTrack) string {
+	for _, t := range tracks {
+		if !isSignedTrack(t) {
+			continue
+		}
+		if d := strings.TrimSpace(t.Date); d != "" {
+			return d
+		}
+		if d := trackDateOf(t.Text); d != "" {
+			return d
+		}
+		if d := trackDateOf(t.Detail); d != "" {
+			return d
+		}
+	}
+	return ""
+}
+
+func SignedTimeFromTrackJSON(raw string) string {
+	return SignedTimeFromTracks(ParseLogisticsTracks(raw))
+}
+
 func ClassifyLogisticsWithTracks(logistics, trackJSON string) string {
 	if strings.Contains(logistics, LogisticsCancelled) {
 		return LogisticsCancelled

@@ -66,6 +66,7 @@ export interface AftersaleTicket {
   returnLogisticsNo?: string
   shipLogisticsNo?: string
   tracks?: LogisticsTrack[]
+  signedTime?: string
   shopId?: number
   shopName?: string
   applyTime?: string
@@ -285,6 +286,7 @@ export interface ShippedRefund {
   tracks?: LogisticsTrack[]
   alert?: boolean
   applyTime?: string
+  signedTime?: string
   syncedAt: string
 }
 

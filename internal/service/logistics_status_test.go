@@ -90,6 +90,20 @@ func TestParseLogisticsTracksKeepsFive(t *testing.T) {
 	}
 }
 
+func TestSignedTimeFromTracksUsesLatestSigned(t *testing.T) {
+	got := SignedTimeFromTrackJSON(`[
+		{"date":"09/16 23:01:42","title":"已签收","detail":"您的快件已取出签收"},
+		{"date":"09/16 18:10:00","title":"派件中","detail":"正在派件"},
+		{"date":"09/12 11:37:01","title":"待取件","detail":"快件已送达"}
+	]`)
+	if got != "09/16 23:01:42" {
+		t.Fatalf("got %q", got)
+	}
+	if SignedTimeFromTrackJSON(`[{"title":"运输中","date":"09/12 07:23:57"}]`) != "" {
+		t.Fatal("unsigned tracks should have empty signed time")
+	}
+}
+
 func TestLastTwoTracksText(t *testing.T) {
 	got := LastTwoTracksText([]dto.LogisticsTrack{
 		{Date: "07/14 17:30:06", Title: "已退回", Detail: "已投递"},

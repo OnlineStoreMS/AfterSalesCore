@@ -205,6 +205,9 @@ watch(kind, () => {
             />
           </template>
         </el-table-column>
+        <el-table-column v-if="kind === 'buyer-return-signed'" label="签收时间" width="170">
+          <template #default="{ row }">{{ row.signedTime || '—' }}</template>
+        </el-table-column>
       </el-table>
 
       <div class="pager">

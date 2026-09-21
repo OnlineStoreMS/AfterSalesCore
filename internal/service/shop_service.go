@@ -1642,6 +1642,7 @@ func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {
 		ReturnLogisticsNo: t.ReturnLogisticsNo,
 		ShipLogisticsNo:   t.ShipLogisticsNo,
 		Tracks:            toDTOTracks(t.TrackJSON),
+		SignedTime:        SignedTimeFromTrackJSON(t.TrackJSON),
 		ShopID:            t.ShopID,
 		ApplyTime:         t.ApplyTime, CardKeys: keys, SyncedAt: formatTime(t.SyncedAt),
 	}
@@ -1712,7 +1713,8 @@ func toReturnRefundItem(item *model.ReturnRefundSuccess, shopName string) dto.Re
 		Logistics: item.Logistics, LogisticsStatus: status,
 		LogisticsNo: item.LogisticsNo, Carrier: item.Carrier, ShipTime: item.ShipTime,
 		Tracks: toDTOTracks(item.TrackJSON), ApplyTime: item.ApplyTime,
-		SyncedAt: formatTime(item.SyncedAt),
+		SignedTime: SignedTimeFromTrackJSON(item.TrackJSON),
+		SyncedAt:   formatTime(item.SyncedAt),
 	}
 }
 
