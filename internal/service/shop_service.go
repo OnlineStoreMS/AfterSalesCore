@@ -777,17 +777,23 @@ func interceptFromTicket(t *model.AftersaleTicket, shopName string) dto.Intercep
 	if no == "" {
 		no = strings.TrimSpace(t.ReturnLogisticsNo)
 	}
-	return dto.InterceptItem{
+	item := dto.InterceptItem{
 		ID: t.ID, ShopID: t.ShopID, ShopName: shopName, Source: "intercept",
 		NeedIntercept: true, AwaitPickup: false,
 		PlatformAftersaleID: t.PlatformAftersaleID, OrderNo: t.OrderNo,
 		ProductTitle: t.ProductTitle, ProductImage: t.ProductImage, SKU: t.SKU,
 		Qty: t.Qty, BuyQty: t.BuyQty, PayAmount: t.PayAmount, RefundAmount: t.RefundAmount,
 		AftersaleType: t.AftersaleType, Reason: t.Reason, Status: t.Status,
-		Logistics: t.Logistics, LogisticsNo: no, ShipLogisticsNo: t.ShipLogisticsNo,
+		TimeoutText: t.TimeoutText, TimeoutAction: t.TimeoutAction,
+		RemainSeconds: remainSeconds(t.DeadlineAt, time.Now()),
+		Logistics:     t.Logistics, LogisticsNo: no, ShipLogisticsNo: t.ShipLogisticsNo,
 		ReturnLogisticsNo: t.ReturnLogisticsNo, Tracks: toDTOTracks(t.TrackJSON),
 		ApplyTime: t.ApplyTime, SyncedAt: formatTime(t.SyncedAt),
 	}
+	if t.DeadlineAt != nil {
+		item.DeadlineAt = t.DeadlineAt.UTC().Format(time.RFC3339)
+	}
+	return item
 }
 
 func interceptFromShipped(p *model.ShippedRefundSuccess, shopName string) dto.InterceptItem {

@@ -383,6 +383,10 @@ export interface InterceptOrder {
   aftersaleType: string
   reason: string
   status: string
+  timeoutText?: string
+  timeoutAction?: string
+  deadlineAt?: string
+  remainSeconds?: number
   logistics?: string
   logisticsStatus?: string
   logisticsNo?: string

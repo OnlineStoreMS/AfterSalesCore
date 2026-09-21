@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import TicketLogisticsCell from '../../components/TicketLogisticsCell.vue'
@@ -14,6 +14,8 @@ const page = ref(1)
 const pageSize = ref(20)
 const shopId = ref<number | undefined>()
 const keyword = ref('')
+const nowTick = ref(Date.now())
+let tickTimer = 0
 
 async function loadShops() {
   try {
@@ -46,9 +48,44 @@ function handleSearch() {
   loadData()
 }
 
+function remainSecondsOf(row: InterceptOrder) {
+  void nowTick.value
+  if (row.deadlineAt) {
+    const t = Date.parse(row.deadlineAt)
+    if (!Number.isNaN(t)) return Math.max(0, Math.floor((t - Date.now()) / 1000))
+  }
+  return Math.max(0, Number(row.remainSeconds || 0))
+}
+
+function formatRemain(sec: number) {
+  if (sec <= 0) return '已超时'
+  const d = Math.floor(sec / 86400)
+  const h = Math.floor((sec % 86400) / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  const parts: string[] = []
+  if (d) parts.push(`${d}天`)
+  if (h) parts.push(`${h}小时`)
+  if (d || h || m) parts.push(`${m}分`)
+  if (!d && h < 6) parts.push(`${s}秒`)
+  return parts.join('') || '不足1分'
+}
+
+function remainClass(sec: number) {
+  if (sec <= 0 || sec < 6 * 3600) return 'danger'
+  if (sec < 24 * 3600) return 'warning'
+  return ''
+}
+
 onMounted(() => {
   loadShops()
   loadData()
+  tickTimer = window.setInterval(() => {
+    nowTick.value = Date.now()
+  }, 1000)
+})
+onUnmounted(() => {
+  if (tickTimer) window.clearInterval(tickTimer)
 })
 </script>
 
@@ -124,6 +161,27 @@ onMounted(() => {
             <div v-if="row.applyTime" class="sub">申请时间 {{ row.applyTime }}</div>
           </template>
         </el-table-column>
+        <el-table-column label="售后状态" min-width="180">
+          <template #default="{ row }">
+            <div>{{ row.status || '—' }}</div>
+            <div
+              v-if="row.deadlineAt || row.timeoutText"
+              class="timeout"
+              :class="remainClass(remainSecondsOf(row))"
+            >
+              <template v-if="row.deadlineAt || row.remainSeconds">
+                <template v-if="remainSecondsOf(row) <= 0">
+                  已超时<span v-if="row.timeoutAction"> · {{ row.timeoutAction }}</span>
+                </template>
+                <template v-else>
+                  剩余 {{ formatRemain(remainSecondsOf(row)) }}
+                  <span v-if="row.timeoutAction">后{{ row.timeoutAction }}</span>
+                </template>
+              </template>
+              <template v-else>{{ row.timeoutText }}</template>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="物流信息" min-width="200">
           <template #default="{ row }">
             <TicketLogisticsCell
@@ -167,5 +225,8 @@ onMounted(() => {
 .title { font-weight: 600; line-height: 1.4; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
 .tag-danger { color: #f56c6c; font-weight: 600; line-height: 1.5; }
+.timeout { color: #e6a23c; font-size: 12px; margin-top: 2px; line-height: 1.4; }
+.timeout.warning { color: #e6a23c; font-weight: 600; }
+.timeout.danger { color: #f56c6c; font-weight: 700; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

@@ -513,6 +513,10 @@ type InterceptItem struct {
 	AftersaleType       string           `json:"aftersaleType"`
 	Reason              string           `json:"reason"`
 	Status              string           `json:"status"`
+	TimeoutText         string           `json:"timeoutText,omitempty"`
+	TimeoutAction       string           `json:"timeoutAction,omitempty"`
+	DeadlineAt          string           `json:"deadlineAt,omitempty"`
+	RemainSeconds       int              `json:"remainSeconds"`
 	Logistics           string           `json:"logistics,omitempty"`
 	LogisticsStatus     string           `json:"logisticsStatus,omitempty"`
 	LogisticsNo         string           `json:"logisticsNo,omitempty"`
