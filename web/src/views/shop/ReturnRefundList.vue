@@ -10,7 +10,7 @@ import {
   type ShippedRefund,
 } from '../../api/shop'
 import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
-import { displayTrackDetail } from '../../utils/ticketLogistics'
+import { displayTrackDetail, signedTimeFromTracks } from '../../utils/ticketLogistics'
 
 const loading = ref(false)
 const shops = ref<MarketplaceShop[]>([])
@@ -71,6 +71,10 @@ function hasTracks(row: ShippedRefund) {
 
 function trackDetail(track: LogisticsTrack) {
   return displayTrackDetail(track)
+}
+
+function signedTimeOf(row: ShippedRefund) {
+  return signedTimeFromTracks(row.tracks, row.signedTime)
 }
 
 onMounted(() => {
@@ -207,7 +211,7 @@ onMounted(() => {
           </template>
         </el-table-column>
         <el-table-column label="签收时间" width="170">
-          <template #default="{ row }">{{ row.signedTime || '—' }}</template>
+          <template #default="{ row }">{{ signedTimeOf(row) || '—' }}</template>
         </el-table-column>
         <el-table-column label="申请时间" width="170">
           <template #default="{ row }">{{ row.applyTime || '—' }}</template>

@@ -11,7 +11,7 @@ import {
   type MarketplaceShop,
   type ShopTicketKind,
 } from '../../api/shop'
-import { parseTicketLogistics } from '../../utils/ticketLogistics'
+import { parseTicketLogistics, signedTimeFromTracks } from '../../utils/ticketLogistics'
 
 const route = useRoute()
 const kind = computed(() => (route.meta.kind as ShopTicketKind) || 'buyer-return-pickup')
@@ -88,6 +88,10 @@ function remainClass(sec: number) {
   if (sec <= 0 || sec < 6 * 3600) return 'danger'
   if (sec < 24 * 3600) return 'warning'
   return ''
+}
+
+function signedTimeOf(row: AftersaleTicket) {
+  return signedTimeFromTracks(row.tracks, row.signedTime)
 }
 
 onMounted(() => {
@@ -206,7 +210,7 @@ watch(kind, () => {
           </template>
         </el-table-column>
         <el-table-column v-if="kind === 'buyer-return-signed'" label="签收时间" width="170">
-          <template #default="{ row }">{{ row.signedTime || '—' }}</template>
+          <template #default="{ row }">{{ signedTimeOf(row) || '—' }}</template>
         </el-table-column>
       </el-table>
 

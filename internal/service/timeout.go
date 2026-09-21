@@ -8,6 +8,7 @@ import (
 )
 
 var timeoutRemainRe = regexp.MustCompile(`(?:(\d+)\s*天)?(?:(\d+)\s*小时)?(?:(\d+)\s*分)?(?:(\d+)\s*秒)?后(.+)`)
+var timeoutPhraseRe = regexp.MustCompile(`(?:\d+\s*天|\d+\s*小时|\d+\s*分|\d+\s*秒)+后\S*`)
 
 // ParseTimeout 从「2天9小时16分后自动同意」解析截止时间和动作，供提醒使用。
 func ParseTimeout(text string, from time.Time) (deadline *time.Time, action string, remainSec int) {
@@ -54,6 +55,15 @@ func remainSeconds(deadline *time.Time, now time.Time) int {
 		return 0
 	}
 	return sec
+}
+
+func timeoutFromAftersaleInfo(info string) string {
+	info = strings.TrimSpace(strings.ReplaceAll(info, "\n", ""))
+	if info == "" {
+		return ""
+	}
+	m := timeoutPhraseRe.FindString(info)
+	return strings.TrimRight(strings.TrimSpace(m), "。.;；")
 }
 
 func atoiDefault(s string) int {

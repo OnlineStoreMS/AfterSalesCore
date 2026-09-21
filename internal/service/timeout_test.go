@@ -65,3 +65,13 @@ func TestDeadlineFromUnix(t *testing.T) {
 		t.Fatalf("fallback parse action=%q deadline=%v", action2, parsed)
 	}
 }
+
+func TestTimeoutFromAftersaleInfo(t *testing.T) {
+	got := timeoutFromAftersaleInfo("售后退款 ¥10 5天3小时后自动同意")
+	if got != "5天3小时后自动同意" {
+		t.Fatalf("got %q", got)
+	}
+	if timeoutFromAftersaleInfo("售后退款 ¥10 申请件数1件") != "" {
+		t.Fatal("expected empty")
+	}
+}

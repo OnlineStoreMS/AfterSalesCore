@@ -385,6 +385,7 @@ export interface InterceptOrder {
   status: string
   timeoutText?: string
   timeoutAction?: string
+  timeoutDisplay?: string
   deadlineAt?: string
   remainSeconds?: number
   logistics?: string

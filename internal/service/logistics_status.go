@@ -36,7 +36,7 @@ func ParseLogisticsTracks(raw string) []LogisticsTrack {
 }
 
 var (
-	trackTimeRe  = regexp.MustCompile(`(\d{2}/\d{2}\s+\d{2}:\d{2}(?::\d{2})?)`)
+	trackTimeRe  = regexp.MustCompile(`((?:\d{4}[-/])?\d{1,2}[-/]\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)`)
 	trackTitleRe = regexp.MustCompile(`^(已签收|待取件|运输中|已发货|已揽件|派件中|已退回|已取消)`)
 )
 
@@ -212,18 +212,31 @@ func isSignedTrack(t LogisticsTrack) bool {
 		strings.Contains(t.Detail, LogisticsSigned)
 }
 
+func trackTimeOf(t LogisticsTrack) string {
+	if d := strings.TrimSpace(t.Date); d != "" {
+		if parsed := trackDateOf(d); parsed != "" {
+			return parsed
+		}
+		return d
+	}
+	if d := trackDateOf(t.Text); d != "" {
+		return d
+	}
+	if d := trackDateOf(t.Detail); d != "" {
+		return d
+	}
+	if d := trackDateOf(t.Title); d != "" {
+		return d
+	}
+	return ""
+}
+
 func SignedTimeFromTracks(tracks []LogisticsTrack) string {
 	for _, t := range tracks {
 		if !isSignedTrack(t) {
 			continue
 		}
-		if d := strings.TrimSpace(t.Date); d != "" {
-			return d
-		}
-		if d := trackDateOf(t.Text); d != "" {
-			return d
-		}
-		if d := trackDateOf(t.Detail); d != "" {
+		if d := trackTimeOf(t); d != "" {
 			return d
 		}
 	}

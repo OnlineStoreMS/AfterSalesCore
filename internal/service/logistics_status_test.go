@@ -102,6 +102,10 @@ func TestSignedTimeFromTracksUsesLatestSigned(t *testing.T) {
 	if SignedTimeFromTrackJSON(`[{"title":"运输中","date":"09/12 07:23:57"}]`) != "" {
 		t.Fatal("unsigned tracks should have empty signed time")
 	}
+	real := SignedTimeFromTrackJSON(`[{"date":"09/05 19:04:15","title":"已签收","detail":"您的快件已在代收点取出签收","text":"09/05 19:04:15 已签收 您的快件已在代收点取出签收"}]`)
+	if real != "09/05 19:04:15" {
+		t.Fatalf("real track got %q", real)
+	}
 }
 
 func TestLastTwoTracksText(t *testing.T) {

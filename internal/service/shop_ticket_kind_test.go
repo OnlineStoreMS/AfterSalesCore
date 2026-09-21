@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"aftersalescore/internal/dto"
 	"aftersalescore/internal/model"
@@ -81,5 +82,25 @@ func TestMatchShopTicketKind(t *testing.T) {
 	}
 	if !MatchShopTicketKind(stalePickup, dto.TicketKindBuyerReturnSigned) {
 		t.Fatal("stale 待取件 text with latest track 已签收 should match signed")
+	}
+}
+
+func TestInterceptFromTicketCopiesTimeout(t *testing.T) {
+	deadline := time.Date(2026, 9, 26, 22, 11, 18, 0, time.Local)
+	item := interceptFromTicket(&model.AftersaleTicket{
+		Status:        "待商家处理",
+		TimeoutText:   "5天3小时41分后自动同意",
+		TimeoutAction: "自动同意",
+		DeadlineAt:    &deadline,
+		Logistics:     "订单发货 待取件\n需商家拦截快递",
+	}, "测试店")
+	if item.Status != "待商家处理" {
+		t.Fatalf("status=%q", item.Status)
+	}
+	if item.TimeoutText != "5天3小时41分后自动同意" {
+		t.Fatalf("timeoutText=%q", item.TimeoutText)
+	}
+	if item.TimeoutDisplay == "" || item.DeadlineAt == "" {
+		t.Fatalf("timeoutDisplay=%q deadlineAt=%q", item.TimeoutDisplay, item.DeadlineAt)
 	}
 }

@@ -785,8 +785,9 @@ func interceptFromTicket(t *model.AftersaleTicket, shopName string) dto.Intercep
 		Qty: t.Qty, BuyQty: t.BuyQty, PayAmount: t.PayAmount, RefundAmount: t.RefundAmount,
 		AftersaleType: t.AftersaleType, Reason: t.Reason, Status: t.Status,
 		TimeoutText: t.TimeoutText, TimeoutAction: t.TimeoutAction,
-		RemainSeconds: remainSeconds(t.DeadlineAt, time.Now()),
-		Logistics:     t.Logistics, LogisticsNo: no, ShipLogisticsNo: t.ShipLogisticsNo,
+		TimeoutDisplay: formatRemainText(t.DeadlineAt, t.TimeoutText, t.TimeoutAction, time.Now()),
+		RemainSeconds:  remainSeconds(t.DeadlineAt, time.Now()),
+		Logistics:      t.Logistics, LogisticsNo: no, ShipLogisticsNo: t.ShipLogisticsNo,
 		ReturnLogisticsNo: t.ReturnLogisticsNo, Tracks: toDTOTracks(t.TrackJSON),
 		ApplyTime: t.ApplyTime, SyncedAt: formatTime(t.SyncedAt),
 	}
@@ -805,7 +806,9 @@ func interceptFromShipped(p *model.ShippedRefundSuccess, shopName string) dto.In
 		ProductTitle: p.ProductTitle, ProductImage: p.ProductImage, SKU: p.SKU,
 		Qty: p.Qty, BuyQty: p.BuyQty, PayAmount: p.PayAmount, RefundAmount: p.RefundAmount,
 		AftersaleType: p.AftersaleType, Reason: p.Reason, Status: p.Status,
-		Logistics: p.Logistics, LogisticsStatus: firstNonEmpty(status, LogisticsAwaitPickup),
+		TimeoutText:    timeoutFromAftersaleInfo(p.AftersaleInfo),
+		TimeoutDisplay: timeoutFromAftersaleInfo(p.AftersaleInfo),
+		Logistics:      p.Logistics, LogisticsStatus: firstNonEmpty(status, LogisticsAwaitPickup),
 		LogisticsNo: p.LogisticsNo, Carrier: p.Carrier, Tracks: toDTOTracks(p.TrackJSON),
 		ApplyTime: p.ApplyTime, SyncedAt: formatTime(p.SyncedAt),
 	}
