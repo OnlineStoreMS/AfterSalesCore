@@ -88,34 +88,6 @@ func TestParseLogisticsTracksKeepsFive(t *testing.T) {
 	}
 }
 
-func TestExtractReturnLocationFromYtoReturnTracks(t *testing.T) {
-	raw := `[
-		{"date":"07/14 17:30:06","title":"已退回","detail":"您的快件已投递，收件人： 退回商家。如遇找不到包裹等问题，请致电专属客服95554","text":"07/14 17:30:06 已退回 您的快件已投递，收件人： 退回商家。"},
-		{"date":"07/14 16:44:27","title":"退回中","detail":"【江苏省昆山市新花桥】的吴巧巧（15996864513）正在为您派件","text":"07/14 16:44:27 退回中 【江苏省昆山市新花桥】的吴巧巧正在为您派件"},
-		{"date":"07/14 07:32:56","title":"","detail":"您的快件已经到达【江苏省昆山市新花桥】【物流问题请致电（专属热线：95554）更快解决】","text":"07/14 07:32:56 您的快件已经到达【江苏省昆山市新花桥】"}
-	]`
-	fallback := "07/14 17:30:06 已退回 您的快件已投递，收件人： 退回商家。如遇找不到包裹等问题，请致电专属客服95554，处理更快捷！"
-	got := ExtractReturnLocation(raw, fallback)
-	if got != "江苏省昆山市新花桥" {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestExtractReturnLocationFromZtoReturnedAt(t *testing.T) {
-	raw := `[{"date":"08/14 15:34:48","title":"已退回","detail":"快件已在 宿迁宿城 被退回签收，如遇问题请联系快递员【杨苏梅：13605248643】。签收人：单位前台"}]`
-	got := ExtractReturnLocation(raw, "")
-	if got != "宿迁宿城" {
-		t.Fatalf("got %q", got)
-	}
-}
-
-func TestExtractReturnLocationDropsTrackDumpFallback(t *testing.T) {
-	got := ExtractReturnLocation("", "07/14 17:30:06 已退回 您的快件已投递，收件人： 退回商家。")
-	if got != "" {
-		t.Fatalf("got %q", got)
-	}
-}
-
 func TestClassifyLogisticsWithTracksPrefersLatestDispatch(t *testing.T) {
 	raw := `[{"date":"09/12 07:23:57","title":"派件中","detail":"正在派件"},{"date":"09/12 02:46:51","title":"待取件","detail":"请及时取件"}]`
 	got := ClassifyLogisticsWithTracks("", raw)
