@@ -11,6 +11,7 @@ require (
 	github.com/minio/minio-go/v7 v7.2.0
 	github.com/spf13/viper v1.19.0
 	github.com/xuri/excelize/v2 v2.11.0
+	golang.org/x/image v0.38.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.25.12
 )

@@ -3,15 +3,18 @@ package service
 import (
 	"bytes"
 	"fmt"
+	"image/jpeg"
 	"io"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
 	"aftersalescore/internal/dto"
 
 	"github.com/xuri/excelize/v2"
+	"golang.org/x/image/webp"
 )
 
 var returnExportFields = []struct {
@@ -19,7 +22,8 @@ var returnExportFields = []struct {
 	Label string
 }{
 	{Key: "shop", Label: "店铺"},
-	{Key: "product", Label: "商品信息"},
+	{Key: "productImage", Label: "商品图片"},
+	{Key: "sku", Label: "规格"},
 	{Key: "order", Label: "订单信息"},
 	{Key: "aftersale", Label: "售后信息"},
 	{Key: "logisticsNo", Label: "物流单号"},
@@ -146,8 +150,10 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 	for i, key := range fields {
 		width := 18.0
 		switch key {
-		case "product":
-			width = 36
+		case "productImage":
+			width = 14
+		case "sku":
+			width = 28
 		case "order", "aftersale", "returnLocation", "fenFaRemark":
 			width = 32
 		case "logisticsNo":
@@ -156,6 +162,8 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 		_ = f.SetColWidth(sheet, colName(i+1), colName(i+1), width)
 	}
 	imgHTTP := &http.Client{Timeout: 8 * time.Second}
+	imgCache := map[string]fetchedExportImage{}
+	embedImages := hasField(fields, "productImage")
 	for i, row := range list {
 		excelRow := i + 2
 		values := make([]any, 0, len(fields))
@@ -166,20 +174,13 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 		if err := f.SetSheetRow(sheet, cell, &values); err != nil {
 			return nil, "", err
 		}
-		_ = f.SetRowHeight(sheet, excelRow, 64)
+		_ = f.SetRowHeight(sheet, excelRow, 72)
 		_ = f.SetCellStyle(sheet, colName(1)+fmt.Sprint(excelRow), colName(len(fields))+fmt.Sprint(excelRow), wrapStyle)
-		if hasField(fields, "product") && strings.TrimSpace(row.ProductImage) != "" {
-			if img, ext, err := fetchExportImage(imgHTTP, row.ProductImage); err == nil && len(img) > 0 {
-				col := indexOfField(fields, "product") + 1
+		if embedImages {
+			if pic := loadExportImage(imgHTTP, imgCache, row.ProductImage); pic.OK() {
+				col := indexOfField(fields, "productImage") + 1
 				picCell, _ := excelize.CoordinatesToCellName(col, excelRow)
-				_ = f.AddPictureFromBytes(sheet, picCell, &excelize.Picture{
-					Extension: ext,
-					File:      img,
-					Format: &excelize.GraphicOptions{
-						AutoFit:         true,
-						LockAspectRatio: true,
-					},
-				})
+				_ = addExportPicture(f, sheet, picCell, pic.Data, pic.Ext)
 			}
 		}
 	}
@@ -195,8 +196,10 @@ func exportFieldValue(row dto.ReturnPackageItem, key string) string {
 	switch key {
 	case "shop":
 		return row.ShopName
-	case "product":
-		return strings.TrimSpace(strings.Join([]string{row.ProductTitle, row.SKU}, "\n"))
+	case "productImage":
+		return ""
+	case "sku":
+		return strings.TrimSpace(row.SKU)
 	case "order":
 		return strings.TrimSpace(fmt.Sprintf("应付 ¥%s\n购买 %d 件\n订单 %s\n售后 %s",
 			dash(row.PayAmount), orQty(row.BuyQty, row.Qty), dash(row.OrderNo), dash(row.PlatformAftersaleID)))
@@ -204,7 +207,7 @@ func exportFieldValue(row dto.ReturnPackageItem, key string) string {
 		return strings.TrimSpace(fmt.Sprintf("%s\n售后退款 ¥%s\n申请 %d 件\n%s\n%s",
 			dash(row.AftersaleType), dash(row.RefundAmount), row.Qty, prefixLine("申请原因 ", row.Reason), prefixLine("申请时间 ", row.ApplyTime)))
 	case "logisticsNo":
-		return strings.TrimSpace(strings.Join([]string{row.LogisticsNo, row.Carrier, row.Logistics}, "\n"))
+		return strings.TrimSpace(row.LogisticsNo)
 	case "returnLocation":
 		return LastTwoTracksText(row.Tracks, row.ReturnLocation)
 	case "fenFaRemark":
@@ -261,12 +264,71 @@ func colName(n int) string {
 	return name
 }
 
-func fetchExportImage(httpClient *http.Client, rawURL string) ([]byte, string, error) {
+type fetchedExportImage struct {
+	Data []byte
+	Ext  string
+}
+
+func (p fetchedExportImage) OK() bool { return len(p.Data) > 0 && p.Ext != "" }
+
+func loadExportImage(httpClient *http.Client, cache map[string]fetchedExportImage, rawURL string) fetchedExportImage {
 	rawURL = strings.TrimSpace(rawURL)
-	if rawURL == "" || !strings.HasPrefix(rawURL, "http") {
+	if rawURL == "" {
+		return fetchedExportImage{}
+	}
+	if cached, ok := cache[rawURL]; ok {
+		return cached
+	}
+	img, ext, err := fetchExportImage(httpClient, rawURL)
+	out := fetchedExportImage{}
+	if err == nil {
+		out = fetchedExportImage{Data: img, Ext: ext}
+	}
+	cache[rawURL] = out
+	return out
+}
+
+func addExportPicture(f *excelize.File, sheet, cell string, img []byte, ext string) error {
+	img, ext, err := normalizeExcelImage(img, ext)
+	if err != nil {
+		return err
+	}
+	return f.AddPictureFromBytes(sheet, cell, &excelize.Picture{
+		Extension: ext,
+		File:      img,
+		Format: &excelize.GraphicOptions{
+			AutoFit:         true,
+			LockAspectRatio: true,
+		},
+	})
+}
+
+var exportThumbSizeRe = regexp.MustCompile(`~48x\d+`)
+
+func upgradeExportImageURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(raw, "//") {
+		raw = "https:" + raw
+	}
+	return exportThumbSizeRe.ReplaceAllString(raw, "~240x240")
+}
+
+func fetchExportImage(httpClient *http.Client, rawURL string) ([]byte, string, error) {
+	rawURL = upgradeExportImageURL(rawURL)
+	if rawURL == "" || !(strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://")) {
 		return nil, "", fmt.Errorf("empty")
 	}
-	resp, err := httpClient.Get(rawURL)
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://fxg.jinritemai.com/")
+	req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -278,24 +340,64 @@ func fetchExportImage(httpClient *http.Client, rawURL string) ([]byte, string, e
 	if err != nil || len(data) == 0 {
 		return nil, "", fmt.Errorf("empty image")
 	}
-	ext := strings.ToLower(path.Ext(strings.Split(rawURL, "?")[0]))
-	switch ext {
-	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
-	default:
+	hinted := strings.ToLower(path.Ext(strings.Split(rawURL, "?")[0]))
+	if hinted == "" {
 		ct := strings.ToLower(resp.Header.Get("Content-Type"))
 		switch {
 		case strings.Contains(ct, "png"):
-			ext = ".png"
+			hinted = ".png"
 		case strings.Contains(ct, "gif"):
-			ext = ".gif"
+			hinted = ".gif"
 		case strings.Contains(ct, "webp"):
-			ext = ".webp"
+			hinted = ".webp"
 		default:
-			ext = ".jpg"
+			hinted = ".jpg"
 		}
 	}
-	if ext == ".jpeg" {
-		ext = ".jpg"
+	return normalizeExcelImage(data, hinted)
+}
+
+func detectImageKind(data []byte) string {
+	switch {
+	case bytes.HasPrefix(data, []byte{0xFF, 0xD8, 0xFF}):
+		return ".jpg"
+	case bytes.HasPrefix(data, []byte{0x89, 0x50, 0x4E, 0x47}):
+		return ".png"
+	case bytes.HasPrefix(data, []byte("GIF8")):
+		return ".gif"
+	case bytes.HasPrefix(data, []byte("BM")):
+		return ".bmp"
+	case len(data) >= 12 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP")):
+		return ".webp"
+	default:
+		return ""
 	}
-	return data, ext, nil
+}
+
+func normalizeExcelImage(data []byte, hintedExt string) ([]byte, string, error) {
+	if len(data) == 0 {
+		return nil, "", fmt.Errorf("empty image")
+	}
+	kind := detectImageKind(data)
+	if kind == "" {
+		kind = strings.ToLower(hintedExt)
+	}
+	switch kind {
+	case ".jpg", ".jpeg":
+		return data, ".jpg", nil
+	case ".png", ".gif", ".bmp":
+		return data, kind, nil
+	case ".webp":
+		img, err := webp.Decode(bytes.NewReader(data))
+		if err != nil {
+			return nil, "", err
+		}
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 88}); err != nil {
+			return nil, "", err
+		}
+		return buf.Bytes(), ".jpg", nil
+	default:
+		return nil, "", fmt.Errorf("unsupported image %s", kind)
+	}
 }

@@ -245,7 +245,8 @@ export interface ReturnPackage {
 
 export const RETURN_EXPORT_FIELDS: { key: string; label: string }[] = [
   { key: 'shop', label: '店铺' },
-  { key: 'product', label: '商品信息' },
+  { key: 'productImage', label: '商品图片' },
+  { key: 'sku', label: '规格' },
   { key: 'order', label: '订单信息' },
   { key: 'aftersale', label: '售后信息' },
   { key: 'logisticsNo', label: '物流单号' },
