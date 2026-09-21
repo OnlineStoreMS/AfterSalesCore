@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"aftersalescore/internal/dto"
 	"aftersalescore/internal/integrations/ordercore"
@@ -613,12 +614,72 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 }
 
 func shopTicketKeywordMatch(t *model.AftersaleTicket, shopName, kw string) bool {
-	blob := strings.ToLower(strings.Join([]string{
+	return fuzzyKeywordMatch(ticketSearchBlob(t, shopName), kw)
+}
+
+func ticketSearchBlob(t *model.AftersaleTicket, shopName string) string {
+	parts := []string{
 		shopName, t.PlatformAftersaleID, t.OrderNo, t.ProductTitle, t.SKU, t.Status, t.Logistics,
-		t.ReturnLogisticsNo, t.ShipLogisticsNo, t.AftersaleType,
-		t.TrackJSON, LatestTrackText(t.TrackJSON),
-	}, " "))
-	return strings.Contains(blob, kw)
+		t.ReturnLogisticsNo, t.ShipLogisticsNo, t.AftersaleType, t.TrackJSON,
+	}
+	for _, tr := range ParseLogisticsTracks(t.TrackJSON) {
+		parts = append(parts, tr.Date, tr.Title, tr.Detail, tr.Text, FormatTrackText(tr))
+	}
+	return strings.Join(parts, " ")
+}
+
+func fuzzyKeywordMatch(blob, kw string) bool {
+	kw = strings.TrimSpace(kw)
+	if kw == "" {
+		return true
+	}
+	blob = strings.ToLower(blob)
+	kw = strings.ToLower(kw)
+	if strings.Contains(blob, kw) {
+		return true
+	}
+	compactBlob := compactSearchText(blob)
+	tokens := splitSearchTokens(kw)
+	if len(tokens) == 0 {
+		compact := compactSearchText(kw)
+		return compact != "" && strings.Contains(compactBlob, compact)
+	}
+	for _, token := range tokens {
+		if strings.Contains(blob, token) {
+			continue
+		}
+		compact := compactSearchText(token)
+		if compact == "" || !strings.Contains(compactBlob, compact) {
+			return false
+		}
+	}
+	return true
+}
+
+func splitSearchTokens(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool {
+		return unicode.IsSpace(r) || r == ',' || r == '，' || r == '+' || r == '|' || r == '/'
+	})
+}
+
+func compactSearchText(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case unicode.IsSpace(r), unicode.IsPunct(r), unicode.IsSymbol(r):
+			continue
+		case r >= 'Ａ' && r <= 'Ｚ':
+			b.WriteRune(r - 'Ａ' + 'a')
+		case r >= 'ａ' && r <= 'ｚ':
+			b.WriteRune(r - 'ａ' + 'a')
+		case r >= '０' && r <= '９':
+			b.WriteRune(r - '０' + '0')
+		default:
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
 }
 
 func (s *ShopService) ListServiceOrders(q dto.ServiceOrderListQuery) ([]dto.ServiceOrderItem, []dto.ServiceTabCount, int64, error) {

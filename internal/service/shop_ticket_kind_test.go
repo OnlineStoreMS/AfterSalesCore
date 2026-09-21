@@ -114,8 +114,11 @@ func TestShopTicketKeywordMatchPickupPoint(t *testing.T) {
 			{"date":"09/12 07:23:57","title":"派件中","detail":"正在派件"}
 		]`,
 	}
-	if !shopTicketKeywordMatch(ticket, "", "利二花苑") {
-		t.Fatal("keyword should match latest track pickup point")
+	cases := []string{"利二花苑", "萧山 利二", "菜鸟杭州", "花苑店"}
+	for _, kw := range cases {
+		if !shopTicketKeywordMatch(ticket, "", kw) {
+			t.Fatalf("keyword %q should fuzzy-match pickup point", kw)
+		}
 	}
 	if shopTicketKeywordMatch(ticket, "", "不存在驿站") {
 		t.Fatal("unrelated keyword should not match")
