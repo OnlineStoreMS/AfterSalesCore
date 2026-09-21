@@ -333,6 +333,7 @@ type ShopTicketListQuery struct {
 	Kind     string
 	ShopID   uint64
 	Keyword  string
+	Reason   string
 	Page     int
 	PageSize int
 }
@@ -488,6 +489,7 @@ type ShippedRefundListQuery struct {
 	ShopID    uint64
 	Keyword   string
 	Status    string
+	Reason    string
 	AlertOnly bool
 	ApplyFrom string
 	ApplyTo   string

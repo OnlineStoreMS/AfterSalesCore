@@ -552,42 +552,55 @@ func ticketHasCard(t *model.AftersaleTicket, group, label string) bool {
 	return false
 }
 
-func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, int64, error) {
+func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, []string, int64, error) {
 	if q.Kind != dto.TicketKindBuyerReturnPickup && q.Kind != dto.TicketKindReviewShippedRefund && q.Kind != dto.TicketKindBuyerReturnSigned {
-		return nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
+		return nil, nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
 	}
 	if q.ShopID > 0 {
 		if _, err := s.repo().Get(q.ShopID); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, 0, ErrNotFound
+				return nil, nil, 0, ErrNotFound
 			}
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 	}
 	list, err := s.repo().ListOpenTickets(q.ShopID)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 	shops, err := s.repo().List()
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 	names := make(map[uint64]string, len(shops))
 	for i := range shops {
 		names[shops[i].ID] = shops[i].Name
 	}
 	kw := strings.ToLower(strings.TrimSpace(q.Keyword))
+	wantReason := strings.TrimSpace(q.Reason)
 	filtered := make([]model.AftersaleTicket, 0, len(list))
+	reasonSet := map[string]struct{}{}
+	var reasons []string
 	for i := range list {
 		t := &list[i]
 		if !MatchShopTicketKind(t, q.Kind) {
 			continue
 		}
+		if r := strings.TrimSpace(t.Reason); r != "" {
+			if _, ok := reasonSet[r]; !ok {
+				reasonSet[r] = struct{}{}
+				reasons = append(reasons, r)
+			}
+		}
 		if kw != "" && !shopTicketKeywordMatch(t, names[t.ShopID], kw) {
+			continue
+		}
+		if wantReason != "" && strings.TrimSpace(t.Reason) != wantReason {
 			continue
 		}
 		filtered = append(filtered, *t)
 	}
+	sort.Strings(reasons)
 	total := int64(len(filtered))
 	page, pageSize := q.Page, q.PageSize
 	if page < 1 {
@@ -598,7 +611,7 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 	}
 	start := (page - 1) * pageSize
 	if start >= len(filtered) {
-		return []dto.TicketItem{}, total, nil
+		return []dto.TicketItem{}, reasons, total, nil
 	}
 	end := start + pageSize
 	if end > len(filtered) {
@@ -610,7 +623,7 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		item.ShopName = names[filtered[i].ShopID]
 		out = append(out, item)
 	}
-	return out, total, nil
+	return out, reasons, total, nil
 }
 
 func shopTicketKeywordMatch(t *model.AftersaleTicket, shopName, kw string) bool {
@@ -619,7 +632,7 @@ func shopTicketKeywordMatch(t *model.AftersaleTicket, shopName, kw string) bool 
 
 func ticketSearchBlob(t *model.AftersaleTicket, shopName string) string {
 	parts := []string{
-		shopName, t.PlatformAftersaleID, t.OrderNo, t.ProductTitle, t.SKU, t.Status, t.Logistics,
+		shopName, t.PlatformAftersaleID, t.OrderNo, t.ProductTitle, t.SKU, t.Status, t.Reason, t.Logistics,
 		t.ReturnLogisticsNo, t.ShipLogisticsNo, t.AftersaleType, t.TrackJSON,
 	}
 	for _, tr := range ParseLogisticsTracks(t.TrackJSON) {
@@ -876,6 +889,18 @@ func interceptFromShipped(p *model.ShippedRefundSuccess, shopName string) dto.In
 	}
 }
 
+func (s *ShopService) ListShippedRefundReasons(shopID uint64) ([]string, error) {
+	if shopID > 0 {
+		if _, err := s.repo().Get(shopID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrNotFound
+			}
+			return nil, err
+		}
+	}
+	return s.repo().ListShippedRefundReasons(shopID)
+}
+
 func (s *ShopService) ListShippedRefunds(q dto.ShippedRefundListQuery) ([]dto.ShippedRefundItem, int64, error) {
 	if q.ShopID > 0 {
 		if _, err := s.repo().Get(q.ShopID); err != nil {
@@ -888,6 +913,7 @@ func (s *ShopService) ListShippedRefunds(q dto.ShippedRefundListQuery) ([]dto.Sh
 	list, _, err := s.repo().ListShippedRefunds(repo.ShippedRefundListFilter{
 		ShopID:    q.ShopID,
 		Keyword:   q.Keyword,
+		Reason:    q.Reason,
 		ApplyFrom: ParseQueryDateTime(q.ApplyFrom, false),
 		ApplyTo:   ParseQueryDateTime(q.ApplyTo, true),
 		Unpaged:   true,
@@ -904,10 +930,14 @@ func (s *ShopService) ListShippedRefunds(q dto.ShippedRefundListQuery) ([]dto.Sh
 		names[shops[i].ID] = shops[i].Name
 	}
 	wantStatus := strings.TrimSpace(q.Status)
+	wantReason := strings.TrimSpace(q.Reason)
 	out := make([]dto.ShippedRefundItem, 0, len(list))
 	for i := range list {
 		item := toShippedRefundItem(&list[i], names[list[i].ShopID])
 		if wantStatus != "" && item.LogisticsStatus != wantStatus {
+			continue
+		}
+		if wantReason != "" && strings.TrimSpace(item.Reason) != wantReason {
 			continue
 		}
 		if q.AlertOnly && !item.Alert {

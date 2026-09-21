@@ -26,6 +26,8 @@ const page = ref(1)
 const pageSize = ref(20)
 const shopId = ref<number | undefined>()
 const keyword = ref('')
+const reason = ref('')
+const reasons = ref<string[]>([])
 const nowTick = ref(Date.now())
 let tickTimer = 0
 
@@ -44,11 +46,13 @@ async function loadData() {
       kind: kind.value,
       shopId: shopId.value || undefined,
       keyword: keyword.value || undefined,
+      reason: isRefundKind.value ? reason.value || undefined : undefined,
       page: page.value,
       pageSize: pageSize.value,
     })
     tickets.value = data.list
     total.value = data.total
+    if (data.reasons) reasons.value = data.reasons
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {
@@ -104,6 +108,7 @@ function pickupPointOf(row: AftersaleTicket) {
 }
 
 const isPickupKind = computed(() => kind.value === 'buyer-return-pickup')
+const isRefundKind = computed(() => kind.value === 'review-shipped-refund')
 const keywordPlaceholder = computed(() =>
   isPickupKind.value
     ? '售后编号 / 订单号 / 商品 / 退货单号 / 代收点'
@@ -122,6 +127,8 @@ onUnmounted(() => {
 })
 watch(kind, () => {
   keyword.value = ''
+  reason.value = ''
+  reasons.value = []
   page.value = 1
   loadData()
 })
@@ -151,6 +158,17 @@ watch(kind, () => {
             :label="shop.name"
             :value="shop.id"
           />
+        </el-select>
+        <el-select
+          v-if="isRefundKind"
+          v-model="reason"
+          clearable
+          filterable
+          placeholder="申请原因"
+          style="width: 200px"
+          @change="handleSearch"
+        >
+          <el-option v-for="item in reasons" :key="item" :label="item" :value="item" />
         </el-select>
         <el-input
           v-model="keyword"

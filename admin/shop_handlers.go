@@ -251,6 +251,24 @@ func (h *ShopHandler) ExportReturns(c *gin.Context) {
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
 }
 
+func (h *ShopHandler) ShippedRefundReasons(c *gin.Context) {
+	var shopID uint64
+	if raw := c.Query("shopId"); raw != "" {
+		id, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid shopId")
+			return
+		}
+		shopID = id
+	}
+	reasons, err := h.ss(c).ListShippedRefundReasons(shopID)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, reasons)
+}
+
 func (h *ShopHandler) ShippedRefunds(c *gin.Context) {
 	page, pageSize := httputil.ParsePage(c)
 	var shopID uint64
@@ -266,6 +284,7 @@ func (h *ShopHandler) ShippedRefunds(c *gin.Context) {
 		ShopID:    shopID,
 		Keyword:   c.Query("keyword"),
 		Status:    c.Query("status"),
+		Reason:    c.Query("reason"),
 		AlertOnly: c.Query("alertOnly") == "1" || c.Query("alertOnly") == "true",
 		ApplyFrom: c.Query("applyFrom"),
 		ApplyTo:   c.Query("applyTo"),
@@ -341,10 +360,11 @@ func (h *ShopHandler) ShopTickets(c *gin.Context) {
 		}
 		shopID = id
 	}
-	list, total, err := h.ss(c).ListShopTickets(dto.ShopTicketListQuery{
+	list, reasons, total, err := h.ss(c).ListShopTickets(dto.ShopTicketListQuery{
 		Kind:     c.Query("kind"),
 		ShopID:   shopID,
 		Keyword:  c.Query("keyword"),
+		Reason:   c.Query("reason"),
 		Page:     page,
 		PageSize: pageSize,
 	})
@@ -352,7 +372,9 @@ func (h *ShopHandler) ShopTickets(c *gin.Context) {
 		httputil.HandleServiceError(c, err)
 		return
 	}
-	response.OK(c, response.PageResult(list, total, page, pageSize))
+	data := response.PageResult(list, total, page, pageSize)
+	data["reasons"] = reasons
+	response.OK(c, data)
 }
 
 func (h *ShopHandler) NavCounts(c *gin.Context) {

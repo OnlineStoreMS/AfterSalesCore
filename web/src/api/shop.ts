@@ -256,10 +256,11 @@ export async function fetchShopTicketsByKind(params: {
   kind: ShopTicketKind
   shopId?: number
   keyword?: string
+  reason?: string
   page?: number
   pageSize?: number
 }) {
-  return unwrap<PageData<AftersaleTicket>>(await client.get('/shop-tickets', { params }))
+  return unwrap<PageData<AftersaleTicket> & { reasons?: string[] }>(await client.get('/shop-tickets', { params }))
 }
 
 export interface ReturnPackage {
@@ -394,10 +395,17 @@ export async function fetchReturnRefunds(params?: {
   return unwrap<PageData<ShippedRefund>>(await client.get('/return-refunds', { params }))
 }
 
+export async function fetchShippedRefundReasons(shopId?: number) {
+  return unwrap<string[]>(await client.get('/shipped-refunds/reasons', {
+    params: { shopId: shopId || undefined },
+  }))
+}
+
 export async function fetchShippedRefunds(params?: {
   shopId?: number
   keyword?: string
   status?: string
+  reason?: string
   alertOnly?: boolean
   applyFrom?: string
   applyTo?: string

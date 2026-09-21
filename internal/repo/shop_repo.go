@@ -542,6 +542,7 @@ type ShippedRefundListFilter struct {
 	ShopID    uint64
 	Keyword   string
 	Status    string
+	Reason    string
 	AlertOnly bool
 	ApplyFrom *time.Time
 	ApplyTo   *time.Time
@@ -564,6 +565,9 @@ func (r *ShopRepo) ListShippedRefunds(f ShippedRefundListFilter) ([]model.Shippe
 	}
 	if status := strings.TrimSpace(f.Status); status != "" {
 		q = q.Where("logistics_status = ?", status)
+	}
+	if reason := strings.TrimSpace(f.Reason); reason != "" {
+		q = q.Where("reason = ?", reason)
 	}
 	if f.AlertOnly {
 		q = q.Where("logistics_status IN ?", []string{"待取件", "已签收", "运输中"})
@@ -611,6 +615,17 @@ func (r *ShopRepo) ListInterceptTickets(shopID uint64, keyword string) ([]model.
 	var list []model.AftersaleTicket
 	err := q.Order("synced_at DESC, id DESC").Limit(500).Find(&list).Error
 	return list, err
+}
+
+func (r *ShopRepo) ListShippedRefundReasons(shopID uint64) ([]string, error) {
+	q := r.db.Model(&model.ShippedRefundSuccess{}).Scopes(scopeTenant(r.tenantID)).
+		Where("COALESCE(reason, '') <> ''")
+	if shopID > 0 {
+		q = q.Where("shop_id = ?", shopID)
+	}
+	var reasons []string
+	err := q.Distinct("reason").Order("reason").Pluck("reason", &reasons).Error
+	return reasons, err
 }
 
 func (r *ShopRepo) ListShippedRefundsByStatus(shopID uint64, status string) ([]model.ShippedRefundSuccess, error) {

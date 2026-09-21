@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import {
+  fetchShippedRefundReasons,
   fetchShippedRefunds,
   fetchShops,
   type LogisticsTrack,
@@ -21,6 +22,8 @@ const pageSize = ref(20)
 const shopId = ref<number | undefined>()
 const keyword = ref('')
 const status = ref('')
+const reason = ref('')
+const reasons = ref<string[]>([])
 const applyRange = ref<[string, string] | null>(null)
 
 async function loadShops() {
@@ -31,6 +34,14 @@ async function loadShops() {
   }
 }
 
+async function loadReasons() {
+  try {
+    reasons.value = await fetchShippedRefundReasons(shopId.value)
+  } catch {
+    reasons.value = []
+  }
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -38,6 +49,7 @@ async function loadData() {
       shopId: shopId.value || undefined,
       keyword: keyword.value || undefined,
       status: status.value || undefined,
+      reason: reason.value || undefined,
       applyFrom: applyRange.value?.[0] || undefined,
       applyTo: applyRange.value?.[1] || undefined,
       page: page.value,
@@ -69,8 +81,15 @@ function trackDetail(track: LogisticsTrack) {
   return displayTrackDetail(track)
 }
 
+function handleShopChange() {
+  reason.value = ''
+  loadReasons()
+  handleSearch()
+}
+
 onMounted(() => {
   loadShops()
+  loadReasons()
   loadData()
 })
 </script>
@@ -91,7 +110,7 @@ onMounted(() => {
           clearable
           placeholder="全部店铺"
           style="width: 180px"
-          @change="handleSearch"
+          @change="handleShopChange"
         >
           <el-option
             v-for="shop in shops"
@@ -99,6 +118,16 @@ onMounted(() => {
             :label="shop.name"
             :value="shop.id"
           />
+        </el-select>
+        <el-select
+          v-model="reason"
+          clearable
+          filterable
+          placeholder="申请原因"
+          style="width: 200px"
+          @change="handleSearch"
+        >
+          <el-option v-for="item in reasons" :key="item" :label="item" :value="item" />
         </el-select>
         <el-select
           v-model="status"
