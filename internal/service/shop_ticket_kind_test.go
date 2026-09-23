@@ -83,6 +83,22 @@ func TestMatchShopTicketKind(t *testing.T) {
 	if !MatchShopTicketKind(stalePickup, dto.TicketKindBuyerReturnSigned) {
 		t.Fatal("stale 待取件 text with latest track 已签收 should match signed")
 	}
+
+	dispute := &model.AftersaleTicket{
+		CardKeys: []model.AftersaleTicketCard{{CardKey: "纠纷:仲裁待举证"}},
+	}
+	if !MatchShopTicketKind(dispute, dto.TicketKindDispute) {
+		t.Fatal("dispute card should match")
+	}
+	if MatchShopTicketKind(review, dto.TicketKindDispute) {
+		t.Fatal("shipped refund should not match dispute")
+	}
+	disputeNegotiate := &model.AftersaleTicket{
+		CardKeys: []model.AftersaleTicketCard{{CardKey: "纠纷:仲裁待协商"}},
+	}
+	if !MatchShopTicketKind(disputeNegotiate, dto.TicketKindDispute) {
+		t.Fatal("仲裁待协商 should match dispute")
+	}
 }
 
 func TestInterceptFromTicketCopiesTimeout(t *testing.T) {

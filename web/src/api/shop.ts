@@ -250,7 +250,11 @@ export async function fetchShopTickets(id: number, params?: {
   return unwrap<PageData<AftersaleTicket>>(await client.get(`/shops/${id}/tickets`, { params }))
 }
 
-export type ShopTicketKind = 'buyer-return-pickup' | 'review-shipped-refund' | 'buyer-return-signed'
+export type ShopTicketKind =
+  | 'buyer-return-pickup'
+  | 'review-shipped-refund'
+  | 'buyer-return-signed'
+  | 'dispute'
 
 export async function fetchShopTicketsByKind(params: {
   kind: ShopTicketKind
@@ -473,6 +477,7 @@ export interface ServiceOrder {
   productTitle: string
   productImage?: string
   productContent?: string
+  skuSpecs?: string
   buyerNick?: string
   createSource?: string
   businessType?: string
@@ -507,6 +512,7 @@ export interface NavCounts {
   ticketTotal: number
   buyerReturnPickup: number
   reviewShippedRefund: number
+  disputeOrders: number
   buyerReturnSigned: number
 }
 

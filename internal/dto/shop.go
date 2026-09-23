@@ -290,6 +290,7 @@ type ServiceOrderItem struct {
 	ProductTitle      string `json:"productTitle"`
 	ProductImage      string `json:"productImage,omitempty"`
 	ProductContent    string `json:"productContent,omitempty"`
+	SkuSpecs          string `json:"skuSpecs,omitempty"`
 	BuyerNick         string `json:"buyerNick,omitempty"`
 	CreateSource      string `json:"createSource,omitempty"`
 	BusinessType      string `json:"businessType,omitempty"`
@@ -320,6 +321,7 @@ type SidebarCounts struct {
 	TicketTotal          int `json:"ticketTotal"`
 	BuyerReturnPickup    int `json:"buyerReturnPickup"`
 	ReviewShippedRefund  int `json:"reviewShippedRefund"`
+	DisputeOrders        int `json:"disputeOrders"`
 	BuyerReturnSigned    int `json:"buyerReturnSigned"`
 }
 
@@ -327,6 +329,7 @@ const (
 	TicketKindBuyerReturnPickup   = "buyer-return-pickup"
 	TicketKindReviewShippedRefund = "review-shipped-refund"
 	TicketKindBuyerReturnSigned   = "buyer-return-signed"
+	TicketKindDispute             = "dispute"
 )
 
 type ShopTicketListQuery struct {

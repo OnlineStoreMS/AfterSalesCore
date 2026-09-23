@@ -34,6 +34,22 @@ type apiBody struct {
 }
 
 func (c *Client) FenFaRemarks(ctx context.Context, token string, orderNos []string) (map[string]string, error) {
+	return c.lookupStringMap(ctx, token, "/api/v1/admin/orders/fenfa-remarks", orderNos, "查询订单中心分发备注", "解析分发备注失败")
+}
+
+// SkuSpecs 按订单号（内部单号或平台单号）批量查询商品规格。
+func (c *Client) SkuSpecs(ctx context.Context, token string, orderNos []string) (map[string]string, error) {
+	return c.lookupStringMap(ctx, token, "/api/v1/admin/orders/sku-specs", orderNos, "查询订单中心商品规格", "解析商品规格失败")
+}
+
+func (c *Client) lookupStringMap(
+	ctx context.Context,
+	token string,
+	path string,
+	orderNos []string,
+	reqErrLabel string,
+	parseErrLabel string,
+) (map[string]string, error) {
 	if c == nil {
 		return nil, fmt.Errorf("订单中心未配置")
 	}
@@ -64,7 +80,7 @@ func (c *Client) FenFaRemarks(ctx context.Context, token string, orderNos []stri
 		if end > len(nos) {
 			end = len(nos)
 		}
-		part, err := c.fenFaChunk(ctx, token, nos[i:end])
+		part, err := c.lookupStringMapChunk(ctx, token, path, nos[i:end], reqErrLabel, parseErrLabel)
 		if err != nil {
 			return nil, err
 		}
@@ -75,12 +91,19 @@ func (c *Client) FenFaRemarks(ctx context.Context, token string, orderNos []stri
 	return out, nil
 }
 
-func (c *Client) fenFaChunk(ctx context.Context, token string, orderNos []string) (map[string]string, error) {
+func (c *Client) lookupStringMapChunk(
+	ctx context.Context,
+	token string,
+	path string,
+	orderNos []string,
+	reqErrLabel string,
+	parseErrLabel string,
+) (map[string]string, error) {
 	payload, err := json.Marshal(map[string]any{"orderNos": orderNos})
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/admin/orders/fenfa-remarks", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +111,7 @@ func (c *Client) fenFaChunk(ctx context.Context, token string, orderNos []string
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("查询订单中心分发备注: %w", err)
+		return nil, fmt.Errorf("%s: %w", reqErrLabel, err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -108,7 +131,7 @@ func (c *Client) fenFaChunk(ctx context.Context, token string, orderNos []string
 		return out, nil
 	}
 	if err := json.Unmarshal(body.Data, &out); err != nil {
-		return nil, fmt.Errorf("解析分发备注失败: %w", err)
+		return nil, fmt.Errorf("%s: %w", parseErrLabel, err)
 	}
 	return out, nil
 }

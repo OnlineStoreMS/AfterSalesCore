@@ -172,6 +172,7 @@ onUnmounted(() => {
               <img v-if="row.productImage" class="thumb" :src="row.productImage" alt="" />
               <div class="product-meta">
                 <div class="title">{{ row.productTitle || '—' }}</div>
+                <div v-if="row.skuSpecs" class="spec">{{ row.skuSpecs }}</div>
                 <div v-if="row.productContent" class="sub">{{ row.productContent }}</div>
                 <div class="sub">订单 {{ row.orderNo || '—' }}</div>
                 <div class="sub">工单 {{ row.platformServiceId }}</div>
@@ -238,6 +239,7 @@ onUnmounted(() => {
 .thumb { width: 48px; height: 48px; border-radius: 4px; object-fit: cover; flex-shrink: 0; background: #f5f7fa; }
 .product-meta { min-width: 0; }
 .title { font-weight: 600; line-height: 1.4; }
+.spec { color: #303133; font-size: 13px; margin-top: 4px; line-height: 1.4; word-break: break-word; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
 .status-text { font-size: 12px; margin-top: 6px; font-weight: 600; }
 .status-text.danger { color: #f56c6c; }

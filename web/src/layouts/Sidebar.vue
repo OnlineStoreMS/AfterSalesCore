@@ -15,6 +15,7 @@ const counts = ref<NavCounts>({
   ticketTotal: 0,
   buyerReturnPickup: 0,
   reviewShippedRefund: 0,
+  disputeOrders: 0,
   buyerReturnSigned: 0,
 })
 let pollTimer = 0
@@ -22,6 +23,7 @@ let pollTimer = 0
 const activeMenu = computed(() => {
   if (route.path.startsWith('/shops/await-pickup')) return '/shops/await-pickup'
   if (route.path.startsWith('/shops/shipped-refund')) return '/shops/shipped-refund'
+  if (route.path.startsWith('/shops/dispute')) return '/shops/dispute'
   if (route.path.startsWith('/shops')) return '/shops'
   if (route.path.startsWith('/returns/signed-return')) return '/returns/signed-return'
   if (route.path.startsWith('/returns/intercept')) return '/returns/intercept'
@@ -117,6 +119,14 @@ watch(() => route.path, () => {
             class="nav-badge"
             :title="`已发货退款 ${counts.reviewShippedRefund}`"
           >{{ badgeText(counts.reviewShippedRefund) }}</span>
+        </el-menu-item>
+        <el-menu-item index="/shops/dispute" @click="navigate('/shops/dispute')">
+          纠纷
+          <span
+            v-if="counts.disputeOrders"
+            class="nav-badge nav-badge--warn"
+            :title="`纠纷 ${counts.disputeOrders}`"
+          >{{ badgeText(counts.disputeOrders) }}</span>
         </el-menu-item>
       </el-sub-menu>
       <el-sub-menu index="returns">
@@ -222,6 +232,9 @@ watch(() => route.path, () => {
   font-size: 11px;
   line-height: 1;
   font-weight: 600;
+}
+.nav-badge--warn {
+  background: #e6a23c;
 }
 .sidebar.collapsed .nav-badge {
   position: absolute;

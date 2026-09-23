@@ -86,6 +86,16 @@ const router = createRouter({
           },
         },
         {
+          path: 'shops/dispute',
+          name: 'ShopDispute',
+          component: () => import('../views/shop/ShopTicketList.vue'),
+          meta: {
+            title: '纠纷',
+            kind: 'dispute',
+            desc: '工作台「纠纷」组全部售后单：仲裁待举证、仲裁待协商、仲裁平台处理中。',
+          },
+        },
+        {
           path: 'returns/signed-return',
           name: 'SignedReturns',
           component: () => import('../views/shop/ShopTicketList.vue'),

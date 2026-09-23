@@ -410,7 +410,7 @@ func (h *ShopHandler) ServiceOrders(c *gin.Context) {
 		Keyword:   c.Query("keyword"),
 		Page:      page,
 		PageSize:  pageSize,
-	})
+	}, authcontext.BearerToken(c))
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return

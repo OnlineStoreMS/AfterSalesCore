@@ -109,6 +109,7 @@ function pickupPointOf(row: AftersaleTicket) {
 
 const isPickupKind = computed(() => kind.value === 'buyer-return-pickup')
 const isRefundKind = computed(() => kind.value === 'review-shipped-refund')
+const isDisputeKind = computed(() => kind.value === 'dispute')
 const keywordPlaceholder = computed(() =>
   isPickupKind.value
     ? '售后编号 / 订单号 / 商品 / 退货单号 / 代收点'
@@ -234,6 +235,7 @@ watch(kind, () => {
             </div>
           </template>
         </el-table-column>
+        <el-table-column v-if="isDisputeKind" prop="dispute" label="纠纷仲裁" width="140" />
         <el-table-column label="物流信息" min-width="220">
           <template #default="{ row }">
             <TicketLogisticsCell

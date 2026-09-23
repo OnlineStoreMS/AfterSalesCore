@@ -488,6 +488,9 @@ func (s *ShopService) SidebarCounts() (*dto.SidebarCounts, error) {
 		if MatchShopTicketKind(&openTickets[i], dto.TicketKindReviewShippedRefund) {
 			out.ReviewShippedRefund++
 		}
+		if MatchShopTicketKind(&openTickets[i], dto.TicketKindDispute) {
+			out.DisputeOrders++
+		}
 		if MatchShopTicketKind(&openTickets[i], dto.TicketKindBuyerReturnSigned) {
 			out.BuyerReturnSigned++
 		}
@@ -508,6 +511,9 @@ func MatchShopTicketKind(t *model.AftersaleTicket, kind string) bool {
 		return hasBuyer && buyer == LogisticsAwaitPickup
 	case dto.TicketKindReviewShippedRefund:
 		return ticketHasCard(t, "待商家审核", "已发货退款")
+	case dto.TicketKindDispute:
+		// 工作台「纠纷」组三张子卡片：仲裁待举证 / 仲裁待协商 / 仲裁平台处理中
+		return ticketHasGroup(t, "纠纷")
 	case dto.TicketKindBuyerReturnSigned:
 		if !ticketHasCard(t, "待商家收/发货", "全部待收货/发货") {
 			return false
@@ -553,7 +559,10 @@ func ticketHasCard(t *model.AftersaleTicket, group, label string) bool {
 }
 
 func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, []string, int64, error) {
-	if q.Kind != dto.TicketKindBuyerReturnPickup && q.Kind != dto.TicketKindReviewShippedRefund && q.Kind != dto.TicketKindBuyerReturnSigned {
+	if q.Kind != dto.TicketKindBuyerReturnPickup &&
+		q.Kind != dto.TicketKindReviewShippedRefund &&
+		q.Kind != dto.TicketKindBuyerReturnSigned &&
+		q.Kind != dto.TicketKindDispute {
 		return nil, nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
 	}
 	if q.ShopID > 0 {
@@ -695,7 +704,7 @@ func compactSearchText(s string) string {
 	return b.String()
 }
 
-func (s *ShopService) ListServiceOrders(q dto.ServiceOrderListQuery) ([]dto.ServiceOrderItem, []dto.ServiceTabCount, int64, error) {
+func (s *ShopService) ListServiceOrders(q dto.ServiceOrderListQuery, bearerToken string) ([]dto.ServiceOrderItem, []dto.ServiceTabCount, int64, error) {
 	if q.ShopID > 0 {
 		if _, err := s.repo().Get(q.ShopID); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -730,7 +739,34 @@ func (s *ShopService) ListServiceOrders(q dto.ServiceOrderListQuery) ([]dto.Serv
 	for i := range list {
 		out = append(out, toServiceOrderItem(&list[i], names[list[i].ShopID]))
 	}
+	s.attachServiceOrderSkuSpecs(out, bearerToken)
 	return out, counts, total, nil
+}
+
+func (s *ShopService) attachServiceOrderSkuSpecs(items []dto.ServiceOrderItem, bearerToken string) {
+	if s.orders == nil || strings.TrimSpace(bearerToken) == "" || len(items) == 0 {
+		return
+	}
+	nos := make([]string, 0, len(items))
+	for i := range items {
+		if n := strings.TrimSpace(items[i].OrderNo); n != "" {
+			nos = append(nos, n)
+		}
+	}
+	specs, err := s.orders.SkuSpecs(context.Background(), bearerToken, nos)
+	if err != nil {
+		log.Printf("[aftersales] 同步服务工单商品规格失败: %v", err)
+		return
+	}
+	for i := range items {
+		n := strings.TrimSpace(items[i].OrderNo)
+		if n == "" {
+			continue
+		}
+		if v := strings.TrimSpace(specs[n]); v != "" {
+			items[i].SkuSpecs = v
+		}
+	}
 }
 
 func interceptKey(shopID uint64, aftersaleID string) string {
