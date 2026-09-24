@@ -8,6 +8,7 @@ type Repos struct {
 	EdgeDevice   *EdgeDeviceRepo
 	Shop         *ShopRepo
 	Notification *NotificationRepo
+	Issue        *IssueRepo
 }
 
 func New(db *gorm.DB) *Repos {
@@ -17,6 +18,7 @@ func New(db *gorm.DB) *Repos {
 		EdgeDevice:   NewEdgeDeviceRepo(db),
 		Shop:         NewShopRepo(db),
 		Notification: NewNotificationRepo(db),
+		Issue:        NewIssueRepo(db),
 	}
 }
 

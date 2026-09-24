@@ -136,6 +136,12 @@ const router = createRouter({
           meta: { title: '服务工单' },
         },
         {
+          path: 'issue-records',
+          name: 'IssueRecords',
+          component: () => import('../views/shop/IssueList.vue'),
+          meta: { title: '售后问题记录' },
+        },
+        {
           path: 'shops/:id',
           name: 'ShopWorkbench',
           component: () => import('../views/shop/ShopWorkbench.vue'),

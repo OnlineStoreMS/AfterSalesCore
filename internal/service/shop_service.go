@@ -495,6 +495,11 @@ func (s *ShopService) SidebarCounts() (*dto.SidebarCounts, error) {
 			out.BuyerReturnSigned++
 		}
 	}
+	pendingIssues, err := s.issueRepo().CountPendingRecent(7)
+	if err != nil {
+		return nil, err
+	}
+	out.PendingIssues7d = int(pendingIssues)
 	return out, nil
 }
 

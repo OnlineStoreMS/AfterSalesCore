@@ -42,6 +42,80 @@ func (c *Client) SkuSpecs(ctx context.Context, token string, orderNos []string) 
 	return c.lookupStringMap(ctx, token, "/api/v1/admin/orders/sku-specs", orderNos, "查询订单中心商品规格", "解析商品规格失败")
 }
 
+type OrderSummary struct {
+	OrderNo         string `json:"orderNo"`
+	PlatformOrderID string `json:"platformOrderId"`
+	ShopName        string `json:"shopName"`
+	BuyerName       string `json:"buyerName"`
+	BuyerPhone      string `json:"buyerPhone"`
+	Address         string `json:"address"`
+	ProductTitle    string `json:"productTitle"`
+	ProductImage    string `json:"productImage"`
+	SkuSpecs        string `json:"skuSpecs"`
+}
+
+// LookupSummaries 按订单号批量查询订单摘要（店铺、地址、规格等）。
+func (c *Client) LookupSummaries(ctx context.Context, token string, orderNos []string) (map[string]OrderSummary, error) {
+	if c == nil {
+		return nil, fmt.Errorf("订单中心未配置")
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, fmt.Errorf("未登录订单中心")
+	}
+	nos := make([]string, 0, len(orderNos))
+	seen := map[string]struct{}{}
+	for _, raw := range orderNos {
+		n := strings.TrimSpace(raw)
+		if n == "" {
+			continue
+		}
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		nos = append(nos, n)
+	}
+	out := map[string]OrderSummary{}
+	if len(nos) == 0 {
+		return out, nil
+	}
+	payload, err := json.Marshal(map[string]any{"orderNos": nos})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/admin/orders/lookup-summaries", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("查询订单中心摘要: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	var body apiBody
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return nil, fmt.Errorf("订单中心响应无效: %s", strings.TrimSpace(string(raw)))
+	}
+	if resp.StatusCode >= 300 || body.Code != 200 {
+		msg := strings.TrimSpace(body.Message)
+		if msg == "" {
+			msg = fmt.Sprintf("http %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("订单中心: %s", msg)
+	}
+	if len(body.Data) == 0 || string(body.Data) == "null" {
+		return out, nil
+	}
+	if err := json.Unmarshal(body.Data, &out); err != nil {
+		return nil, fmt.Errorf("解析订单摘要失败: %w", err)
+	}
+	return out, nil
+}
+
 func (c *Client) lookupStringMap(
 	ctx context.Context,
 	token string,

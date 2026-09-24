@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HomeFilled, VideoCamera, Box, Search, Monitor, Shop, Bell, RefreshLeft, Tickets } from '@element-plus/icons-vue'
+import { HomeFilled, VideoCamera, Box, Search, Monitor, Shop, Bell, RefreshLeft, Tickets, Document } from '@element-plus/icons-vue'
 import { fetchNavCounts, type NavCounts } from '../api/shop'
 import { useSessionStore } from '../stores/session'
 
@@ -17,6 +17,7 @@ const counts = ref<NavCounts>({
   reviewShippedRefund: 0,
   disputeOrders: 0,
   buyerReturnSigned: 0,
+  pendingIssues7d: 0,
 })
 let pollTimer = 0
 
@@ -31,6 +32,7 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/returns/return-refund-success')) return '/returns/return-refund-success'
   if (route.path.startsWith('/returns')) return '/returns'
   if (route.path.startsWith('/service-orders')) return '/service-orders'
+  if (route.path.startsWith('/issue-records')) return '/issue-records'
   if (route.path.startsWith('/notifications')) return '/notifications'
   return route.path
 })
@@ -174,6 +176,15 @@ watch(() => route.path, () => {
           class="nav-badge"
           :title="`待处理工单 ${counts.pendingServiceOrders}`"
         >{{ badgeText(counts.pendingServiceOrders) }}</span>
+      </el-menu-item>
+      <el-menu-item index="/issue-records" @click="navigate('/issue-records')">
+        <el-icon><Document /></el-icon>
+        <span>售后问题记录</span>
+        <span
+          v-if="counts.pendingIssues7d"
+          class="nav-badge nav-badge--warn"
+          :title="`近7天待处理 ${counts.pendingIssues7d}`"
+        >{{ badgeText(counts.pendingIssues7d) }}</span>
       </el-menu-item>
       <el-menu-item
         v-for="item in menuItems"

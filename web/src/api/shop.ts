@@ -514,6 +514,7 @@ export interface NavCounts {
   reviewShippedRefund: number
   disputeOrders: number
   buyerReturnSigned: number
+  pendingIssues7d: number
 }
 
 export async function fetchNavCounts() {

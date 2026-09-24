@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"aftersalescore/internal/dto"
 	"aftersalescore/internal/pkg/authcontext"
@@ -422,4 +423,134 @@ func (h *ShopHandler) ServiceOrders(c *gin.Context) {
 		"pageSize": pageSize,
 		"tabs":     tabs,
 	})
+}
+
+func operatorName(c *gin.Context) string {
+	if claims := authcontext.Claims(c); claims != nil {
+		if n := strings.TrimSpace(claims.DisplayName); n != "" {
+			return n
+		}
+		if n := strings.TrimSpace(claims.Email); n != "" {
+			return n
+		}
+	}
+	return ""
+}
+
+func (h *ShopHandler) IssueMeta(c *gin.Context) {
+	response.OK(c, h.ss(c).IssueMeta())
+}
+
+func (h *ShopHandler) IssueLookup(c *gin.Context) {
+	list, err := h.ss(c).LookupIssueSource(c.Query("q"), authcontext.BearerToken(c))
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"list": list})
+}
+
+func (h *ShopHandler) ListIssues(c *gin.Context) {
+	page, pageSize := httputil.ParsePage(c)
+	var shopID uint64
+	if raw := c.Query("shopId"); raw != "" {
+		id, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, "invalid shopId")
+			return
+		}
+		shopID = id
+	}
+	list, total, err := h.ss(c).ListIssues(dto.IssueListQuery{
+		ShopID:      shopID,
+		Status:      c.Query("status"),
+		ProblemType: c.Query("problemType"),
+		Keyword:     c.Query("keyword"),
+		Page:        page,
+		PageSize:    pageSize,
+	})
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, response.PageResult(list, total, page, pageSize))
+}
+
+func (h *ShopHandler) GetIssue(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	item, err := h.ss(c).GetIssue(id)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
+func (h *ShopHandler) CreateIssue(c *gin.Context) {
+	var in dto.IssueUpsertRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	item, err := h.ss(c).CreateIssue(in, authcontext.UserID(c), operatorName(c))
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
+func (h *ShopHandler) UpdateIssue(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.IssueUpsertRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	item, err := h.ss(c).UpdateIssue(id, in, authcontext.UserID(c), operatorName(c))
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
+func (h *ShopHandler) UpdateIssueStatus(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.IssueStatusRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	item, err := h.ss(c).UpdateIssueStatus(id, in.Status, authcontext.UserID(c), operatorName(c))
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
+func (h *ShopHandler) DeleteIssue(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := h.ss(c).DeleteIssue(id); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"ok": true})
 }

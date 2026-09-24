@@ -323,6 +323,7 @@ type SidebarCounts struct {
 	ReviewShippedRefund  int `json:"reviewShippedRefund"`
 	DisputeOrders        int `json:"disputeOrders"`
 	BuyerReturnSigned    int `json:"buyerReturnSigned"`
+	PendingIssues7d      int `json:"pendingIssues7d"`
 }
 
 const (

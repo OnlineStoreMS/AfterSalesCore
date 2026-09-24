@@ -359,6 +359,29 @@ func (r *ShopRepo) ListTicketsByCard(shopID uint64, cardKey string) ([]model.Aft
 	return list, err
 }
 
+func (r *ShopRepo) FindTicketsByKeyword(keyword string, limit int) ([]model.AftersaleTicket, error) {
+	kw := strings.TrimSpace(keyword)
+	if kw == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	like := "%" + kw + "%"
+	var list []model.AftersaleTicket
+	err := r.db.Model(&model.AftersaleTicket{}).
+		Scopes(scopeTenant(r.tenantID)).
+		Where(
+			"platform_aftersale_id = ? OR order_no = ? OR platform_aftersale_id ILIKE ? OR order_no ILIKE ?",
+			kw, kw, like, like,
+		).
+		Preload("CardKeys").
+		Order("id DESC").
+		Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
 func (r *ShopRepo) ListOpenTickets(shopID uint64) ([]model.AftersaleTicket, error) {
 	q := r.db.Model(&model.AftersaleTicket{}).
 		Scopes(scopeTenant(r.tenantID)).

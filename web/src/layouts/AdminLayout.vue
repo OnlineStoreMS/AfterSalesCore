@@ -48,6 +48,7 @@ const breadcrumbs = computed(() => {
   if (route.path.startsWith('/returns/return-refund-success')) return ['售后中心', '退回管理', '退货退款成功']
   if (route.path.startsWith('/returns')) return ['售后中心', '退回管理']
   if (route.path.startsWith('/service-orders')) return ['售后中心', '服务工单']
+  if (route.path.startsWith('/issue-records')) return ['售后中心', '售后问题记录']
   if (route.path.startsWith('/notifications')) return ['售后中心', '通知管理']
   if (route.path.startsWith('/edge-devices')) return ['售后中心', '录制端管理']
   return ['售后中心', title]
