@@ -6,6 +6,8 @@ export type SpecLabelItem = {
   productTitle?: string
   shopName?: string
   aftersaleId?: string
+  /** 入库时间（退回物流签收时间） */
+  inboundAt?: string
   /** 该行默认打印份数（如申请件数） */
   copies?: number
 }
@@ -29,27 +31,68 @@ export const LABEL_SIZE_PRESETS: LabelSizePreset[] = [
 
 export type LabelSize = { widthMm: number; heightMm: number }
 
+/** portrait=纵向（按预设宽×高）；landscape=横向（宽高对调） */
+export type LabelOrientation = 'portrait' | 'landscape'
+
+export type LabelPrintPrefs = {
+  size: LabelSize
+  orientation: LabelOrientation
+}
+
+const PREFS_STORAGE_KEY = 'aftersales.specLabel.prefs'
 const SIZE_STORAGE_KEY = 'aftersales.specLabel.size'
 
-export function loadSavedLabelSize(): LabelSize {
+export function resolvePrintSize(size: LabelSize, orientation: LabelOrientation = 'portrait'): LabelSize {
+  if (orientation === 'landscape') {
+    return { widthMm: size.heightMm, heightMm: size.widthMm }
+  }
+  return { widthMm: size.widthMm, heightMm: size.heightMm }
+}
+
+export function loadSavedLabelPrefs(): LabelPrintPrefs {
   try {
-    const raw = localStorage.getItem(SIZE_STORAGE_KEY)
+    const raw = localStorage.getItem(PREFS_STORAGE_KEY)
     if (raw) {
-      const parsed = JSON.parse(raw) as LabelSize
-      if (parsed?.widthMm > 0 && parsed?.heightMm > 0) return parsed
+      const parsed = JSON.parse(raw) as Partial<LabelPrintPrefs>
+      const w = Number(parsed?.size?.widthMm)
+      const h = Number(parsed?.size?.heightMm)
+      const orientation: LabelOrientation =
+        parsed?.orientation === 'landscape' ? 'landscape' : 'portrait'
+      if (w > 0 && h > 0) return { size: { widthMm: w, heightMm: h }, orientation }
     }
   } catch {
     /* ignore */
   }
-  return { widthMm: 40, heightMm: 50 }
-}
-
-export function saveLabelSize(size: LabelSize) {
+  // 兼容旧版只存尺寸的 key
   try {
-    localStorage.setItem(SIZE_STORAGE_KEY, JSON.stringify(size))
+    const legacy = localStorage.getItem(SIZE_STORAGE_KEY)
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as LabelSize
+      if (parsed?.widthMm > 0 && parsed?.heightMm > 0) {
+        return { size: { widthMm: parsed.widthMm, heightMm: parsed.heightMm }, orientation: 'portrait' }
+      }
+    }
   } catch {
     /* ignore */
   }
+  return { size: { widthMm: 40, heightMm: 50 }, orientation: 'portrait' }
+}
+
+export function loadSavedLabelSize(): LabelSize {
+  return loadSavedLabelPrefs().size
+}
+
+export function saveLabelPrefs(prefs: LabelPrintPrefs) {
+  try {
+    localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(prefs))
+    localStorage.setItem(SIZE_STORAGE_KEY, JSON.stringify(prefs.size))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function saveLabelSize(size: LabelSize, orientation: LabelOrientation = 'portrait') {
+  saveLabelPrefs({ size, orientation })
 }
 
 export function resolveSpecText(item: SpecLabelItem): string {
@@ -87,6 +130,7 @@ function expandCopies(items: SpecLabelItem[]): SpecLabelItem[] {
 function labelHtml(item: SpecLabelItem, size: LabelSize, tone: LayoutTone): string {
   const spec = escapeHtml(resolveSpecText(item))
   const orderNo = escapeHtml(String(item.orderNo || '').trim() || '—')
+  const inboundAt = escapeHtml(String(item.inboundAt || '').trim())
   const title = escapeHtml(String(item.productTitle || '').trim())
   const shop = escapeHtml(String(item.shopName || '').trim())
   const aftersale = escapeHtml(String(item.aftersaleId || '').trim())
@@ -102,19 +146,31 @@ function labelHtml(item: SpecLabelItem, size: LabelSize, tone: LayoutTone): stri
     extras.push(`<div class="meta">售后 ${aftersale}</div>`)
   }
 
+  const inboundLine = inboundAt
+    ? `<div class="inbound"><span class="inbound-key">入库</span><span class="inbound-at">${inboundAt}</span></div>`
+    : ''
+
   return `<div class="label tone-${tone}" style="width:${size.widthMm}mm;height:${size.heightMm}mm">
   <div class="inner">
     <div class="spec">${spec}</div>
-    <div class="order"><span class="order-key">订单</span><span class="order-no">${orderNo}</span></div>
-    ${extras.join('\n')}
+    <div class="footer">
+      <div class="order"><span class="order-key">订单</span><span class="order-no">${orderNo}</span></div>
+      ${inboundLine}
+      ${extras.join('\n')}
+    </div>
   </div>
 </div>`
 }
 
-export function buildSpecLabelPrintHtml(items: SpecLabelItem[], size: LabelSize): string {
-  const tone = layoutTone(size)
+export function buildSpecLabelPrintHtml(
+  items: SpecLabelItem[],
+  size: LabelSize,
+  orientation: LabelOrientation = 'portrait',
+): string {
+  const printSize = resolvePrintSize(size, orientation)
+  const tone = layoutTone(printSize)
   const sheets = expandCopies(items)
-  const body = sheets.map((it) => labelHtml(it, size, tone)).join('\n')
+  const body = sheets.map((it) => labelHtml(it, printSize, tone)).join('\n')
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -122,7 +178,7 @@ export function buildSpecLabelPrintHtml(items: SpecLabelItem[], size: LabelSize)
 <title>商品规格标签</title>
 <style>
   @page {
-    size: ${size.widthMm}mm ${size.heightMm}mm;
+    size: ${printSize.widthMm}mm ${printSize.heightMm}mm;
     margin: 0;
   }
   * { box-sizing: border-box; }
@@ -160,21 +216,24 @@ export function buildSpecLabelPrintHtml(items: SpecLabelItem[], size: LabelSize)
     overflow: hidden;
     flex: 1 1 auto;
   }
-  .order {
+  .footer {
     flex: 0 0 auto;
     margin-top: 1mm;
+    border-top: 0.3mm solid #000;
+    padding-top: 1mm;
+  }
+  .order, .inbound {
     display: flex;
     align-items: baseline;
     gap: 1mm;
-    border-top: 0.3mm solid #000;
-    padding-top: 1mm;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
-  .order-key {
+  .inbound { margin-top: 0.6mm; }
+  .order-key, .inbound-key {
     flex: 0 0 auto;
     font-weight: 700;
   }
-  .order-no {
+  .order-no, .inbound-at {
     flex: 1 1 auto;
     word-break: break-all;
     font-weight: 600;
@@ -188,17 +247,17 @@ export function buildSpecLabelPrintHtml(items: SpecLabelItem[], size: LabelSize)
   }
 
   /* 尺寸自适应：紧凑 / 常规 / 宽松 */
-  .tone-compact .spec { font-size: 3.2mm; max-height: 18mm; }
-  .tone-compact .order { font-size: 2.2mm; }
-  .tone-compact .order-key { font-size: 2mm; }
+  .tone-compact .spec { font-size: 3.2mm; max-height: 16mm; }
+  .tone-compact .order, .tone-compact .inbound { font-size: 2.1mm; }
+  .tone-compact .order-key, .tone-compact .inbound-key { font-size: 1.9mm; }
   .tone-compact .inner { padding: 1.2mm 1.4mm; }
 
-  .tone-normal .spec { font-size: 4mm; max-height: 32mm; }
-  .tone-normal .order { font-size: 2.6mm; }
+  .tone-normal .spec { font-size: 4mm; max-height: 28mm; }
+  .tone-normal .order, .tone-normal .inbound { font-size: 2.5mm; }
   .tone-normal .meta { font-size: 2.2mm; line-height: 1.3; max-height: 8mm; }
 
-  .tone-roomy .spec { font-size: 7mm; max-height: 55mm; }
-  .tone-roomy .order { font-size: 3.6mm; }
+  .tone-roomy .spec { font-size: 7mm; max-height: 50mm; }
+  .tone-roomy .order, .tone-roomy .inbound { font-size: 3.4mm; }
   .tone-roomy .title { font-size: 3.2mm; line-height: 1.35; max-height: 28mm; }
   .tone-roomy .meta { font-size: 2.8mm; line-height: 1.35; }
 
@@ -226,34 +285,66 @@ ${body}
 </html>`
 }
 
-/** 打开独立窗口并调起系统打印对话框；@page size 交给浏览器/驱动适配标签纸。 */
-export function printSpecLabels(items: SpecLabelItem[], size: LabelSize): boolean {
-  if (!items.length) return false
-  const html = buildSpecLabelPrintHtml(items, size)
-  const w = window.open('', '_blank', 'noopener,noreferrer,width=520,height=720')
-  if (!w) return false
-  w.document.open()
-  w.document.write(html)
-  w.document.close()
+const PRINT_IFRAME_ID = 'aftersales-spec-label-print-frame'
+
+/** 用隐藏 iframe 调起打印（不依赖弹窗，避免被浏览器拦截）。 */
+export function printSpecLabels(
+  items: SpecLabelItem[],
+  size: LabelSize,
+  orientation: LabelOrientation = 'portrait',
+): boolean {
+  if (!items.length || typeof document === 'undefined') return false
+  const html = buildSpecLabelPrintHtml(items, size, orientation)
+
+  let frame = document.getElementById(PRINT_IFRAME_ID) as HTMLIFrameElement | null
+  if (frame) {
+    frame.remove()
+  }
+  frame = document.createElement('iframe')
+  frame.id = PRINT_IFRAME_ID
+  frame.setAttribute('aria-hidden', 'true')
+  frame.style.cssText =
+    'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;'
+  document.body.appendChild(frame)
+
+  const win = frame.contentWindow
+  const doc = frame.contentDocument || win?.document
+  if (!win || !doc) {
+    frame.remove()
+    return false
+  }
+
+  doc.open()
+  doc.write(html)
+  doc.close()
+
+  const cleanup = () => {
+    setTimeout(() => {
+      try {
+        frame?.remove()
+      } catch {
+        /* ignore */
+      }
+    }, 800)
+  }
+
   const run = () => {
     try {
-      w.focus()
-      w.print()
-    } finally {
-      // 部分浏览器打印对话框关闭后才安全关闭窗口
-      setTimeout(() => {
-        try {
-          w.close()
-        } catch {
-          /* ignore */
-        }
-      }, 400)
+      win.focus()
+      win.print()
+    } catch {
+      cleanup()
+      return
     }
+    cleanup()
   }
-  if (w.document.readyState === 'complete') {
-    setTimeout(run, 120)
+
+  // 等样式/字体就绪后再调打印
+  if (doc.readyState === 'complete') {
+    setTimeout(run, 150)
   } else {
-    w.addEventListener('load', () => setTimeout(run, 80))
+    frame.addEventListener('load', () => setTimeout(run, 100), { once: true })
+    setTimeout(run, 400)
   }
   return true
 }

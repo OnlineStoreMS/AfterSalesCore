@@ -35,6 +35,7 @@ function toLabelItem(row: ShippedRefund): SpecLabelItem {
     productTitle: row.productTitle || '',
     shopName: row.shopName || '',
     aftersaleId: row.platformAftersaleId || '',
+    inboundAt: signedTimeOf(row),
     copies: Math.max(row.qty || 1, 1),
   }
 }
@@ -258,8 +259,12 @@ onMounted(() => {
             </el-popover>
           </template>
         </el-table-column>
-        <el-table-column label="签收时间" width="170">
-          <template #default="{ row }">{{ signedTimeOf(row) || '—' }}</template>
+        <el-table-column label="入库时间" width="170">
+          <template #default="{ row }">
+            <el-tooltip content="取自退回物流签收时间" placement="top" :disabled="!signedTimeOf(row)">
+              <span>{{ signedTimeOf(row) || '—' }}</span>
+            </el-tooltip>
+          </template>
         </el-table-column>
         <el-table-column label="申请时间" width="170">
           <template #default="{ row }">{{ row.applyTime || '—' }}</template>

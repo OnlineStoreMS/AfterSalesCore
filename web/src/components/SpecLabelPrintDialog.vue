@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Printer } from '@element-plus/icons-vue'
+import { Printer, RefreshLeft } from '@element-plus/icons-vue'
 import {
   LABEL_SIZE_PRESETS,
-  loadSavedLabelSize,
+  loadSavedLabelPrefs,
   printSpecLabels,
+  resolvePrintSize,
   resolveSpecText,
-  saveLabelSize,
+  saveLabelPrefs,
+  type LabelOrientation,
   type LabelSize,
   type SpecLabelItem,
 } from '../utils/specLabelPrint'
+
+type EditableRow = SpecLabelItem & { _key: string; _origSku: string }
 
 const props = defineProps<{
   modelValue: boolean
@@ -26,22 +30,47 @@ const visible = computed({
   set: (v: boolean) => emit('update:modelValue', v),
 })
 
-const size = ref<LabelSize>(loadSavedLabelSize())
+const size = ref<LabelSize>(loadSavedLabelPrefs().size)
+const orientation = ref<LabelOrientation>(loadSavedLabelPrefs().orientation)
 const presetId = ref('')
 const copies = ref(1)
 const customW = ref(40)
 const customH = ref(50)
+const rows = ref<EditableRow[]>([])
 
-const previewItems = computed(() =>
-  props.items.map((it) => ({
-    ...it,
+const printSize = computed(() => resolvePrintSize(size.value, orientation.value))
+
+const printItems = computed(() =>
+  rows.value.map((it) => ({
+    orderNo: it.orderNo,
+    sku: String(it.sku || '').trim(),
+    productTitle: it.productTitle,
+    shopName: it.shopName,
+    aftersaleId: it.aftersaleId,
+    inboundAt: it.inboundAt,
     copies: Math.min(Math.max(Number(copies.value) || 1, 1), 99),
   })),
 )
 
 const totalSheets = computed(() =>
-  previewItems.value.reduce((n, it) => n + (Math.min(Math.max(Number(it.copies) || 1, 1), 99)), 0),
+  printItems.value.reduce((n, it) => n + (Math.min(Math.max(Number(it.copies) || 1, 1), 99)), 0),
 )
+
+const editedCount = computed(() =>
+  rows.value.filter((r) => String(r.sku || '').trim() !== String(r._origSku || '').trim()).length,
+)
+
+function cloneRows(list: SpecLabelItem[]): EditableRow[] {
+  return list.map((it, i) => {
+    const sku = String(it.sku || '').trim() || String(it.productTitle || '').trim()
+    return {
+      ...it,
+      sku,
+      _origSku: sku,
+      _key: `${it.orderNo || ''}-${it.aftersaleId || ''}-${i}`,
+    }
+  })
+}
 
 function matchPreset(s: LabelSize) {
   const hit = LABEL_SIZE_PRESETS.find(
@@ -56,9 +85,11 @@ watch(
   () => props.modelValue,
   (open) => {
     if (!open) return
-    const saved = loadSavedLabelSize()
-    size.value = { ...saved }
-    matchPreset(saved)
+    const saved = loadSavedLabelPrefs()
+    size.value = { ...saved.size }
+    orientation.value = saved.orientation
+    matchPreset(saved.size)
+    rows.value = cloneRows(props.items)
     const firstCopies = props.items[0]?.copies
     copies.value = firstCopies && firstCopies > 0 ? Math.min(firstCopies, 99) : 1
   },
@@ -87,28 +118,37 @@ function onCustomChange() {
   }
 }
 
+function resetSpecs() {
+  rows.value = rows.value.map((r) => ({ ...r, sku: r._origSku }))
+  ElMessage.success('已恢复原始规格名称')
+}
+
 const previewScale = computed(() => {
-  // 屏幕预览：把 mm 映射到 px，大标签缩小
-  const maxEdge = Math.max(size.value.widthMm, size.value.heightMm)
+  const maxEdge = Math.max(printSize.value.widthMm, printSize.value.heightMm)
   if (maxEdge >= 100) return 2.2
   if (maxEdge >= 70) return 2.8
   return 3.4
 })
 
 function doPrint() {
-  if (!props.items.length) {
+  if (!printItems.value.length) {
     ElMessage.warning('没有可打印的订单')
     return
   }
-  const missing = props.items.filter((it) => !String(it.orderNo || '').trim())
+  const emptySpec = printItems.value.filter((it) => !String(it.sku || '').trim())
+  if (emptySpec.length) {
+    ElMessage.warning('请填写规格名称后再打印')
+    return
+  }
+  const missing = printItems.value.filter((it) => !String(it.orderNo || '').trim())
   if (missing.length) {
     ElMessage.warning('存在缺少订单号的记录，请检查后再打')
     return
   }
-  saveLabelSize(size.value)
-  const ok = printSpecLabels(previewItems.value, size.value)
+  saveLabelPrefs({ size: size.value, orientation: orientation.value })
+  const ok = printSpecLabels(printItems.value, size.value, orientation.value)
   if (!ok) {
-    ElMessage.error('无法打开打印窗口，请允许浏览器弹窗后重试')
+    ElMessage.error('打印失败，请刷新页面后重试')
     return
   }
   ElMessage.success(`已调起打印（${totalSheets.value} 张）`)
@@ -120,7 +160,7 @@ function doPrint() {
   <el-dialog
     v-model="visible"
     title="打印商品规格标签"
-    width="720px"
+    width="860px"
     destroy-on-close
     append-to-body
   >
@@ -157,34 +197,75 @@ function doPrint() {
         />
         <span class="unit">mm</span>
       </template>
+      <span class="field-label">方向</span>
+      <el-radio-group v-model="orientation" size="small">
+        <el-radio-button value="portrait">纵向</el-radio-button>
+        <el-radio-button value="landscape">横向</el-radio-button>
+      </el-radio-group>
       <span class="field-label">每单份数</span>
       <el-input-number v-model="copies" :min="1" :max="99" controls-position="right" style="width: 110px" />
-      <span class="hint">共 {{ items.length }} 单 · {{ totalSheets }} 张 · {{ size.widthMm }}×{{ size.heightMm }} mm</span>
+      <el-button
+        :icon="RefreshLeft"
+        :disabled="!editedCount"
+        @click="resetSpecs"
+      >恢复规格</el-button>
+      <span class="hint">
+        共 {{ rows.length }} 单 · {{ totalSheets }} 张 ·
+        {{ printSize.widthMm }}×{{ printSize.heightMm }} mm
+        （{{ orientation === 'landscape' ? '横向' : '纵向' }}）
+        <template v-if="editedCount"> · 已改 {{ editedCount }} 条规格</template>
+      </span>
     </div>
 
     <p class="tip">
-      打印前按标签纸尺寸排版：主文案为商品规格，底部为订单号便于追溯。实际出纸尺寸由浏览器「更多设置 → 纸张尺寸」或标签打印机驱动决定，请选择与预设一致的纸张。
+      可直接修改下方「规格名称」，打印与预览都会用修改后的文案；不影响列表原始数据。「恢复规格」可还原为采集到的名称。
     </p>
+
+    <el-table :data="rows" border size="small" max-height="280" class="edit-table">
+      <el-table-column label="订单号" prop="orderNo" width="180" show-overflow-tooltip />
+      <el-table-column label="规格名称" min-width="260">
+        <template #default="{ row }">
+          <el-input
+            v-model="row.sku"
+            type="textarea"
+            :autosize="{ minRows: 1, maxRows: 3 }"
+            maxlength="200"
+            show-word-limit
+            placeholder="标签上显示的规格名称"
+          />
+        </template>
+      </el-table-column>
+      <el-table-column label="入库时间" prop="inboundAt" width="140" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.inboundAt || '—' }}</template>
+      </el-table-column>
+      <el-table-column label="商品" prop="productTitle" min-width="160" show-overflow-tooltip />
+    </el-table>
 
     <div class="preview-board">
       <div
-        v-for="(it, idx) in items.slice(0, 6)"
+        v-for="(it, idx) in printItems.slice(0, 6)"
         :key="`${it.orderNo}-${idx}`"
         class="preview-label"
         :style="{
-          width: `${size.widthMm * previewScale}px`,
-          height: `${size.heightMm * previewScale}px`,
+          width: `${printSize.widthMm * previewScale}px`,
+          height: `${printSize.heightMm * previewScale}px`,
         }"
       >
         <div class="preview-inner">
           <div class="preview-spec">{{ resolveSpecText(it) }}</div>
-          <div class="preview-order">
-            <span>订单</span>
-            <span class="mono">{{ it.orderNo || '—' }}</span>
+          <div class="preview-footer">
+            <div class="preview-order">
+              <span>订单</span>
+              <span class="mono">{{ it.orderNo || '—' }}</span>
+            </div>
+            <div v-if="it.inboundAt" class="preview-order">
+              <span>入库</span>
+              <span class="mono">{{ it.inboundAt }}</span>
+            </div>
           </div>
         </div>
       </div>
-      <div v-if="items.length > 6" class="more">… 另有 {{ items.length - 6 }} 单</div>
+      <div v-if="printItems.length > 6" class="more">… 另有 {{ printItems.length - 6 }} 单</div>
     </div>
 
     <template #footer>
@@ -215,6 +296,7 @@ function doPrint() {
   font-size: 12px;
   line-height: 1.5;
 }
+.edit-table { margin-bottom: 12px; }
 .preview-board {
   display: flex;
   flex-wrap: wrap;
@@ -230,6 +312,7 @@ function doPrint() {
   border: 1px dashed #c0c4cc;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   overflow: hidden;
+  transition: width .15s ease, height .15s ease;
 }
 .preview-inner {
   width: 100%;
@@ -248,15 +331,18 @@ function doPrint() {
   overflow: hidden;
   flex: 1;
 }
+.preview-footer {
+  border-top: 1px solid #303133;
+  padding-top: 4px;
+}
 .preview-order {
   display: flex;
   gap: 6px;
   align-items: baseline;
-  border-top: 1px solid #303133;
-  padding-top: 4px;
   font-size: 11px;
   font-weight: 600;
 }
+.preview-order + .preview-order { margin-top: 2px; }
 .preview-order .mono {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   word-break: break-all;
