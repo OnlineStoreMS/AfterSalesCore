@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Printer, Search } from '@element-plus/icons-vue'
+import SpecLabelPrintDialog from '../../components/SpecLabelPrintDialog.vue'
 import {
   fetchReturnRefunds,
   fetchShops,
@@ -10,6 +11,7 @@ import {
   type ShippedRefund,
 } from '../../api/shop'
 import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
+import type { SpecLabelItem } from '../../utils/specLabelPrint'
 import { displayTrackDetail, signedTimeFromTracks } from '../../utils/ticketLogistics'
 
 const loading = ref(false)
@@ -22,6 +24,46 @@ const shopId = ref<number | undefined>()
 const keyword = ref('')
 const status = ref('')
 const applyRange = ref<[string, string] | null>(null)
+const selected = ref<ShippedRefund[]>([])
+const printVisible = ref(false)
+const printItems = ref<SpecLabelItem[]>([])
+
+function toLabelItem(row: ShippedRefund): SpecLabelItem {
+  return {
+    orderNo: row.orderNo || '',
+    sku: row.sku || '',
+    productTitle: row.productTitle || '',
+    shopName: row.shopName || '',
+    aftersaleId: row.platformAftersaleId || '',
+    copies: Math.max(row.qty || 1, 1),
+  }
+}
+
+function onSelectionChange(rows: ShippedRefund[]) {
+  selected.value = rows
+}
+
+function openPrint(rows: ShippedRefund[]) {
+  if (!rows.length) {
+    ElMessage.warning('请先勾选要打印的订单')
+    return
+  }
+  const bad = rows.filter((r) => !String(r.sku || '').trim() && !String(r.productTitle || '').trim())
+  if (bad.length === rows.length) {
+    ElMessage.warning('选中记录没有规格/商品信息')
+    return
+  }
+  printItems.value = rows.map(toLabelItem)
+  printVisible.value = true
+}
+
+function printSelected() {
+  openPrint(selected.value)
+}
+
+function printOne(row: ShippedRefund) {
+  openPrint([row])
+}
 
 async function loadShops() {
   try {
@@ -88,7 +130,12 @@ onMounted(() => {
     <div class="page-head">
       <div>
         <h2 class="page-title">退货退款成功</h2>
-        <p class="desc">采集抖店售后类型「退货退款」、售后状态「退款成功」。申请时间窗口在店铺采集设置里单独配置。默认按申请时间最近的在前，悬停物流单号可看轨迹。</p>
+        <p class="desc">采集抖店售后类型「退货退款」、售后状态「退款成功」。申请时间窗口在店铺采集设置里单独配置。默认按申请时间最近的在前，悬停物流单号可看轨迹。支持打印商品规格标签（含订单号）。</p>
+      </div>
+      <div class="head-actions">
+        <el-button type="primary" :icon="Printer" :disabled="!selected.length" @click="printSelected">
+          打印规格标签{{ selected.length ? `（${selected.length}）` : '' }}
+        </el-button>
       </div>
     </div>
 
@@ -146,7 +193,8 @@ onMounted(() => {
         <span class="total">共 {{ total }} 条</span>
       </div>
 
-      <el-table :data="tableData" stripe border>
+      <el-table :data="tableData" stripe border @selection-change="onSelectionChange">
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="shopName" label="店铺" width="140" />
         <el-table-column label="商品信息" min-width="240">
           <template #default="{ row }">
@@ -217,6 +265,11 @@ onMounted(() => {
           <template #default="{ row }">{{ row.applyTime || '—' }}</template>
         </el-table-column>
         <el-table-column prop="syncedAt" label="同步时间" width="170" />
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" :icon="Printer" @click="printOne(row)">打标签</el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <div class="pager">
@@ -231,13 +284,16 @@ onMounted(() => {
         />
       </div>
     </el-card>
+
+    <SpecLabelPrintDialog v-model="printVisible" :items="printItems" />
   </div>
 </template>
 
 <style scoped>
-.page-head { margin-bottom: 16px; }
+.page-head { margin-bottom: 16px; display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .page-title { margin: 0 0 6px; font-size: 22px; }
 .desc { color: #606266; margin: 0; }
+.head-actions { flex-shrink: 0; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .field-label { color: #606266; font-size: 13px; white-space: nowrap; }
 .total { margin-left: auto; color: #909399; font-size: 13px; }
