@@ -1035,6 +1035,9 @@ func (s *ShopService) ListReturnRefunds(q dto.ReturnRefundListQuery) ([]dto.Retu
 	wantStatus := strings.TrimSpace(q.Status)
 	out := make([]dto.ReturnRefundItem, 0, len(list))
 	for i := range list {
+		if !IsReturnRefundSuccessRecord(list[i].AftersaleType, list[i].Status) {
+			continue
+		}
 		item := toReturnRefundItem(&list[i], names[list[i].ShopID])
 		if wantStatus != "" && item.LogisticsStatus != wantStatus {
 			continue
@@ -1077,6 +1080,22 @@ func (s *ShopService) MarkReturnRefundLabelPrinted(ids []uint64) error {
 		return fmt.Errorf("%w: 请选择要记录的记录", ErrBadRequest)
 	}
 	return s.repo().IncrementReturnRefundLabelPrint(clean)
+}
+
+// IsReturnRefundSuccessRecord 退货退款成功列表仅收：售后类型=退货退款（排除未发货/已发货退款），状态含退款成功。
+func IsReturnRefundSuccessRecord(aftersaleType, status string) bool {
+	typ := strings.TrimSpace(aftersaleType)
+	st := strings.TrimSpace(status)
+	if strings.Contains(typ, "未发货退款") || strings.Contains(typ, "已发货退款") {
+		return false
+	}
+	if typ != "" && !strings.Contains(typ, "退货退款") {
+		return false
+	}
+	if !strings.Contains(st, "退款成功") {
+		return false
+	}
+	return true
 }
 
 func (s *ShopService) Bind(bindCode string) (*dto.PluginBindResult, error) {
@@ -1558,6 +1577,11 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 			if aid == "" {
 				continue
 			}
+			typ := strings.TrimSpace(item.AftersaleType)
+			st := strings.TrimSpace(item.Status)
+			if !IsReturnRefundSuccessRecord(typ, st) {
+				continue
+			}
 			logistics := strings.TrimSpace(item.Logistics)
 			trackJSON := LimitLogisticsTracksJSON(item.TrackJSON)
 			status := ClassifyLogisticsWithTracks(logistics, trackJSON)
@@ -1577,9 +1601,9 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 				BuyQty:              item.BuyQty,
 				PayAmount:           strings.TrimSpace(item.PayAmount),
 				RefundAmount:        strings.TrimSpace(item.RefundAmount),
-				AftersaleType:       firstNonEmpty(strings.TrimSpace(item.AftersaleType), "退货退款"),
+				AftersaleType:       firstNonEmpty(typ, "退货退款"),
 				Reason:              strings.TrimSpace(item.Reason),
-				Status:              firstNonEmpty(strings.TrimSpace(item.Status), "退款成功"),
+				Status:              firstNonEmpty(st, "退款成功"),
 				OrderInfo:           strings.TrimSpace(item.OrderInfo),
 				AftersaleInfo:       strings.TrimSpace(item.AftersaleInfo),
 				Logistics:           logistics,
