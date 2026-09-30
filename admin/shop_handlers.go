@@ -333,6 +333,21 @@ func (h *ShopHandler) ReturnRefunds(c *gin.Context) {
 	response.OK(c, response.PageResult(list, total, page, pageSize))
 }
 
+func (h *ShopHandler) MarkReturnRefundLabelPrinted(c *gin.Context) {
+	var in struct {
+		IDs []uint64 `json:"ids"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "参数无效")
+		return
+	}
+	if err := h.ss(c).MarkReturnRefundLabelPrinted(in.IDs); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"ok": true})
+}
+
 func (h *ShopHandler) Intercepts(c *gin.Context) {
 	page, pageSize := httputil.ParsePage(c)
 	var shopID uint64

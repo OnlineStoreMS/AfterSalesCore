@@ -340,6 +340,8 @@ export interface ShippedRefund {
   alert?: boolean
   applyTime?: string
   signedTime?: string
+  labelPrintCount?: number
+  labelPrintedAt?: string
   syncedAt: string
 }
 
@@ -397,6 +399,10 @@ export async function fetchReturnRefunds(params?: {
   pageSize?: number
 }) {
   return unwrap<PageData<ShippedRefund>>(await client.get('/return-refunds', { params }))
+}
+
+export async function markReturnRefundLabelPrinted(ids: number[]) {
+  return unwrap<{ ok: boolean }>(await client.post('/return-refunds/label-printed', { ids }))
 }
 
 export async function fetchShippedRefundReasons(shopId?: number) {

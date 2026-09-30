@@ -218,3 +218,10 @@ func (s *UnboxingService) toDetail(rec *model.UnboxingRecord) *dto.UnboxingDetai
 func formatTime(t time.Time) string {
 	return t.Format("2006-01-02 15:04:05")
 }
+
+func formatTimePtr(t *time.Time) string {
+	if t == nil || t.IsZero() {
+		return ""
+	}
+	return formatTime(*t)
+}

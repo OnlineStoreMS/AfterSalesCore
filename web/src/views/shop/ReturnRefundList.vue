@@ -6,6 +6,7 @@ import SpecLabelPrintDialog from '../../components/SpecLabelPrintDialog.vue'
 import {
   fetchReturnRefunds,
   fetchShops,
+  markReturnRefundLabelPrinted,
   type LogisticsTrack,
   type MarketplaceShop,
   type ShippedRefund,
@@ -30,12 +31,14 @@ const printItems = ref<SpecLabelItem[]>([])
 
 function toLabelItem(row: ShippedRefund): SpecLabelItem {
   return {
+    id: row.id,
     orderNo: row.orderNo || '',
     sku: row.sku || '',
     productTitle: row.productTitle || '',
     shopName: row.shopName || '',
     aftersaleId: row.platformAftersaleId || '',
     inboundAt: signedTimeOf(row),
+    labelPrintCount: row.labelPrintCount || 0,
     copies: Math.max(row.qty || 1, 1),
   }
 }
@@ -64,6 +67,16 @@ function printSelected() {
 
 function printOne(row: ShippedRefund) {
   openPrint([row])
+}
+
+async function onLabelPrinted(ids: number[]) {
+  if (!ids.length) return
+  try {
+    await markReturnRefundLabelPrinted(ids)
+  } catch {
+    /* 打印已发出，计数失败不阻断 */
+  }
+  await loadData()
 }
 
 async function loadShops() {
@@ -266,6 +279,14 @@ onMounted(() => {
             </el-tooltip>
           </template>
         </el-table-column>
+        <el-table-column label="标签打印" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="(row.labelPrintCount || 0) > 0" type="success" size="small" effect="plain">
+              已打印 ×{{ row.labelPrintCount }}
+            </el-tag>
+            <span v-else class="muted">未打印</span>
+          </template>
+        </el-table-column>
         <el-table-column label="申请时间" width="170">
           <template #default="{ row }">{{ row.applyTime || '—' }}</template>
         </el-table-column>
@@ -290,7 +311,11 @@ onMounted(() => {
       </div>
     </el-card>
 
-    <SpecLabelPrintDialog v-model="printVisible" :items="printItems" />
+    <SpecLabelPrintDialog
+      v-model="printVisible"
+      :items="printItems"
+      @printed="onLabelPrinted"
+    />
   </div>
 </template>
 
@@ -308,6 +333,7 @@ onMounted(() => {
 .title { font-weight: 600; line-height: 1.4; }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
 .tracking { color: #409eff; word-break: break-all; }
+.muted { color: #c0c4cc; font-size: 12px; }
 .logistics-cell.link { cursor: pointer; }
 .logistics-status { font-weight: 600; margin-top: 2px; }
 .logistics-status.danger { color: #f56c6c; }

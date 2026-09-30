@@ -1060,6 +1060,25 @@ func (s *ShopService) ListReturnRefunds(q dto.ReturnRefundListQuery) ([]dto.Retu
 	return out[start:end], total, nil
 }
 
+func (s *ShopService) MarkReturnRefundLabelPrinted(ids []uint64) error {
+	clean := make([]uint64, 0, len(ids))
+	seen := map[uint64]struct{}{}
+	for _, id := range ids {
+		if id == 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		clean = append(clean, id)
+	}
+	if len(clean) == 0 {
+		return fmt.Errorf("%w: 请选择要记录的记录", ErrBadRequest)
+	}
+	return s.repo().IncrementReturnRefundLabelPrint(clean)
+}
+
 func (s *ShopService) Bind(bindCode string) (*dto.PluginBindResult, error) {
 	code := strings.ToUpper(strings.TrimSpace(bindCode))
 	if len(code) < 4 {
@@ -1857,7 +1876,9 @@ func toReturnRefundItem(item *model.ReturnRefundSuccess, shopName string) dto.Re
 		LogisticsNo: item.LogisticsNo, Carrier: item.Carrier, ShipTime: item.ShipTime,
 		Tracks: toDTOTracks(item.TrackJSON), ApplyTime: item.ApplyTime,
 		SignedTime: SignedTimeFromTrackJSON(item.TrackJSON),
-		SyncedAt:   formatTime(item.SyncedAt),
+		LabelPrintCount: item.LabelPrintCount,
+		LabelPrintedAt:  formatTimePtr(item.LabelPrintedAt),
+		SyncedAt:        formatTime(item.SyncedAt),
 	}
 }
 

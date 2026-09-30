@@ -23,6 +23,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [boolean]
+  printed: [ids: number[]]
 }>()
 
 const visible = computed({
@@ -151,6 +152,10 @@ function doPrint() {
     ElMessage.error('打印失败，请刷新页面后重试')
     return
   }
+  const ids = rows.value
+    .map((r) => Number(r.id) || 0)
+    .filter((id) => id > 0)
+  emit('printed', ids)
   ElMessage.success(`已调起打印（${totalSheets.value} 张）`)
   visible.value = false
 }
@@ -218,7 +223,7 @@ function doPrint() {
     </div>
 
     <p class="tip">
-      可直接修改下方「规格名称」，打印与预览都会用修改后的文案；不影响列表原始数据。「恢复规格」可还原为采集到的名称。
+      可直接修改下方「规格名称」，打印与预览都会用修改后的文案；不影响列表原始数据。标签不打印售后单号。已打印的仍可再次打印。
     </p>
 
     <el-table :data="rows" border size="small" max-height="280" class="edit-table">
@@ -238,7 +243,14 @@ function doPrint() {
       <el-table-column label="入库时间" prop="inboundAt" width="140" show-overflow-tooltip>
         <template #default="{ row }">{{ row.inboundAt || '—' }}</template>
       </el-table-column>
-      <el-table-column label="商品" prop="productTitle" min-width="160" show-overflow-tooltip />
+      <el-table-column label="打印" width="100">
+        <template #default="{ row }">
+          <el-tag v-if="(row.labelPrintCount || 0) > 0" type="success" size="small" effect="plain">
+            已打印 ×{{ row.labelPrintCount }}
+          </el-tag>
+          <span v-else class="muted">未打印</span>
+        </template>
+      </el-table-column>
     </el-table>
 
     <div class="preview-board">
@@ -297,6 +309,7 @@ function doPrint() {
   line-height: 1.5;
 }
 .edit-table { margin-bottom: 12px; }
+.muted { color: #c0c4cc; font-size: 12px; }
 .preview-board {
   display: flex;
   flex-wrap: wrap;

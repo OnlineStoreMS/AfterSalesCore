@@ -848,6 +848,20 @@ func (r *ShopRepo) UpsertReturnRefunds(shop *model.MarketplaceShop, items []mode
 	})
 }
 
+func (r *ShopRepo) IncrementReturnRefundLabelPrint(ids []uint64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	now := time.Now()
+	return r.db.Scopes(scopeTenant(r.tenantID)).
+		Model(&model.ReturnRefundSuccess{}).
+		Where("id IN ?", ids).
+		Updates(map[string]any{
+			"label_print_count": gorm.Expr("label_print_count + 1"),
+			"label_printed_at":  now,
+		}).Error
+}
+
 type ServiceOrderListFilter struct {
 	ShopID    uint64
 	StatusTab string

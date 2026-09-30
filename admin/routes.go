@@ -58,6 +58,7 @@ func RegisterRoutes(
 	g.GET("/shipped-refunds/reasons", shopH.ShippedRefundReasons)
 	g.GET("/shipped-refunds", shopH.ShippedRefunds)
 	g.GET("/return-refunds", shopH.ReturnRefunds)
+	g.POST("/return-refunds/label-printed", shopH.MarkReturnRefundLabelPrinted)
 	g.GET("/intercept-orders", shopH.Intercepts)
 	g.GET("/service-orders", shopH.ServiceOrders)
 	g.GET("/issue-records/meta", shopH.IssueMeta)

@@ -476,6 +476,8 @@ type ReturnRefundItem struct {
 	Tracks              []LogisticsTrack `json:"tracks,omitempty"`
 	SignedTime          string           `json:"signedTime,omitempty"`
 	ApplyTime           string           `json:"applyTime,omitempty"`
+	LabelPrintCount     int              `json:"labelPrintCount"`
+	LabelPrintedAt      string           `json:"labelPrintedAt,omitempty"`
 	SyncedAt            string           `json:"syncedAt"`
 }
 

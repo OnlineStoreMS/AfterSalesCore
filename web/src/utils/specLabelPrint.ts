@@ -1,6 +1,7 @@
 /** 商品规格标签：尺寸预设与打印排版 */
 
 export type SpecLabelItem = {
+  id?: number
   orderNo: string
   sku: string
   productTitle?: string
@@ -8,6 +9,8 @@ export type SpecLabelItem = {
   aftersaleId?: string
   /** 入库时间（退回物流签收时间） */
   inboundAt?: string
+  /** 已打印次数（展示用） */
+  labelPrintCount?: number
   /** 该行默认打印份数（如申请件数） */
   copies?: number
 }
@@ -133,7 +136,6 @@ function labelHtml(item: SpecLabelItem, size: LabelSize, tone: LayoutTone): stri
   const inboundAt = escapeHtml(String(item.inboundAt || '').trim())
   const title = escapeHtml(String(item.productTitle || '').trim())
   const shop = escapeHtml(String(item.shopName || '').trim())
-  const aftersale = escapeHtml(String(item.aftersaleId || '').trim())
 
   const extras: string[] = []
   if (tone === 'roomy' && title) {
@@ -141,9 +143,6 @@ function labelHtml(item: SpecLabelItem, size: LabelSize, tone: LayoutTone): stri
   }
   if (tone === 'roomy' && shop) {
     extras.push(`<div class="meta">店铺 ${shop}</div>`)
-  }
-  if (tone !== 'compact' && aftersale) {
-    extras.push(`<div class="meta">售后 ${aftersale}</div>`)
   }
 
   const inboundLine = inboundAt
@@ -179,7 +178,7 @@ export function buildSpecLabelPrintHtml(
 <style>
   @page {
     size: ${printSize.widthMm}mm ${printSize.heightMm}mm;
-    margin: 0;
+    margin: 2mm;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -203,7 +202,7 @@ export function buildSpecLabelPrintHtml(
   .inner {
     width: 100%;
     height: 100%;
-    padding: 1.6mm 1.8mm;
+    padding: 2.5mm 2.8mm;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -247,10 +246,10 @@ export function buildSpecLabelPrintHtml(
   }
 
   /* 尺寸自适应：紧凑 / 常规 / 宽松 */
-  .tone-compact .spec { font-size: 3.2mm; max-height: 16mm; }
+  .tone-compact .spec { font-size: 3.2mm; max-height: 14mm; }
   .tone-compact .order, .tone-compact .inbound { font-size: 2.1mm; }
   .tone-compact .order-key, .tone-compact .inbound-key { font-size: 1.9mm; }
-  .tone-compact .inner { padding: 1.2mm 1.4mm; }
+  .tone-compact .inner { padding: 2mm 2.2mm; }
 
   .tone-normal .spec { font-size: 4mm; max-height: 28mm; }
   .tone-normal .order, .tone-normal .inbound { font-size: 2.5mm; }

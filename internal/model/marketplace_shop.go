@@ -245,9 +245,13 @@ type ReturnRefundSuccess struct {
 	ApplyTime           string     `gorm:"size:64" json:"applyTime"`
 	AppliedAt           *time.Time `gorm:"index" json:"appliedAt"`
 	RawJSON             string     `gorm:"type:text" json:"rawJson"`
-	SyncedAt            time.Time  `json:"syncedAt"`
-	CreatedAt           time.Time  `json:"createdAt"`
-	UpdatedAt           time.Time  `json:"updatedAt"`
+	// LabelPrintCount 规格标签累计打印次数（可重复打印）。
+	LabelPrintCount int `gorm:"not null;default:0" json:"labelPrintCount"`
+	// LabelPrintedAt 最近一次打印规格标签时间。
+	LabelPrintedAt *time.Time `json:"labelPrintedAt,omitempty"`
+	SyncedAt       time.Time  `json:"syncedAt"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 func (ReturnRefundSuccess) TableName() string { return "return_refund_success" }
