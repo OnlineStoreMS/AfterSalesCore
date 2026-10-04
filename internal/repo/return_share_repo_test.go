@@ -14,3 +14,21 @@ func TestSplitReturnLocationFilters(t *testing.T) {
 		t.Fatal("empty should be nil")
 	}
 }
+
+func TestReturnListOrderClause(t *testing.T) {
+	got := ReturnListOrderClause("returnTime", "desc")
+	want := "returned_at DESC NULLS LAST, id DESC"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	got = ReturnListOrderClause("returnTime", "asc")
+	want = "returned_at ASC NULLS LAST, id ASC"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	got = ReturnListOrderClause("", "")
+	want = "COALESCE(returned_at, applied_at) DESC NULLS LAST, id DESC"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}

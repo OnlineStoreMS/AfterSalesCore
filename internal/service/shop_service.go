@@ -419,6 +419,8 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery, bearerToken string) ([]
 		Page:           q.Page,
 		PageSize:       q.PageSize,
 		Unpaged:        q.Unpaged,
+		SortBy:         q.SortBy,
+		SortOrder:      q.SortOrder,
 	})
 	if err != nil {
 		return nil, 0, err

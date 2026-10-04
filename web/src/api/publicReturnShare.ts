@@ -28,7 +28,7 @@ export interface PublicReturnSharePage extends PageData<ReturnPackage> {
   returnLocation: string
 }
 
-export async function fetchPublicReturnShare(token: string, params?: { keyword?: string; page?: number; pageSize?: number }) {
+export async function fetchPublicReturnShare(token: string, params?: { keyword?: string; page?: number; pageSize?: number; sortBy?: string; sortOrder?: string }) {
   const res = await publicClient.get(`/return-shares/${encodeURIComponent(token)}`, { params })
   return (res.data as ApiResponse<PublicReturnSharePage>).data as PublicReturnSharePage
 }

@@ -144,16 +144,24 @@ func (s *ShopService) PublicReturnShareMeta(token string) (*dto.PublicReturnShar
 	}, nil
 }
 
-func (s *ShopService) PublicListReturns(token, keyword string, page, pageSize int) (*dto.PublicReturnShareMeta, []dto.ReturnPackageItem, int64, error) {
+func (s *ShopService) PublicListReturns(token, keyword string, page, pageSize int, sortBy, sortOrder string) (*dto.PublicReturnShareMeta, []dto.ReturnPackageItem, int64, error) {
 	svc, item, err := s.resolvePublicShare(token)
 	if err != nil {
 		return nil, nil, 0, err
+	}
+	if strings.TrimSpace(sortBy) == "" {
+		sortBy = "returnTime"
+	}
+	if strings.TrimSpace(sortOrder) == "" {
+		sortOrder = "desc"
 	}
 	list, total, err := svc.ListReturns(dto.ReturnListQuery{
 		Keyword:        keyword,
 		ReturnLocation: item.ReturnLocation,
 		Page:           page,
 		PageSize:       pageSize,
+		SortBy:         sortBy,
+		SortOrder:      sortOrder,
 	}, "")
 	if err != nil {
 		return nil, nil, 0, err
@@ -189,6 +197,8 @@ func (s *ShopService) PublicExportReturns(token string, fields []string) ([]byte
 		ReturnLocation: item.ReturnLocation,
 		Fields:         fields,
 		HidePayAmount:  true,
+		SortBy:         "returnTime",
+		SortOrder:      "desc",
 	}, "")
 	if err != nil {
 		return nil, "", err

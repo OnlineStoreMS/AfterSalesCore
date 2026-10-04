@@ -422,6 +422,8 @@ type ReturnListQuery struct {
 	Page           int
 	PageSize       int
 	Unpaged        bool
+	SortBy         string
+	SortOrder      string
 }
 
 type ReturnExportRequest struct {
@@ -434,6 +436,8 @@ type ReturnExportRequest struct {
 	ApplyTo        string   `json:"applyTo"`
 	Fields         []string `json:"fields"`
 	HidePayAmount  bool     `json:"hidePayAmount"`
+	SortBy         string   `json:"sortBy"`
+	SortOrder      string   `json:"sortOrder"`
 }
 
 type ReturnShareItem struct {

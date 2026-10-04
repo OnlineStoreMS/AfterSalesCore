@@ -16,6 +16,9 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
+const sortBy = ref('returnTime')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+const sortReady = ref(false)
 const sharerName = ref('')
 const returnLocation = ref('')
 const missing = ref(false)
@@ -35,6 +38,8 @@ async function loadData() {
       keyword: keyword.value || undefined,
       page: page.value,
       pageSize: pageSize.value,
+      sortBy: sortBy.value,
+      sortOrder: sortOrder.value,
     })
     tableData.value = data.list || []
     total.value = data.total
@@ -51,6 +56,14 @@ async function loadData() {
 }
 
 function handleSearch() {
+  page.value = 1
+  loadData()
+}
+
+function onSortChange(payload: { prop?: string; order?: string | null }) {
+  sortBy.value = payload.prop === 'returnTime' ? 'returnTime' : 'returnTime'
+  sortOrder.value = payload.order === 'ascending' ? 'asc' : 'desc'
+  if (!sortReady.value) return
   page.value = 1
   loadData()
 }
@@ -81,7 +94,10 @@ function trackDetail(track: LogisticsTrack) {
   return displayTrackDetail(track)
 }
 
-onMounted(loadData)
+onMounted(async () => {
+  await loadData()
+  sortReady.value = true
+})
 </script>
 
 <template>
@@ -91,7 +107,7 @@ onMounted(loadData)
         <div class="brand">退回件</div>
         <h1>{{ sharerName || '退回件分享' }}</h1>
         <p v-if="returnLocation" class="meta">退回地 {{ returnLocation }}</p>
-        <p class="hint">刷新本页始终显示最新结果。不含店铺名，按序号查看。</p>
+        <p class="hint">刷新本页始终显示最新结果。不含店铺名。默认按物流退回时间，最近的在前，点击列头可切换。</p>
       </header>
 
       <div v-if="missing && !loading" class="empty">分享链接无效或已停用</div>
@@ -110,7 +126,13 @@ onMounted(loadData)
           <span class="total">共 {{ total }} 条</span>
         </div>
 
-        <el-table :data="tableData" stripe border>
+        <el-table
+          :data="tableData"
+          stripe
+          border
+          :default-sort="{ prop: 'returnTime', order: 'descending' }"
+          @sort-change="onSortChange"
+        >
           <el-table-column label="序号" width="70" align="center">
             <template #default="{ $index }">{{ seq($index) }}</template>
           </el-table-column>
@@ -181,7 +203,7 @@ onMounted(loadData)
               <div class="location">{{ row.returnLocation || '—' }}</div>
             </template>
           </el-table-column>
-          <el-table-column label="物流退回时间" width="170">
+          <el-table-column prop="returnTime" label="物流退回时间" width="180" sortable="custom" :sort-orders="['descending', 'ascending']">
             <template #default="{ row }">{{ row.returnTime || '—' }}</template>
           </el-table-column>
           <el-table-column label="申请时间" width="170">

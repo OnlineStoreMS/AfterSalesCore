@@ -424,6 +424,8 @@ type ReturnListFilter struct {
 	Page           int
 	PageSize       int
 	Unpaged        bool
+	SortBy         string
+	SortOrder      string
 }
 
 func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64, error) {
@@ -475,9 +477,24 @@ func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64
 	}
 	var list []model.ReturnPackage
 	offset := (f.Page - 1) * f.PageSize
-	err := q.Order("COALESCE(returned_at, applied_at) DESC NULLS LAST, id DESC").
+	err := q.Order(ReturnListOrderClause(f.SortBy, f.SortOrder)).
 		Offset(offset).Limit(f.PageSize).Find(&list).Error
 	return list, total, err
+}
+
+func ReturnListOrderClause(sortBy, sortOrder string) string {
+	dir := "DESC"
+	if strings.EqualFold(strings.TrimSpace(sortOrder), "asc") {
+		dir = "ASC"
+	}
+	switch strings.ToLower(strings.TrimSpace(sortBy)) {
+	case "returntime", "return_time", "returned_at":
+		return "returned_at " + dir + " NULLS LAST, id " + dir
+	case "applytime", "apply_time", "applied_at":
+		return "applied_at " + dir + " NULLS LAST, id " + dir
+	default:
+		return "COALESCE(returned_at, applied_at) DESC NULLS LAST, id DESC"
+	}
 }
 
 func findRefundByIdentity(tx *gorm.DB, shopID uint64, aftersaleID, orderNo string, dest any) error {

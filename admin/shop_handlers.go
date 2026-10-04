@@ -655,7 +655,7 @@ func (h *ShopHandler) DeleteReturnShare(c *gin.Context) {
 
 func (h *ShopHandler) PublicReturnShare(c *gin.Context) {
 	page, pageSize := httputil.ParsePage(c)
-	meta, list, total, err := h.svc.PublicListReturns(c.Param("token"), c.Query("keyword"), page, pageSize)
+	meta, list, total, err := h.svc.PublicListReturns(c.Param("token"), c.Query("keyword"), page, pageSize, c.Query("sortBy"), c.Query("sortOrder"))
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return

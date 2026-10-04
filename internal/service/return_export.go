@@ -119,6 +119,8 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 		Page:           1,
 		PageSize:       1500,
 		Unpaged:        true,
+		SortBy:         q.SortBy,
+		SortOrder:      q.SortOrder,
 	}, bearerToken)
 	if err != nil {
 		return nil, "", err
