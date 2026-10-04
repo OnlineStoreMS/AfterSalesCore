@@ -57,7 +57,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	}
 	agentsClient := service.NewAgentsCenterClient(cfg.AgentsCenter.BaseURL, cfg.AgentsCenter.InternalToken)
 	orderClient := ordercore.NewClient(cfg.Integrations.OrderCoreAPIURL)
-	shopSvc := service.NewShopService(repos, codec, cfg.Apps.PublicBaseURL, agentsClient, orderClient)
+	shopSvc := service.NewShopService(repos, codec, cfg.Apps.PublicBaseURL, agentsClient, orderClient, cfg.Auth.InternalToken)
 	notifySvc := service.NewNotificationService(repos)
 	unboxingH := admin.NewUnboxingHandler(unboxingSvc)
 	edgeRecordH := admin.NewEdgeRecordHandler(edgeRecordSvc)

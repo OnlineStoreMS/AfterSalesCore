@@ -34,12 +34,16 @@ type apiBody struct {
 }
 
 func (c *Client) FenFaRemarks(ctx context.Context, token string, orderNos []string) (map[string]string, error) {
-	return c.lookupStringMap(ctx, token, "/api/v1/admin/orders/fenfa-remarks", orderNos, "查询订单中心分发备注", "解析分发备注失败")
+	return c.lookupStringMap(ctx, token, "", 0, "/api/v1/admin/orders/fenfa-remarks", orderNos, "查询订单中心分发备注", "解析分发备注失败")
+}
+
+func (c *Client) FenFaRemarksInternal(ctx context.Context, internalToken string, tenantID uint64, orderNos []string) (map[string]string, error) {
+	return c.lookupStringMap(ctx, "", internalToken, tenantID, "/api/v1/internal/orders/fenfa-remarks", orderNos, "查询订单中心分发备注", "解析分发备注失败")
 }
 
 // SkuSpecs 按订单号（内部单号或平台单号）批量查询商品规格。
 func (c *Client) SkuSpecs(ctx context.Context, token string, orderNos []string) (map[string]string, error) {
-	return c.lookupStringMap(ctx, token, "/api/v1/admin/orders/sku-specs", orderNos, "查询订单中心商品规格", "解析商品规格失败")
+	return c.lookupStringMap(ctx, token, "", 0, "/api/v1/admin/orders/sku-specs", orderNos, "查询订单中心商品规格", "解析商品规格失败")
 }
 
 type OrderSummary struct {
@@ -118,7 +122,8 @@ func (c *Client) LookupSummaries(ctx context.Context, token string, orderNos []s
 
 func (c *Client) lookupStringMap(
 	ctx context.Context,
-	token string,
+	bearerToken, internalToken string,
+	tenantID uint64,
 	path string,
 	orderNos []string,
 	reqErrLabel string,
@@ -127,8 +132,9 @@ func (c *Client) lookupStringMap(
 	if c == nil {
 		return nil, fmt.Errorf("订单中心未配置")
 	}
-	token = strings.TrimSpace(token)
-	if token == "" {
+	bearerToken = strings.TrimSpace(bearerToken)
+	internalToken = strings.TrimSpace(internalToken)
+	if bearerToken == "" && internalToken == "" {
 		return nil, fmt.Errorf("未登录订单中心")
 	}
 	nos := make([]string, 0, len(orderNos))
@@ -154,7 +160,7 @@ func (c *Client) lookupStringMap(
 		if end > len(nos) {
 			end = len(nos)
 		}
-		part, err := c.lookupStringMapChunk(ctx, token, path, nos[i:end], reqErrLabel, parseErrLabel)
+		part, err := c.lookupStringMapChunk(ctx, bearerToken, internalToken, tenantID, path, nos[i:end], reqErrLabel, parseErrLabel)
 		if err != nil {
 			return nil, err
 		}
@@ -167,7 +173,8 @@ func (c *Client) lookupStringMap(
 
 func (c *Client) lookupStringMapChunk(
 	ctx context.Context,
-	token string,
+	bearerToken, internalToken string,
+	tenantID uint64,
 	path string,
 	orderNos []string,
 	reqErrLabel string,
@@ -182,7 +189,15 @@ func (c *Client) lookupStringMapChunk(
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+	if internalToken != "" {
+		req.Header.Set("X-Internal-Token", internalToken)
+		if tenantID > 0 {
+			req.Header.Set("X-Tenant-Id", fmt.Sprintf("%d", tenantID))
+		}
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", reqErrLabel, err)

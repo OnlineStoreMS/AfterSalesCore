@@ -410,6 +410,7 @@ type ReturnExportRequest struct {
 	ApplyFrom      string   `json:"applyFrom"`
 	ApplyTo        string   `json:"applyTo"`
 	Fields         []string `json:"fields"`
+	HidePayAmount  bool     `json:"hidePayAmount"`
 }
 
 type ReturnShareItem struct {

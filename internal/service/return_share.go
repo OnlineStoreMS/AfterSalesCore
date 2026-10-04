@@ -129,6 +129,7 @@ func (s *ShopService) resolvePublicShare(token string) (*ShopService, *model.Ret
 func stripShareReturn(item *dto.ReturnPackageItem) {
 	item.ShopID = 0
 	item.ShopName = ""
+	item.PayAmount = ""
 }
 
 func (s *ShopService) PublicReturnShareMeta(token string) (*dto.PublicReturnShareMeta, error) {
@@ -186,6 +187,7 @@ func (s *ShopService) PublicExportReturns(token string, fields []string) ([]byte
 		Keyword:        "",
 		ReturnLocation: item.ReturnLocation,
 		Fields:         fields,
+		HidePayAmount:  true,
 	}, "")
 	if err != nil {
 		return nil, "", err

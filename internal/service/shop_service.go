@@ -38,21 +38,23 @@ var shopPlatforms = map[string]string{
 }
 
 type ShopService struct {
-	repos         *repo.Repos
-	tenantID      uint64
-	codec         *pluginsecret.Codec
-	publicBaseURL string
-	agents        *AgentsCenterClient
-	orders        *ordercore.Client
+	repos              *repo.Repos
+	tenantID           uint64
+	codec              *pluginsecret.Codec
+	publicBaseURL      string
+	agents             *AgentsCenterClient
+	orders             *ordercore.Client
+	orderInternalToken string
 }
 
-func NewShopService(repos *repo.Repos, codec *pluginsecret.Codec, publicBaseURL string, agents *AgentsCenterClient, orders *ordercore.Client) *ShopService {
+func NewShopService(repos *repo.Repos, codec *pluginsecret.Codec, publicBaseURL string, agents *AgentsCenterClient, orders *ordercore.Client, orderInternalToken string) *ShopService {
 	return &ShopService{
-		repos:         repos,
-		codec:         codec,
-		publicBaseURL: strings.TrimRight(strings.TrimSpace(publicBaseURL), "/"),
-		agents:        agents,
-		orders:        orders,
+		repos:              repos,
+		codec:              codec,
+		publicBaseURL:      strings.TrimRight(strings.TrimSpace(publicBaseURL), "/"),
+		agents:             agents,
+		orders:             orders,
+		orderInternalToken: strings.TrimSpace(orderInternalToken),
 	}
 }
 
@@ -435,7 +437,7 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery, bearerToken string) ([]
 }
 
 func (s *ShopService) attachFenFaRemarks(items []dto.ReturnPackageItem, bearerToken string) {
-	if s.orders == nil || strings.TrimSpace(bearerToken) == "" || len(items) == 0 {
+	if s.orders == nil || len(items) == 0 {
 		return
 	}
 	nos := make([]string, 0, len(items))
@@ -444,7 +446,15 @@ func (s *ShopService) attachFenFaRemarks(items []dto.ReturnPackageItem, bearerTo
 			nos = append(nos, n)
 		}
 	}
-	remarks, err := s.orders.FenFaRemarks(context.Background(), bearerToken, nos)
+	var remarks map[string]string
+	var err error
+	if tok := strings.TrimSpace(bearerToken); tok != "" {
+		remarks, err = s.orders.FenFaRemarks(context.Background(), tok, nos)
+	} else if s.orderInternalToken != "" && s.tenantID > 0 {
+		remarks, err = s.orders.FenFaRemarksInternal(context.Background(), s.orderInternalToken, s.tenantID, nos)
+	} else {
+		return
+	}
 	if err != nil {
 		log.Printf("[aftersales] 同步分发备注失败: %v", err)
 		return

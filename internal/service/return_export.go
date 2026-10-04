@@ -176,7 +176,7 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 		values := make([]any, 0, len(fields)+1)
 		values = append(values, i+1)
 		for _, key := range fields {
-			values = append(values, exportFieldValue(row, key))
+			values = append(values, exportFieldValue(row, key, q.HidePayAmount))
 		}
 		cell, _ := excelize.CoordinatesToCellName(1, excelRow)
 		if err := f.SetSheetRow(sheet, cell, &values); err != nil {
@@ -201,7 +201,7 @@ func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken strin
 	return buf.Bytes(), name, nil
 }
 
-func exportFieldValue(row dto.ReturnPackageItem, key string) string {
+func exportFieldValue(row dto.ReturnPackageItem, key string, hidePayAmount bool) string {
 	switch key {
 	case "shop":
 		return row.ShopName
@@ -210,6 +210,10 @@ func exportFieldValue(row dto.ReturnPackageItem, key string) string {
 	case "sku":
 		return strings.TrimSpace(row.SKU)
 	case "order":
+		if hidePayAmount {
+			return strings.TrimSpace(fmt.Sprintf("购买 %d 件\n订单 %s\n售后 %s",
+				orQty(row.BuyQty, row.Qty), dash(row.OrderNo), dash(row.PlatformAftersaleID)))
+		}
 		return strings.TrimSpace(fmt.Sprintf("应付 ¥%s\n购买 %d 件\n订单 %s\n售后 %s",
 			dash(row.PayAmount), orQty(row.BuyQty, row.Qty), dash(row.OrderNo), dash(row.PlatformAftersaleID)))
 	case "aftersale":

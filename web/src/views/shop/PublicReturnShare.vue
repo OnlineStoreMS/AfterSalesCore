@@ -127,8 +127,7 @@ onMounted(loadData)
           </el-table-column>
           <el-table-column label="订单信息" min-width="220">
             <template #default="{ row }">
-              <div>应付金额 ¥{{ row.payAmount || '—' }}</div>
-              <div class="sub">购买件数 {{ row.buyQty || row.qty || 0 }} 件</div>
+              <div>购买件数 {{ row.buyQty || row.qty || 0 }} 件</div>
               <div class="sub">订单 {{ row.orderNo || '—' }}</div>
               <div class="sub">售后 {{ row.platformAftersaleId }}</div>
             </template>
