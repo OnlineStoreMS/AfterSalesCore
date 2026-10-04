@@ -130,6 +130,7 @@ func stripShareReturn(item *dto.ReturnPackageItem) {
 	item.ShopID = 0
 	item.ShopName = ""
 	item.PayAmount = ""
+	item.RefundAmount = ""
 }
 
 func (s *ShopService) PublicReturnShareMeta(token string) (*dto.PublicReturnShareMeta, error) {

@@ -237,6 +237,20 @@ func (h *ShopHandler) Returns(c *gin.Context) {
 	response.OK(c, response.PageResult(list, total, page, pageSize))
 }
 
+func (h *ShopHandler) CreateManualReturn(c *gin.Context) {
+	var in dto.ManualReturnRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "参数无效")
+		return
+	}
+	item, err := h.ss(c).CreateManualReturn(in, authcontext.BearerToken(c))
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.Created(c, item)
+}
+
 func (h *ShopHandler) ExportReturns(c *gin.Context) {
 	var in dto.ReturnExportRequest
 	if err := c.ShouldBindJSON(&in); err != nil {

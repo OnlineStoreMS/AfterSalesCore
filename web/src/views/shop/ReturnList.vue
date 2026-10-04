@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Download, Search } from '@element-plus/icons-vue'
+import { Download, Plus, Search } from '@element-plus/icons-vue'
 import {
   RETURN_EXPORT_FIELDS,
+  createManualReturn,
   exportReturnPackages,
   fetchReturnPackages,
   fetchShops,
@@ -27,6 +28,45 @@ const applyRange = ref<[string, string] | null>(null)
 const exportVisible = ref(false)
 const exporting = ref(false)
 const exportFields = ref(RETURN_EXPORT_FIELDS.map((f) => f.key))
+const createVisible = ref(false)
+const creating = ref(false)
+const form = reactive({
+  shopId: undefined as number | undefined,
+  platformAftersaleId: '',
+  orderNo: '',
+  productTitle: '',
+  sku: '',
+  qty: 1,
+  buyQty: 1,
+  payAmount: '',
+  refundAmount: '',
+  aftersaleType: '已发货退款',
+  reason: '',
+  logisticsNo: '',
+  carrier: '',
+  returnLocation: '',
+  applyTime: '',
+  returnTime: '',
+})
+
+function resetForm() {
+  form.shopId = shopId.value
+  form.platformAftersaleId = ''
+  form.orderNo = ''
+  form.productTitle = ''
+  form.sku = ''
+  form.qty = 1
+  form.buyQty = 1
+  form.payAmount = ''
+  form.refundAmount = ''
+  form.aftersaleType = '已发货退款'
+  form.reason = ''
+  form.logisticsNo = ''
+  form.carrier = ''
+  form.returnLocation = ''
+  form.applyTime = ''
+  form.returnTime = ''
+}
 
 async function loadShops() {
   try {
@@ -65,6 +105,51 @@ function handleSearch() {
 
 function openExport() {
   exportVisible.value = true
+}
+
+function openCreate() {
+  resetForm()
+  createVisible.value = true
+}
+
+async function confirmCreate() {
+  if (!form.shopId) {
+    ElMessage.warning('请选择店铺')
+    return
+  }
+  if (!form.orderNo.trim() && !form.platformAftersaleId.trim() && !form.logisticsNo.trim()) {
+    ElMessage.warning('请填写订单号、售后编号或物流单号')
+    return
+  }
+  creating.value = true
+  try {
+    await createManualReturn({
+      shopId: form.shopId,
+      platformAftersaleId: form.platformAftersaleId.trim() || undefined,
+      orderNo: form.orderNo.trim() || undefined,
+      productTitle: form.productTitle.trim() || undefined,
+      sku: form.sku.trim() || undefined,
+      qty: Number(form.qty) || 0,
+      buyQty: Number(form.buyQty) || 0,
+      payAmount: form.payAmount.trim() || undefined,
+      refundAmount: form.refundAmount.trim() || undefined,
+      aftersaleType: form.aftersaleType.trim() || undefined,
+      reason: form.reason.trim() || undefined,
+      logisticsNo: form.logisticsNo.trim() || undefined,
+      carrier: form.carrier.trim() || undefined,
+      returnLocation: form.returnLocation.trim() || undefined,
+      applyTime: form.applyTime || undefined,
+      returnTime: form.returnTime || undefined,
+    })
+    createVisible.value = false
+    ElMessage.success('已添加退回记录')
+    page.value = 1
+    await loadData()
+  } catch (e) {
+    ElMessage.error((e as Error).message || '添加失败')
+  } finally {
+    creating.value = false
+  }
 }
 
 async function confirmExport() {
@@ -173,6 +258,7 @@ onMounted(() => {
           @keyup.enter="handleSearch"
         />
         <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">手动添加</el-button>
         <el-button :icon="Download" @click="openExport">导出 Excel</el-button>
         <span class="total">共 {{ total }} 条退回件</span>
       </div>
@@ -195,7 +281,10 @@ onMounted(() => {
             <div>应付金额 ¥{{ row.payAmount || '—' }}</div>
             <div class="sub">购买件数 {{ row.buyQty || row.qty || 0 }} 件</div>
             <div class="sub">订单 {{ row.orderNo || '—' }}</div>
-            <div class="sub">售后 {{ row.platformAftersaleId }}</div>
+            <div class="sub">
+              售后 {{ row.platformAftersaleId }}
+              <el-tag v-if="row.manual" size="small" type="warning" class="manual-tag">手工</el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="售后信息" min-width="220">
@@ -257,6 +346,80 @@ onMounted(() => {
         <el-table-column prop="syncedAt" label="同步时间" width="170" />
       </el-table>
 
+      <el-dialog v-model="createVisible" title="手动添加退回售后单" width="640px">
+        <el-form label-width="108px">
+          <el-form-item label="店铺" required>
+            <el-select v-model="form.shopId" filterable placeholder="选择店铺" style="width: 100%">
+              <el-option v-for="shop in shops" :key="shop.id" :label="shop.name" :value="shop.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="订单号">
+            <el-input v-model="form.orderNo" placeholder="平台订单号或内部单号" />
+          </el-form-item>
+          <el-form-item label="售后编号">
+            <el-input v-model="form.platformAftersaleId" placeholder="可空，空则自动生成" />
+          </el-form-item>
+          <el-form-item label="物流单号">
+            <el-input v-model="form.logisticsNo" />
+          </el-form-item>
+          <el-form-item label="承运商">
+            <el-input v-model="form.carrier" placeholder="如中通、圆通" />
+          </el-form-item>
+          <el-form-item label="退回地">
+            <el-input v-model="form.returnLocation" type="textarea" :rows="2" placeholder="用于分享过滤，建议填写" />
+          </el-form-item>
+          <el-form-item label="商品标题">
+            <el-input v-model="form.productTitle" />
+          </el-form-item>
+          <el-form-item label="规格">
+            <el-input v-model="form.sku" />
+          </el-form-item>
+          <el-form-item label="申请件数">
+            <el-input-number v-model="form.qty" :min="0" :controls="false" />
+          </el-form-item>
+          <el-form-item label="购买件数">
+            <el-input-number v-model="form.buyQty" :min="0" :controls="false" />
+          </el-form-item>
+          <el-form-item label="售后类型">
+            <el-input v-model="form.aftersaleType" />
+          </el-form-item>
+          <el-form-item label="申请原因">
+            <el-input v-model="form.reason" />
+          </el-form-item>
+          <el-form-item label="应付金额">
+            <el-input v-model="form.payAmount" />
+          </el-form-item>
+          <el-form-item label="售后退款">
+            <el-input v-model="form.refundAmount" />
+          </el-form-item>
+          <el-form-item label="物流退回时间">
+            <el-date-picker
+              v-model="form.returnTime"
+              type="datetime"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              placeholder="选择时间"
+              style="width: 100%"
+              clearable
+            />
+          </el-form-item>
+          <el-form-item label="申请时间">
+            <el-date-picker
+              v-model="form.applyTime"
+              type="datetime"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              placeholder="选择时间"
+              style="width: 100%"
+              clearable
+            />
+          </el-form-item>
+        </el-form>
+        <p class="create-hint">订单号、售后编号、物流单号至少填一项。有对应销售单时，分发备注会按订单号自动带出。</p>
+        <template #footer>
+          <el-button @click="createVisible = false">取消</el-button>
+          <el-button type="primary" :loading="creating" @click="confirmCreate">添加</el-button>
+        </template>
+      </el-dialog>
+
       <el-dialog v-model="exportVisible" title="导出 Excel" width="480px">
         <p class="export-hint">按当前筛选条件导出，最多 1500 条。第一列为序号。商品图片会嵌入图片；规格只导出规格；物流单号只导出单号；退回地默认导出最新两条轨迹。</p>
         <el-checkbox-group v-model="exportFields" class="export-fields">
@@ -302,6 +465,8 @@ onMounted(() => {
 .location { white-space: pre-wrap; line-height: 1.5; word-break: break-word; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
 .export-hint { margin: 0 0 12px; color: #606266; font-size: 13px; line-height: 1.5; }
+.create-hint { margin: 0; color: #909399; font-size: 12px; line-height: 1.5; }
+.manual-tag { margin-left: 6px; vertical-align: middle; }
 .export-fields { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 </style>
 

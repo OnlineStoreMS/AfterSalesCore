@@ -1890,6 +1890,7 @@ func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageI
 		ApplyTime: item.ApplyTime, ReturnTime: item.ReturnTime,
 		Tracks:   toDTOTracks(item.TrackJSON),
 		SyncedAt: formatTime(item.SyncedAt),
+		Manual:   strings.Contains(item.RawJSON, `"source":"manual"`),
 	}
 }
 

@@ -217,6 +217,10 @@ func exportFieldValue(row dto.ReturnPackageItem, key string, hidePayAmount bool)
 		return strings.TrimSpace(fmt.Sprintf("应付 ¥%s\n购买 %d 件\n订单 %s\n售后 %s",
 			dash(row.PayAmount), orQty(row.BuyQty, row.Qty), dash(row.OrderNo), dash(row.PlatformAftersaleID)))
 	case "aftersale":
+		if hidePayAmount {
+			return strings.TrimSpace(fmt.Sprintf("%s\n申请 %d 件\n%s\n%s",
+				dash(row.AftersaleType), row.Qty, prefixLine("申请原因 ", row.Reason), prefixLine("申请时间 ", row.ApplyTime)))
+		}
 		return strings.TrimSpace(fmt.Sprintf("%s\n售后退款 ¥%s\n申请 %d 件\n%s\n%s",
 			dash(row.AftersaleType), dash(row.RefundAmount), row.Qty, prefixLine("申请原因 ", row.Reason), prefixLine("申请时间 ", row.ApplyTime)))
 	case "logisticsNo":

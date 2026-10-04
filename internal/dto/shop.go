@@ -386,6 +386,27 @@ type ReturnPackageItem struct {
 	FenFaRemark         string           `json:"fenFaRemark,omitempty"`
 	Tracks              []LogisticsTrack `json:"tracks,omitempty"`
 	SyncedAt            string           `json:"syncedAt"`
+	Manual              bool             `json:"manual,omitempty"`
+}
+
+type ManualReturnRequest struct {
+	ShopID              uint64 `json:"shopId"`
+	PlatformAftersaleID string `json:"platformAftersaleId"`
+	OrderNo             string `json:"orderNo"`
+	ProductTitle        string `json:"productTitle"`
+	ProductImage        string `json:"productImage"`
+	SKU                 string `json:"sku"`
+	Qty                 int    `json:"qty"`
+	BuyQty              int    `json:"buyQty"`
+	PayAmount           string `json:"payAmount"`
+	RefundAmount        string `json:"refundAmount"`
+	AftersaleType       string `json:"aftersaleType"`
+	Reason              string `json:"reason"`
+	LogisticsNo         string `json:"logisticsNo"`
+	Carrier             string `json:"carrier"`
+	ReturnLocation      string `json:"returnLocation"`
+	ApplyTime           string `json:"applyTime"`
+	ReturnTime          string `json:"returnTime"`
 }
 
 type ReturnListQuery struct {

@@ -1168,6 +1168,26 @@ func (r *ShopRepo) SavePluginSyncMinutes(minutes int) (*model.TenantSetting, err
 	return r.SavePluginSetting(cur)
 }
 
+func (r *ShopRepo) GetReturnByShopAftersale(shopID uint64, aftersaleID string) (*model.ReturnPackage, error) {
+	aftersaleID = strings.TrimSpace(aftersaleID)
+	if shopID == 0 || aftersaleID == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var item model.ReturnPackage
+	err := r.db.Scopes(scopeTenant(r.tenantID)).
+		Where("shop_id = ? AND platform_aftersale_id = ?", shopID, aftersaleID).
+		First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *ShopRepo) CreateReturn(item *model.ReturnPackage) error {
+	item.TenantID = r.tenantID
+	return r.db.Create(item).Error
+}
+
 func (r *ShopRepo) ListTenantIDs() ([]uint64, error) {
 	var ids []uint64
 	err := r.db.Model(&model.MarketplaceShop{}).Distinct("tenant_id").Pluck("tenant_id", &ids).Error
