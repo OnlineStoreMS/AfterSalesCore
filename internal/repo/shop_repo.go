@@ -434,8 +434,8 @@ func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
 		like := "%" + kw + "%"
 		q = q.Where(
-			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR sku ILIKE ? OR logistics_no ILIKE ? OR return_location ILIKE ? OR carrier ILIKE ? OR status ILIKE ? OR order_info ILIKE ? OR aftersale_info ILIKE ?",
-			like, like, like, like, like, like, like, like, like, like,
+			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR sku ILIKE ? OR logistics_no ILIKE ? OR return_location ILIKE ? OR carrier ILIKE ? OR status ILIKE ? OR order_info ILIKE ? OR aftersale_info ILIKE ? OR shop_name ILIKE ? OR fen_fa_remark ILIKE ?",
+			like, like, like, like, like, like, like, like, like, like, like, like,
 		)
 	}
 	if locs := SplitReturnLocationFilters(f.ReturnLocation); len(locs) > 0 {
@@ -1170,7 +1170,7 @@ func (r *ShopRepo) SavePluginSyncMinutes(minutes int) (*model.TenantSetting, err
 
 func (r *ShopRepo) GetReturnByShopAftersale(shopID uint64, aftersaleID string) (*model.ReturnPackage, error) {
 	aftersaleID = strings.TrimSpace(aftersaleID)
-	if shopID == 0 || aftersaleID == "" {
+	if aftersaleID == "" {
 		return nil, gorm.ErrRecordNotFound
 	}
 	var item model.ReturnPackage

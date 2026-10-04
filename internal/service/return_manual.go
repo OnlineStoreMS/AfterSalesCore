@@ -3,6 +3,8 @@ package service
 import (
 	"errors"
 	"fmt"
+	"mime/multipart"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,16 +14,50 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *ShopService) CreateManualReturn(in dto.ManualReturnRequest, bearerToken string) (*dto.ReturnPackageItem, error) {
-	if in.ShopID == 0 {
-		return nil, fmt.Errorf("%w: 请选择店铺", ErrBadRequest)
+func (s *ShopService) UploadReturnImage(file *multipart.FileHeader) (string, error) {
+	if s.store == nil {
+		return "", fmt.Errorf("%w: 存储未配置", ErrBadRequest)
 	}
-	shop, err := s.repo().Get(in.ShopID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("%w: 店铺不存在", ErrBadRequest)
+	if file == nil {
+		return "", fmt.Errorf("%w: 请选择图片", ErrBadRequest)
+	}
+	if file.Size > 10<<20 {
+		return "", fmt.Errorf("%w: 图片不能超过 10MB", ErrBadRequest)
+	}
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp":
+	default:
+		ct := strings.ToLower(file.Header.Get("Content-Type"))
+		if !strings.HasPrefix(ct, "image/") {
+			return "", fmt.Errorf("%w: 请上传图片文件", ErrBadRequest)
 		}
-		return nil, err
+	}
+	_, url, err := s.store.Upload(file, "returns")
+	if err != nil {
+		return "", err
+	}
+	return url, nil
+}
+
+func (s *ShopService) CreateManualReturn(in dto.ManualReturnRequest, bearerToken string) (*dto.ReturnPackageItem, error) {
+	shopName := strings.TrimSpace(in.ShopName)
+	var shopID uint64
+	if in.ShopID > 0 {
+		shop, err := s.repo().Get(in.ShopID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("%w: 店铺不存在", ErrBadRequest)
+			}
+			return nil, err
+		}
+		shopID = shop.ID
+		if shopName == "" {
+			shopName = shop.Name
+		}
+	}
+	if shopName == "" {
+		return nil, fmt.Errorf("%w: 请填写店铺名", ErrBadRequest)
 	}
 	orderNo := strings.TrimSpace(in.OrderNo)
 	logisticsNo := strings.TrimSpace(in.LogisticsNo)
@@ -37,7 +73,7 @@ func (s *ShopService) CreateManualReturn(in dto.ManualReturnRequest, bearerToken
 		}
 		aid = "MANUAL-" + time.Now().Format("20060102150405") + strings.ToUpper(hex)
 	}
-	if existing, err := s.repo().GetReturnByShopAftersale(shop.ID, aid); err == nil && existing != nil {
+	if existing, err := s.repo().GetReturnByShopAftersale(shopID, aid); err == nil && existing != nil {
 		return nil, fmt.Errorf("%w: 该售后编号已存在", ErrBadRequest)
 	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
@@ -58,7 +94,8 @@ func (s *ShopService) CreateManualReturn(in dto.ManualReturnRequest, bearerToken
 	}
 	now := time.Now()
 	item := &model.ReturnPackage{
-		ShopID:              shop.ID,
+		ShopID:              shopID,
+		ShopName:            shopName,
 		PlatformAftersaleID: aid,
 		OrderNo:             orderNo,
 		ProductTitle:        title,
@@ -74,6 +111,7 @@ func (s *ShopService) CreateManualReturn(in dto.ManualReturnRequest, bearerToken
 		LogisticsNo:         logisticsNo,
 		Carrier:             strings.TrimSpace(in.Carrier),
 		ReturnLocation:      strings.TrimSpace(in.ReturnLocation),
+		FenFaRemark:         strings.TrimSpace(in.FenFaRemark),
 		ApplyTime:           applyTime,
 		ReturnTime:          returnTime,
 		ReturnedAt:          returnedAt,
@@ -87,7 +125,7 @@ func (s *ShopService) CreateManualReturn(in dto.ManualReturnRequest, bearerToken
 		}
 		return nil, err
 	}
-	out := toReturnItem(item, shop.Name)
+	out := toReturnItem(item, shopName)
 	list := []dto.ReturnPackageItem{out}
 	s.attachFenFaRemarks(list, bearerToken)
 	return &list[0], nil

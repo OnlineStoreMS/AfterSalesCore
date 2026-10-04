@@ -423,7 +423,8 @@ export async function fetchReturnPackages(params?: {
 }
 
 export async function createManualReturn(data: {
-  shopId: number
+  shopId?: number
+  shopName?: string
   platformAftersaleId?: string
   orderNo?: string
   productTitle?: string
@@ -438,10 +439,21 @@ export async function createManualReturn(data: {
   logisticsNo?: string
   carrier?: string
   returnLocation?: string
+  fenFaRemark?: string
   applyTime?: string
   returnTime?: string
 }) {
   return unwrap<ReturnPackage>(await client.post('/return-packages', data))
+}
+
+export async function uploadReturnImage(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await client.post('/return-packages/upload-image', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+  })
+  return unwrap<{ url: string }>(res).url
 }
 
 export async function fetchReturnRefunds(params?: {

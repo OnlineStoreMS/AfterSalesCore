@@ -8,6 +8,7 @@ import {
   exportReturnPackages,
   fetchReturnPackages,
   fetchShops,
+  uploadReturnImage,
   type LogisticsTrack,
   type MarketplaceShop,
   type ReturnPackage,
@@ -32,9 +33,11 @@ const createVisible = ref(false)
 const creating = ref(false)
 const form = reactive({
   shopId: undefined as number | undefined,
+  shopName: '',
   platformAftersaleId: '',
   orderNo: '',
   productTitle: '',
+  productImage: '',
   sku: '',
   qty: 1,
   buyQty: 1,
@@ -45,15 +48,18 @@ const form = reactive({
   logisticsNo: '',
   carrier: '',
   returnLocation: '',
+  fenFaRemark: '',
   applyTime: '',
   returnTime: '',
 })
 
 function resetForm() {
   form.shopId = shopId.value
+  form.shopName = shops.value.find((s) => s.id === shopId.value)?.name || ''
   form.platformAftersaleId = ''
   form.orderNo = ''
   form.productTitle = ''
+  form.productImage = ''
   form.sku = ''
   form.qty = 1
   form.buyQty = 1
@@ -64,8 +70,28 @@ function resetForm() {
   form.logisticsNo = ''
   form.carrier = ''
   form.returnLocation = ''
+  form.fenFaRemark = ''
   form.applyTime = ''
   form.returnTime = ''
+}
+
+function onPickShop(id: number | undefined) {
+  form.shopId = id
+  const shop = shops.value.find((s) => s.id === id)
+  if (shop) form.shopName = shop.name
+}
+
+async function uploadSkuImage(opt: { file: File }) {
+  try {
+    form.productImage = await uploadReturnImage(opt.file)
+    ElMessage.success('规格图片已上传')
+  } catch (e) {
+    ElMessage.error((e as Error).message || '上传失败')
+  }
+}
+
+function clearSkuImage() {
+  form.productImage = ''
 }
 
 async function loadShops() {
@@ -113,8 +139,8 @@ function openCreate() {
 }
 
 async function confirmCreate() {
-  if (!form.shopId) {
-    ElMessage.warning('请选择店铺')
+  if (!form.shopName.trim()) {
+    ElMessage.warning('请填写店铺名')
     return
   }
   if (!form.orderNo.trim() && !form.platformAftersaleId.trim() && !form.logisticsNo.trim()) {
@@ -124,10 +150,12 @@ async function confirmCreate() {
   creating.value = true
   try {
     await createManualReturn({
-      shopId: form.shopId,
+      shopId: form.shopId || undefined,
+      shopName: form.shopName.trim(),
       platformAftersaleId: form.platformAftersaleId.trim() || undefined,
       orderNo: form.orderNo.trim() || undefined,
       productTitle: form.productTitle.trim() || undefined,
+      productImage: form.productImage.trim() || undefined,
       sku: form.sku.trim() || undefined,
       qty: Number(form.qty) || 0,
       buyQty: Number(form.buyQty) || 0,
@@ -138,6 +166,7 @@ async function confirmCreate() {
       logisticsNo: form.logisticsNo.trim() || undefined,
       carrier: form.carrier.trim() || undefined,
       returnLocation: form.returnLocation.trim() || undefined,
+      fenFaRemark: form.fenFaRemark.trim() || undefined,
       applyTime: form.applyTime || undefined,
       returnTime: form.returnTime || undefined,
     })
@@ -348,10 +377,29 @@ onMounted(() => {
 
       <el-dialog v-model="createVisible" title="手动添加退回售后单" width="640px">
         <el-form label-width="108px">
-          <el-form-item label="店铺" required>
-            <el-select v-model="form.shopId" filterable placeholder="选择店铺" style="width: 100%">
+          <el-form-item label="店铺名" required>
+            <el-input v-model="form.shopName" placeholder="手动填写，或从右侧选择带出" />
+          </el-form-item>
+          <el-form-item label="关联店铺">
+            <el-select
+              :model-value="form.shopId"
+              clearable
+              filterable
+              placeholder="可选，选择后自动填店铺名"
+              style="width: 100%"
+              @update:model-value="onPickShop"
+            >
               <el-option v-for="shop in shops" :key="shop.id" :label="shop.name" :value="shop.id" />
             </el-select>
+          </el-form-item>
+          <el-form-item label="规格图片">
+            <div class="sku-upload">
+              <el-upload :show-file-list="false" accept="image/*" :http-request="uploadSkuImage as any">
+                <img v-if="form.productImage" class="sku-preview" :src="form.productImage" alt="" />
+                <el-button v-else>上传规格图片</el-button>
+              </el-upload>
+              <el-button v-if="form.productImage" link type="danger" @click="clearSkuImage">移除</el-button>
+            </div>
           </el-form-item>
           <el-form-item label="订单号">
             <el-input v-model="form.orderNo" placeholder="平台订单号或内部单号" />
@@ -367,6 +415,9 @@ onMounted(() => {
           </el-form-item>
           <el-form-item label="退回地">
             <el-input v-model="form.returnLocation" type="textarea" :rows="2" placeholder="用于分享过滤，建议填写" />
+          </el-form-item>
+          <el-form-item label="分发备注">
+            <el-input v-model="form.fenFaRemark" type="textarea" :rows="2" placeholder="手工填写；有对应销售单时也会尝试自动带出" />
           </el-form-item>
           <el-form-item label="商品标题">
             <el-input v-model="form.productTitle" />
@@ -413,7 +464,7 @@ onMounted(() => {
             />
           </el-form-item>
         </el-form>
-        <p class="create-hint">订单号、售后编号、物流单号至少填一项。有对应销售单时，分发备注会按订单号自动带出。</p>
+        <p class="create-hint">订单号、售后编号、物流单号至少填一项。店铺名可手填。规格图片会显示在列表商品信息中。</p>
         <template #footer>
           <el-button @click="createVisible = false">取消</el-button>
           <el-button type="primary" :loading="creating" @click="confirmCreate">添加</el-button>
@@ -467,6 +518,8 @@ onMounted(() => {
 .export-hint { margin: 0 0 12px; color: #606266; font-size: 13px; line-height: 1.5; }
 .create-hint { margin: 0; color: #909399; font-size: 12px; line-height: 1.5; }
 .manual-tag { margin-left: 6px; vertical-align: middle; }
+.sku-upload { display: flex; align-items: center; gap: 12px; }
+.sku-preview { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; background: #f5f7fa; display: block; }
 .export-fields { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 </style>
 

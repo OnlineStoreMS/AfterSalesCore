@@ -55,6 +55,7 @@ func RegisterRoutes(
 	g.GET("/shops/:id/tickets", shopH.Tickets)
 	g.GET("/return-packages", shopH.Returns)
 	g.POST("/return-packages", shopH.CreateManualReturn)
+	g.POST("/return-packages/upload-image", shopH.UploadReturnImage)
 	g.POST("/return-packages/export", shopH.ExportReturns)
 	g.GET("/return-shares", shopH.ListReturnShares)
 	g.POST("/return-shares", shopH.CreateReturnShare)

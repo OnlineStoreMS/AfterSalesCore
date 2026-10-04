@@ -149,6 +149,7 @@ type ReturnPackage struct {
 	TenantID            uint64     `gorm:"index;not null" json:"tenantId"`
 	ShopID              uint64     `gorm:"uniqueIndex:uk_shop_return;index;not null" json:"shopId"`
 	PlatformAftersaleID string     `gorm:"size:64;uniqueIndex:uk_shop_return;not null" json:"platformAftersaleId"`
+	ShopName            string     `gorm:"size:128" json:"shopName"`
 	OrderNo             string     `gorm:"size:64;index" json:"orderNo"`
 	ProductTitle        string     `gorm:"size:512" json:"productTitle"`
 	ProductImage        string     `gorm:"size:2048" json:"productImage"`
@@ -166,6 +167,7 @@ type ReturnPackage struct {
 	LogisticsNo         string     `gorm:"size:64;index" json:"logisticsNo"`
 	Carrier             string     `gorm:"size:64" json:"carrier"`
 	ReturnLocation      string     `gorm:"size:512;index" json:"returnLocation"`
+	FenFaRemark         string     `gorm:"type:text" json:"fenFaRemark"`
 	ShipTime            string     `gorm:"size:64" json:"shipTime"`
 	ApplyTime           string     `gorm:"size:64" json:"applyTime"`
 	ReturnTime          string     `gorm:"size:64" json:"returnTime"`

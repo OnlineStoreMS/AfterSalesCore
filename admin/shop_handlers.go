@@ -251,6 +251,20 @@ func (h *ShopHandler) CreateManualReturn(c *gin.Context) {
 	response.Created(c, item)
 }
 
+func (h *ShopHandler) UploadReturnImage(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "请选择图片")
+		return
+	}
+	url, err := h.ss(c).UploadReturnImage(file)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"url": url})
+}
+
 func (h *ShopHandler) ExportReturns(c *gin.Context) {
 	var in dto.ReturnExportRequest
 	if err := c.ShouldBindJSON(&in); err != nil {

@@ -391,6 +391,7 @@ type ReturnPackageItem struct {
 
 type ManualReturnRequest struct {
 	ShopID              uint64 `json:"shopId"`
+	ShopName            string `json:"shopName"`
 	PlatformAftersaleID string `json:"platformAftersaleId"`
 	OrderNo             string `json:"orderNo"`
 	ProductTitle        string `json:"productTitle"`
@@ -405,6 +406,7 @@ type ManualReturnRequest struct {
 	LogisticsNo         string `json:"logisticsNo"`
 	Carrier             string `json:"carrier"`
 	ReturnLocation      string `json:"returnLocation"`
+	FenFaRemark         string `json:"fenFaRemark"`
 	ApplyTime           string `json:"applyTime"`
 	ReturnTime          string `json:"returnTime"`
 }

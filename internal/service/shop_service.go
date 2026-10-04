@@ -21,6 +21,7 @@ import (
 	"aftersalescore/internal/model"
 	"aftersalescore/internal/pkg/pluginsecret"
 	"aftersalescore/internal/repo"
+	"aftersalescore/internal/storage"
 
 	"gorm.io/gorm"
 )
@@ -45,9 +46,10 @@ type ShopService struct {
 	agents             *AgentsCenterClient
 	orders             *ordercore.Client
 	orderInternalToken string
+	store              storage.Storage
 }
 
-func NewShopService(repos *repo.Repos, codec *pluginsecret.Codec, publicBaseURL string, agents *AgentsCenterClient, orders *ordercore.Client, orderInternalToken string) *ShopService {
+func NewShopService(repos *repo.Repos, codec *pluginsecret.Codec, publicBaseURL string, agents *AgentsCenterClient, orders *ordercore.Client, orderInternalToken string, store storage.Storage) *ShopService {
 	return &ShopService{
 		repos:              repos,
 		codec:              codec,
@@ -55,6 +57,7 @@ func NewShopService(repos *repo.Repos, codec *pluginsecret.Codec, publicBaseURL 
 		agents:             agents,
 		orders:             orders,
 		orderInternalToken: strings.TrimSpace(orderInternalToken),
+		store:              store,
 	}
 }
 
@@ -430,7 +433,11 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery, bearerToken string) ([]
 	}
 	out := make([]dto.ReturnPackageItem, 0, len(list))
 	for i := range list {
-		out = append(out, toReturnItem(&list[i], names[list[i].ShopID]))
+		name := names[list[i].ShopID]
+		if n := strings.TrimSpace(list[i].ShopName); n != "" {
+			name = n
+		}
+		out = append(out, toReturnItem(&list[i], name))
 	}
 	s.attachFenFaRemarks(out, bearerToken)
 	return out, total, nil
@@ -460,7 +467,10 @@ func (s *ShopService) attachFenFaRemarks(items []dto.ReturnPackageItem, bearerTo
 		return
 	}
 	for i := range items {
-		items[i].FenFaRemark = strings.TrimSpace(remarks[strings.TrimSpace(items[i].OrderNo)])
+		oc := strings.TrimSpace(remarks[strings.TrimSpace(items[i].OrderNo)])
+		if oc != "" {
+			items[i].FenFaRemark = oc
+		}
 	}
 }
 
@@ -1888,9 +1898,10 @@ func toReturnItem(item *model.ReturnPackage, shopName string) dto.ReturnPackageI
 		Logistics: item.Logistics, LogisticsNo: item.LogisticsNo, Carrier: item.Carrier,
 		ReturnLocation: item.ReturnLocation, ShipTime: item.ShipTime,
 		ApplyTime: item.ApplyTime, ReturnTime: item.ReturnTime,
-		Tracks:   toDTOTracks(item.TrackJSON),
-		SyncedAt: formatTime(item.SyncedAt),
-		Manual:   strings.Contains(item.RawJSON, `"source":"manual"`),
+		FenFaRemark: item.FenFaRemark,
+		Tracks:      toDTOTracks(item.TrackJSON),
+		SyncedAt:    formatTime(item.SyncedAt),
+		Manual:      strings.Contains(item.RawJSON, `"source":"manual"`),
 	}
 }
 
