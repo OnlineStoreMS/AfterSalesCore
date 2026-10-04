@@ -207,7 +207,7 @@ onMounted(loadData)
 
 <style scoped>
 .public-share { min-height: 100vh; background: #f5f7fa; padding: 24px 16px 48px; }
-.frame { max-width: 1280px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 8px 24px #0000000d; }
+.frame { max-width: 1680px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 8px 24px #0000000d; }
 .hero { margin-bottom: 20px; }
 .brand { color: #409eff; font-weight: 600; font-size: 13px; letter-spacing: 0.08em; }
 h1 { margin: 6px 0; font-size: 24px; }
