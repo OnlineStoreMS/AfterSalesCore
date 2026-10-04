@@ -414,15 +414,16 @@ func (r *ShopRepo) ListPendingServiceOrders(shopID uint64) ([]model.ServiceOrder
 }
 
 type ReturnListFilter struct {
-	ShopID     uint64
-	Keyword    string
-	ReturnFrom *time.Time
-	ReturnTo   *time.Time
-	ApplyFrom  *time.Time
-	ApplyTo    *time.Time
-	Page       int
-	PageSize   int
-	Unpaged    bool
+	ShopID         uint64
+	Keyword        string
+	ReturnLocation string
+	ReturnFrom     *time.Time
+	ReturnTo       *time.Time
+	ApplyFrom      *time.Time
+	ApplyTo        *time.Time
+	Page           int
+	PageSize       int
+	Unpaged        bool
 }
 
 func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64, error) {
@@ -436,6 +437,15 @@ func (r *ShopRepo) ListReturns(f ReturnListFilter) ([]model.ReturnPackage, int64
 			"platform_aftersale_id ILIKE ? OR order_no ILIKE ? OR product_title ILIKE ? OR sku ILIKE ? OR logistics_no ILIKE ? OR return_location ILIKE ? OR carrier ILIKE ? OR status ILIKE ? OR order_info ILIKE ? OR aftersale_info ILIKE ?",
 			like, like, like, like, like, like, like, like, like, like,
 		)
+	}
+	if locs := SplitReturnLocationFilters(f.ReturnLocation); len(locs) > 0 {
+		conds := make([]string, 0, len(locs))
+		args := make([]any, 0, len(locs))
+		for _, loc := range locs {
+			conds = append(conds, "return_location ILIKE ?")
+			args = append(args, "%"+loc+"%")
+		}
+		q = q.Where("("+strings.Join(conds, " OR ")+")", args...)
 	}
 	if f.ReturnFrom != nil {
 		q = q.Where("returned_at >= ?", f.ReturnFrom)

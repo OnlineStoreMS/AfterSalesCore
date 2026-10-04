@@ -18,6 +18,12 @@ const router = createRouter({
       meta: { public: true },
     },
     {
+      path: '/share/returns/:token',
+      name: 'PublicReturnShare',
+      component: () => import('../views/shop/PublicReturnShare.vue'),
+      meta: { public: true, title: '退回件' },
+    },
+    {
       path: '/',
       component: AdminLayout,
       redirect: '/dashboard',
@@ -106,10 +112,16 @@ const router = createRouter({
           },
         },
         {
+          path: 'returns/share-settings',
+          name: 'ReturnShareSettings',
+          component: () => import('../views/shop/ReturnShareSettings.vue'),
+          meta: { title: '分享设置' },
+        },
+        {
           path: 'returns',
           name: 'Returns',
           component: () => import('../views/shop/ReturnList.vue'),
-          meta: { title: '退回管理' },
+          meta: { title: '退回件' },
         },
         {
           path: 'returns/shipped-success',

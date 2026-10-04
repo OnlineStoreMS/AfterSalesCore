@@ -389,25 +389,49 @@ type ReturnPackageItem struct {
 }
 
 type ReturnListQuery struct {
-	ShopID     uint64
-	Keyword    string
-	ReturnFrom string
-	ReturnTo   string
-	ApplyFrom  string
-	ApplyTo    string
-	Page       int
-	PageSize   int
-	Unpaged    bool
+	ShopID         uint64
+	Keyword        string
+	ReturnLocation string
+	ReturnFrom     string
+	ReturnTo       string
+	ApplyFrom      string
+	ApplyTo        string
+	Page           int
+	PageSize       int
+	Unpaged        bool
 }
 
 type ReturnExportRequest struct {
-	ShopID     uint64   `json:"shopId"`
-	Keyword    string   `json:"keyword"`
-	ReturnFrom string   `json:"returnFrom"`
-	ReturnTo   string   `json:"returnTo"`
-	ApplyFrom  string   `json:"applyFrom"`
-	ApplyTo    string   `json:"applyTo"`
-	Fields     []string `json:"fields"`
+	ShopID         uint64   `json:"shopId"`
+	Keyword        string   `json:"keyword"`
+	ReturnLocation string   `json:"returnLocation"`
+	ReturnFrom     string   `json:"returnFrom"`
+	ReturnTo       string   `json:"returnTo"`
+	ApplyFrom      string   `json:"applyFrom"`
+	ApplyTo        string   `json:"applyTo"`
+	Fields         []string `json:"fields"`
+}
+
+type ReturnShareItem struct {
+	ID             uint64 `json:"id"`
+	Name           string `json:"name"`
+	Token          string `json:"token"`
+	ReturnLocation string `json:"returnLocation"`
+	Enabled        bool   `json:"enabled"`
+	ShareURL       string `json:"shareUrl"`
+	CreatedAt      string `json:"createdAt"`
+	UpdatedAt      string `json:"updatedAt"`
+}
+
+type ReturnShareUpsertRequest struct {
+	Name           string `json:"name"`
+	ReturnLocation string `json:"returnLocation"`
+	Enabled        *bool  `json:"enabled"`
+}
+
+type PublicReturnShareMeta struct {
+	Name           string `json:"name"`
+	ReturnLocation string `json:"returnLocation"`
 }
 
 type ShippedRefundItem struct {

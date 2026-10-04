@@ -44,6 +44,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.AftersaleTicketCard{},
 		&model.ServiceOrder{},
 		&model.ReturnPackage{},
+		&model.ReturnShare{},
 		&model.ShippedRefundSuccess{},
 		&model.ReturnRefundSuccess{},
 		&model.TenantNotification{},

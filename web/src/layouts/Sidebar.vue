@@ -30,6 +30,7 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/returns/intercept')) return '/returns/intercept'
   if (route.path.startsWith('/returns/shipped-success')) return '/returns/shipped-success'
   if (route.path.startsWith('/returns/return-refund-success')) return '/returns/return-refund-success'
+  if (route.path.startsWith('/returns/share-settings')) return '/returns/share-settings'
   if (route.path.startsWith('/returns')) return '/returns'
   if (route.path.startsWith('/service-orders')) return '/service-orders'
   if (route.path.startsWith('/issue-records')) return '/issue-records'
@@ -85,7 +86,7 @@ watch(() => route.path, () => {
     <div class="logo">{{ logoText }}</div>
     <el-menu
       :default-active="activeMenu"
-      :default-openeds="['shops', 'returns']"
+      :default-openeds="['shops', 'returns', 'returns-packages']"
       :collapse="collapsed"
       background-color="#001529"
       text-color="#ffffffa6"
@@ -166,7 +167,11 @@ watch(() => route.path, () => {
         <el-menu-item index="/returns/return-refund-success" @click="navigate('/returns/return-refund-success')">
           退货退款成功
         </el-menu-item>
-        <el-menu-item index="/returns" @click="navigate('/returns')">退回件</el-menu-item>
+        <el-sub-menu index="returns-packages">
+          <template #title>退回件</template>
+          <el-menu-item index="/returns" @click="navigate('/returns')">退回列表</el-menu-item>
+          <el-menu-item index="/returns/share-settings" @click="navigate('/returns/share-settings')">分享设置</el-menu-item>
+        </el-sub-menu>
       </el-sub-menu>
       <el-menu-item index="/service-orders" @click="navigate('/service-orders')">
         <el-icon><Tickets /></el-icon>

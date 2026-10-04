@@ -81,6 +81,10 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
 	admin.RegisterRoutes(adminGroup, unboxingH, edgeRecordH, edgeDeviceH, shopH, notifyH)
 
+	publicGroup := v1.Group("/public")
+	publicGroup.GET("/return-shares/:token", shopH.PublicReturnShare)
+	publicGroup.POST("/return-shares/:token/export", shopH.PublicReturnShareExport)
+
 	pluginGroup := v1.Group("/plugin")
 	pluginGroup.POST("/bind", pluginH.Bind)
 	authed := pluginGroup.Group("")

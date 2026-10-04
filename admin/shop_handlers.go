@@ -569,3 +569,87 @@ func (h *ShopHandler) DeleteIssue(c *gin.Context) {
 	}
 	response.OK(c, gin.H{"ok": true})
 }
+
+func (h *ShopHandler) ListReturnShares(c *gin.Context) {
+	list, err := h.ss(c).ListReturnShares()
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *ShopHandler) CreateReturnShare(c *gin.Context) {
+	var in dto.ReturnShareUpsertRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "参数无效")
+		return
+	}
+	item, err := h.ss(c).CreateReturnShare(in)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.Created(c, item)
+}
+
+func (h *ShopHandler) UpdateReturnShare(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.ReturnShareUpsertRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "参数无效")
+		return
+	}
+	item, err := h.ss(c).UpdateReturnShare(id, in)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
+func (h *ShopHandler) DeleteReturnShare(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := h.ss(c).DeleteReturnShare(id); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"ok": true})
+}
+
+func (h *ShopHandler) PublicReturnShare(c *gin.Context) {
+	page, pageSize := httputil.ParsePage(c)
+	meta, list, total, err := h.svc.PublicListReturns(c.Param("token"), c.Query("keyword"), page, pageSize)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{
+		"name":           meta.Name,
+		"returnLocation": meta.ReturnLocation,
+		"list":           list,
+		"total":          total,
+		"page":           page,
+		"pageSize":       pageSize,
+	})
+}
+
+func (h *ShopHandler) PublicReturnShareExport(c *gin.Context) {
+	var in dto.ReturnExportRequest
+	_ = c.ShouldBindJSON(&in)
+	data, filename, err := h.svc.PublicExportReturns(c.Param("token"), in.Fields)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename="returns.xlsx"; filename*=UTF-8''`+url.PathEscape(filename))
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
+}

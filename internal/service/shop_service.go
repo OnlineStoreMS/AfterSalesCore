@@ -404,15 +404,16 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery, bearerToken string) ([]
 		}
 	}
 	list, total, err := s.repo().ListReturns(repo.ReturnListFilter{
-		ShopID:     q.ShopID,
-		Keyword:    q.Keyword,
-		ReturnFrom: ParseQueryDateTime(q.ReturnFrom, false),
-		ReturnTo:   ParseQueryDateTime(q.ReturnTo, true),
-		ApplyFrom:  ParseQueryDateTime(q.ApplyFrom, false),
-		ApplyTo:    ParseQueryDateTime(q.ApplyTo, true),
-		Page:       q.Page,
-		PageSize:   q.PageSize,
-		Unpaged:    q.Unpaged,
+		ShopID:         q.ShopID,
+		Keyword:        q.Keyword,
+		ReturnLocation: q.ReturnLocation,
+		ReturnFrom:     ParseQueryDateTime(q.ReturnFrom, false),
+		ReturnTo:       ParseQueryDateTime(q.ReturnTo, true),
+		ApplyFrom:      ParseQueryDateTime(q.ApplyFrom, false),
+		ApplyTo:        ParseQueryDateTime(q.ApplyTo, true),
+		Page:           q.Page,
+		PageSize:       q.PageSize,
+		Unpaged:        q.Unpaged,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -1899,7 +1900,7 @@ func toReturnRefundItem(item *model.ReturnRefundSuccess, shopName string) dto.Re
 		Logistics: item.Logistics, LogisticsStatus: status,
 		LogisticsNo: item.LogisticsNo, Carrier: item.Carrier, ShipTime: item.ShipTime,
 		Tracks: toDTOTracks(item.TrackJSON), ApplyTime: item.ApplyTime,
-		SignedTime: SignedTimeFromTrackJSON(item.TrackJSON),
+		SignedTime:      SignedTimeFromTrackJSON(item.TrackJSON),
 		LabelPrintCount: item.LabelPrintCount,
 		LabelPrintedAt:  formatTimePtr(item.LabelPrintedAt),
 		SyncedAt:        formatTime(item.SyncedAt),

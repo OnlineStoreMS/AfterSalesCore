@@ -109,15 +109,16 @@ func formatTrackLine(t dto.LogisticsTrack) string {
 
 func (s *ShopService) ExportReturns(q dto.ReturnExportRequest, bearerToken string) ([]byte, string, error) {
 	list, _, err := s.ListReturns(dto.ReturnListQuery{
-		ShopID:     q.ShopID,
-		Keyword:    q.Keyword,
-		ReturnFrom: q.ReturnFrom,
-		ReturnTo:   q.ReturnTo,
-		ApplyFrom:  q.ApplyFrom,
-		ApplyTo:    q.ApplyTo,
-		Page:       1,
-		PageSize:   1500,
-		Unpaged:    true,
+		ShopID:         q.ShopID,
+		Keyword:        q.Keyword,
+		ReturnLocation: q.ReturnLocation,
+		ReturnFrom:     q.ReturnFrom,
+		ReturnTo:       q.ReturnTo,
+		ApplyFrom:      q.ApplyFrom,
+		ApplyTo:        q.ApplyTo,
+		Page:           1,
+		PageSize:       1500,
+		Unpaged:        true,
 	}, bearerToken)
 	if err != nil {
 		return nil, "", err

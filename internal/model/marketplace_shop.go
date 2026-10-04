@@ -255,3 +255,17 @@ type ReturnRefundSuccess struct {
 }
 
 func (ReturnRefundSuccess) TableName() string { return "return_refund_success" }
+
+// ReturnShare 退回件对外分享配置：每个分享者一条固定链接，按退回地过滤，刷新始终取最新数据。
+type ReturnShare struct {
+	ID             uint64    `gorm:"primaryKey" json:"id"`
+	TenantID       uint64    `gorm:"index;not null" json:"tenantId"`
+	Name           string    `gorm:"size:128;not null" json:"name"`
+	Token          string    `gorm:"size:64;uniqueIndex;not null" json:"token"`
+	ReturnLocation string    `gorm:"size:512;not null" json:"returnLocation"`
+	Enabled        bool      `gorm:"not null;default:true" json:"enabled"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+func (ReturnShare) TableName() string { return "return_shares" }

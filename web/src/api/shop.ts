@@ -376,6 +376,38 @@ export async function exportReturnPackages(data: {
   return { blob, filename }
 }
 
+export interface ReturnShare {
+  id: number
+  name: string
+  token: string
+  returnLocation: string
+  enabled: boolean
+  shareUrl: string
+  createdAt: string
+  updatedAt: string
+}
+
+export function returnSharePageUrl(token: string) {
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/?$/, '/')
+  return `${window.location.origin}${base}share/returns/${encodeURIComponent(token)}`
+}
+
+export async function fetchReturnShares() {
+  return unwrap<ReturnShare[]>(await client.get('/return-shares'))
+}
+
+export async function createReturnShare(data: { name: string; returnLocation: string; enabled?: boolean }) {
+  return unwrap<ReturnShare>(await client.post('/return-shares', data))
+}
+
+export async function updateReturnShare(id: number, data: { name?: string; returnLocation?: string; enabled?: boolean }) {
+  return unwrap<ReturnShare>(await client.put(`/return-shares/${id}`, data))
+}
+
+export async function deleteReturnShare(id: number) {
+  return unwrap<{ ok: boolean }>(await client.delete(`/return-shares/${id}`))
+}
+
 export async function fetchReturnPackages(params?: {
   shopId?: number
   keyword?: string
