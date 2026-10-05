@@ -655,7 +655,16 @@ func (h *ShopHandler) DeleteReturnShare(c *gin.Context) {
 
 func (h *ShopHandler) PublicReturnShare(c *gin.Context) {
 	page, pageSize := httputil.ParsePage(c)
-	meta, list, total, err := h.svc.PublicListReturns(c.Param("token"), c.Query("keyword"), page, pageSize, c.Query("sortBy"), c.Query("sortOrder"))
+	meta, list, total, err := h.svc.PublicListReturns(
+		c.Param("token"),
+		c.Query("keyword"),
+		page,
+		pageSize,
+		c.Query("sortBy"),
+		c.Query("sortOrder"),
+		c.Query("returnFrom"),
+		c.Query("returnTo"),
+	)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -673,7 +682,7 @@ func (h *ShopHandler) PublicReturnShare(c *gin.Context) {
 func (h *ShopHandler) PublicReturnShareExport(c *gin.Context) {
 	var in dto.ReturnExportRequest
 	_ = c.ShouldBindJSON(&in)
-	data, filename, err := h.svc.PublicExportReturns(c.Param("token"), in.Fields)
+	data, filename, err := h.svc.PublicExportReturns(c.Param("token"), in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return

@@ -28,13 +28,23 @@ export interface PublicReturnSharePage extends PageData<ReturnPackage> {
   returnLocation: string
 }
 
-export async function fetchPublicReturnShare(token: string, params?: { keyword?: string; page?: number; pageSize?: number; sortBy?: string; sortOrder?: string }) {
+export interface PublicReturnShareQuery {
+  keyword?: string
+  page?: number
+  pageSize?: number
+  sortBy?: string
+  sortOrder?: string
+  returnFrom?: string
+  returnTo?: string
+}
+
+export async function fetchPublicReturnShare(token: string, params?: PublicReturnShareQuery) {
   const res = await publicClient.get(`/return-shares/${encodeURIComponent(token)}`, { params })
   return (res.data as ApiResponse<PublicReturnSharePage>).data as PublicReturnSharePage
 }
 
-export async function exportPublicReturnShare(token: string) {
-  const res = await publicClient.post(`/return-shares/${encodeURIComponent(token)}/export`, {}, {
+export async function exportPublicReturnShare(token: string, body?: PublicReturnShareQuery) {
+  const res = await publicClient.post(`/return-shares/${encodeURIComponent(token)}/export`, body || {}, {
     responseType: 'blob',
     timeout: 120000,
   })
@@ -42,8 +52,8 @@ export async function exportPublicReturnShare(token: string) {
   if (blob.type && blob.type.includes('application/json')) {
     const text = await blob.text()
     try {
-      const body = JSON.parse(text) as { message?: string }
-      throw new Error(body.message || '导出失败')
+      const bodyJson = JSON.parse(text) as { message?: string }
+      throw new Error(bodyJson.message || '导出失败')
     } catch (e) {
       if (e instanceof Error && e.message !== '导出失败') throw e
       throw new Error('导出失败')

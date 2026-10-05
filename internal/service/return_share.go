@@ -144,7 +144,7 @@ func (s *ShopService) PublicReturnShareMeta(token string) (*dto.PublicReturnShar
 	}, nil
 }
 
-func (s *ShopService) PublicListReturns(token, keyword string, page, pageSize int, sortBy, sortOrder string) (*dto.PublicReturnShareMeta, []dto.ReturnPackageItem, int64, error) {
+func (s *ShopService) PublicListReturns(token, keyword string, page, pageSize int, sortBy, sortOrder, returnFrom, returnTo string) (*dto.PublicReturnShareMeta, []dto.ReturnPackageItem, int64, error) {
 	svc, item, err := s.resolvePublicShare(token)
 	if err != nil {
 		return nil, nil, 0, err
@@ -158,6 +158,8 @@ func (s *ShopService) PublicListReturns(token, keyword string, page, pageSize in
 	list, total, err := svc.ListReturns(dto.ReturnListQuery{
 		Keyword:        keyword,
 		ReturnLocation: item.ReturnLocation,
+		ReturnFrom:     returnFrom,
+		ReturnTo:       returnTo,
 		Page:           page,
 		PageSize:       pageSize,
 		SortBy:         sortBy,
@@ -175,11 +177,12 @@ func (s *ShopService) PublicListReturns(token, keyword string, page, pageSize in
 	}, list, total, nil
 }
 
-func (s *ShopService) PublicExportReturns(token string, fields []string) ([]byte, string, error) {
+func (s *ShopService) PublicExportReturns(token string, in dto.ReturnExportRequest) ([]byte, string, error) {
 	svc, item, err := s.resolvePublicShare(token)
 	if err != nil {
 		return nil, "", err
 	}
+	fields := in.Fields
 	if len(fields) == 0 {
 		fields = defaultShareReturnExportFields()
 	} else {
@@ -192,13 +195,23 @@ func (s *ShopService) PublicExportReturns(token string, fields []string) ([]byte
 		}
 		fields = cleaned
 	}
+	sortBy := strings.TrimSpace(in.SortBy)
+	if sortBy == "" {
+		sortBy = "returnTime"
+	}
+	sortOrder := strings.TrimSpace(in.SortOrder)
+	if sortOrder == "" {
+		sortOrder = "desc"
+	}
 	data, filename, err := svc.ExportReturns(dto.ReturnExportRequest{
 		Keyword:        "",
 		ReturnLocation: item.ReturnLocation,
+		ReturnFrom:     in.ReturnFrom,
+		ReturnTo:       in.ReturnTo,
 		Fields:         fields,
 		HidePayAmount:  true,
-		SortBy:         "returnTime",
-		SortOrder:      "desc",
+		SortBy:         sortBy,
+		SortOrder:      sortOrder,
 	}, "")
 	if err != nil {
 		return nil, "", err

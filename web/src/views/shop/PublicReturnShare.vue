@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 import { Download, Search } from '@element-plus/icons-vue'
 import { exportPublicReturnShare, fetchPublicReturnShare } from '../../api/publicReturnShare'
 import type { LogisticsTrack, ReturnPackage } from '../../api/shop'
+import { dateShortcuts } from '../../utils/date'
 import { displayTrackDetail } from '../../utils/ticketLogistics'
 
 const route = useRoute()
@@ -16,6 +17,7 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
+const returnRange = ref<[string, string] | null>(null)
 const sortBy = ref('returnTime')
 const sortOrder = ref<'asc' | 'desc'>('desc')
 const sortReady = ref(false)
@@ -27,6 +29,16 @@ function seq(index: number) {
   return (page.value - 1) * pageSize.value + index + 1
 }
 
+function queryParams() {
+  return {
+    keyword: keyword.value || undefined,
+    returnFrom: returnRange.value?.[0] || undefined,
+    returnTo: returnRange.value?.[1] || undefined,
+    sortBy: sortBy.value,
+    sortOrder: sortOrder.value,
+  }
+}
+
 async function loadData() {
   if (!token.value) {
     missing.value = true
@@ -35,11 +47,9 @@ async function loadData() {
   loading.value = true
   try {
     const data = await fetchPublicReturnShare(token.value, {
-      keyword: keyword.value || undefined,
+      ...queryParams(),
       page: page.value,
       pageSize: pageSize.value,
-      sortBy: sortBy.value,
-      sortOrder: sortOrder.value,
     })
     tableData.value = data.list || []
     total.value = data.total
@@ -71,7 +81,7 @@ function onSortChange(payload: { prop?: string; order?: string | null }) {
 async function exportExcel() {
   exporting.value = true
   try {
-    const { blob, filename } = await exportPublicReturnShare(token.value)
+    const { blob, filename } = await exportPublicReturnShare(token.value, queryParams())
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -114,6 +124,19 @@ onMounted(async () => {
 
       <template v-else>
         <div class="toolbar">
+          <span class="field-label">物流退回时间</span>
+          <el-date-picker
+            v-model="returnRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            value-format="YYYY-MM-DD"
+            :shortcuts="dateShortcuts"
+            clearable
+            style="width: 260px"
+            @change="handleSearch"
+          />
           <el-input
             v-model="keyword"
             clearable
@@ -122,7 +145,7 @@ onMounted(async () => {
             @keyup.enter="handleSearch"
           />
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-          <el-button :icon="Download" :loading="exporting" @click="exportExcel">导出 Excel</el-button>
+          <el-button class="export-btn" type="success" :icon="Download" :loading="exporting" @click="exportExcel">导出 Excel</el-button>
           <span class="total">共 {{ total }} 条</span>
         </div>
 
@@ -237,6 +260,8 @@ h1 { margin: 6px 0; font-size: 24px; }
 .hint { margin: 6px 0 0; color: #909399; font-size: 13px; }
 .empty { padding: 48px 0; text-align: center; color: #909399; }
 .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.field-label { color: #606266; font-size: 13px; white-space: nowrap; }
+.export-btn { --el-button-bg-color: #18a058; --el-button-border-color: #18a058; --el-button-hover-bg-color: #36ad6a; --el-button-hover-border-color: #36ad6a; --el-button-active-bg-color: #0c7a43; --el-button-active-border-color: #0c7a43; font-weight: 600; }
 .total { margin-left: auto; color: #909399; font-size: 13px; }
 .product { display: flex; gap: 10px; align-items: flex-start; }
 .thumb { width: 48px; height: 48px; border-radius: 4px; object-fit: cover; flex-shrink: 0; background: #f5f7fa; }
