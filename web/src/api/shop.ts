@@ -261,6 +261,10 @@ export async function fetchShopTicketsByKind(params: {
   shopId?: number
   keyword?: string
   reason?: string
+  signedFrom?: string
+  signedTo?: string
+  sortBy?: string
+  sortOrder?: string
   page?: number
   pageSize?: number
 }) {
@@ -462,6 +466,10 @@ export async function fetchReturnRefunds(params?: {
   status?: string
   applyFrom?: string
   applyTo?: string
+  signedFrom?: string
+  signedTo?: string
+  sortBy?: string
+  sortOrder?: string
   page?: number
   pageSize?: number
 }) {

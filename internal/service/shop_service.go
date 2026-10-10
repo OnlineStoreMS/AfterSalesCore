@@ -615,7 +615,11 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 	}
 	kw := strings.ToLower(strings.TrimSpace(q.Keyword))
 	wantReason := strings.TrimSpace(q.Reason)
+	signedFrom := ParseQueryDateTime(q.SignedFrom, false)
+	signedTo := ParseQueryDateTime(q.SignedTo, true)
+	filterSigned := q.Kind == dto.TicketKindBuyerReturnSigned && (signedFrom != nil || signedTo != nil)
 	filtered := make([]model.AftersaleTicket, 0, len(list))
+	signedAtOf := make(map[uint64]*time.Time, len(list))
 	reasonSet := map[string]struct{}{}
 	var reasons []string
 	for i := range list {
@@ -635,9 +639,24 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		if wantReason != "" && strings.TrimSpace(t.Reason) != wantReason {
 			continue
 		}
+		signedAt := SignedAtFromTrackJSON(t.TrackJSON, t.ApplyTime, "")
+		if filterSigned && !TimeInRange(signedAt, signedFrom, signedTo) {
+			continue
+		}
+		signedAtOf[t.ID] = signedAt
 		filtered = append(filtered, *t)
 	}
 	sort.Strings(reasons)
+	if q.Kind == dto.TicketKindBuyerReturnSigned {
+		_, desc := SignedTimeSortDesc(q.SortBy, q.SortOrder, "signedTime")
+		sort.SliceStable(filtered, func(i, j int) bool {
+			cmp := CompareTimePtr(signedAtOf[filtered[i].ID], signedAtOf[filtered[j].ID], desc)
+			if cmp != 0 {
+				return cmp < 0
+			}
+			return filtered[i].ID > filtered[j].ID
+		})
+	}
 	total := int64(len(filtered))
 	page, pageSize := q.Page, q.PageSize
 	if page < 1 {
@@ -1056,7 +1075,11 @@ func (s *ShopService) ListReturnRefunds(q dto.ReturnRefundListQuery) ([]dto.Retu
 		names[shops[i].ID] = shops[i].Name
 	}
 	wantStatus := strings.TrimSpace(q.Status)
+	signedFrom := ParseQueryDateTime(q.SignedFrom, false)
+	signedTo := ParseQueryDateTime(q.SignedTo, true)
+	filterSigned := signedFrom != nil || signedTo != nil
 	out := make([]dto.ReturnRefundItem, 0, len(list))
+	signedAtOf := make(map[uint64]*time.Time, len(list))
 	for i := range list {
 		if !IsReturnRefundSuccessRecord(list[i].AftersaleType, list[i].Status) {
 			continue
@@ -1065,7 +1088,21 @@ func (s *ShopService) ListReturnRefunds(q dto.ReturnRefundListQuery) ([]dto.Retu
 		if wantStatus != "" && item.LogisticsStatus != wantStatus {
 			continue
 		}
+		signedAt := SignedAtFromTrackJSON(list[i].TrackJSON, list[i].ApplyTime, list[i].ShipTime)
+		if filterSigned && !TimeInRange(signedAt, signedFrom, signedTo) {
+			continue
+		}
+		signedAtOf[item.ID] = signedAt
 		out = append(out, item)
+	}
+	if by, desc := SignedTimeSortDesc(q.SortBy, q.SortOrder, ""); by == "signedTime" {
+		sort.SliceStable(out, func(i, j int) bool {
+			cmp := CompareTimePtr(signedAtOf[out[i].ID], signedAtOf[out[j].ID], desc)
+			if cmp != 0 {
+				return cmp < 0
+			}
+			return out[i].ID > out[j].ID
+		})
 	}
 	total := int64(len(out))
 	page, pageSize := q.Page, q.PageSize

@@ -106,3 +106,61 @@ func ParseQueryDateTime(raw string, endOfDay bool) *time.Time {
 	}
 	return t
 }
+
+func SignedAtFromTrackJSON(trackJSON, applyTime, shipTime string) *time.Time {
+	raw := SignedTimeFromTrackJSON(trackJSON)
+	if raw == "" {
+		return nil
+	}
+	return ParsePlatformDateTime(raw, yearHintFrom(applyTime, shipTime))
+}
+
+func TimeInRange(t, from, to *time.Time) bool {
+	if from == nil && to == nil {
+		return true
+	}
+	if t == nil {
+		return false
+	}
+	if from != nil && t.Before(*from) {
+		return false
+	}
+	if to != nil && t.After(*to) {
+		return false
+	}
+	return true
+}
+
+func CompareTimePtr(a, b *time.Time, desc bool) int {
+	if a == nil && b == nil {
+		return 0
+	}
+	if a == nil {
+		return 1
+	}
+	if b == nil {
+		return -1
+	}
+	if a.Equal(*b) {
+		return 0
+	}
+	if desc {
+		if a.After(*b) {
+			return -1
+		}
+		return 1
+	}
+	if a.Before(*b) {
+		return -1
+	}
+	return 1
+}
+
+func SignedTimeSortDesc(sortBy, sortOrder, defaultBy string) (by string, desc bool) {
+	by = strings.TrimSpace(sortBy)
+	if by == "" {
+		by = defaultBy
+	}
+	desc = !strings.EqualFold(strings.TrimSpace(sortOrder), "asc")
+	return by, desc
+}

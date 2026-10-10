@@ -346,13 +346,17 @@ func (h *ShopHandler) ReturnRefunds(c *gin.Context) {
 		shopID = id
 	}
 	list, total, err := h.ss(c).ListReturnRefunds(dto.ReturnRefundListQuery{
-		ShopID:    shopID,
-		Keyword:   c.Query("keyword"),
-		Status:    c.Query("status"),
-		ApplyFrom: c.Query("applyFrom"),
-		ApplyTo:   c.Query("applyTo"),
-		Page:      page,
-		PageSize:  pageSize,
+		ShopID:     shopID,
+		Keyword:    c.Query("keyword"),
+		Status:     c.Query("status"),
+		ApplyFrom:  c.Query("applyFrom"),
+		ApplyTo:    c.Query("applyTo"),
+		SignedFrom: c.Query("signedFrom"),
+		SignedTo:   c.Query("signedTo"),
+		SortBy:     c.Query("sortBy"),
+		SortOrder:  c.Query("sortOrder"),
+		Page:       page,
+		PageSize:   pageSize,
 	})
 	if err != nil {
 		httputil.HandleServiceError(c, err)
@@ -412,12 +416,16 @@ func (h *ShopHandler) ShopTickets(c *gin.Context) {
 		shopID = id
 	}
 	list, reasons, total, err := h.ss(c).ListShopTickets(dto.ShopTicketListQuery{
-		Kind:     c.Query("kind"),
-		ShopID:   shopID,
-		Keyword:  c.Query("keyword"),
-		Reason:   c.Query("reason"),
-		Page:     page,
-		PageSize: pageSize,
+		Kind:       c.Query("kind"),
+		ShopID:     shopID,
+		Keyword:    c.Query("keyword"),
+		Reason:     c.Query("reason"),
+		SignedFrom: c.Query("signedFrom"),
+		SignedTo:   c.Query("signedTo"),
+		SortBy:     c.Query("sortBy"),
+		SortOrder:  c.Query("sortOrder"),
+		Page:       page,
+		PageSize:   pageSize,
 	})
 	if err != nil {
 		httputil.HandleServiceError(c, err)

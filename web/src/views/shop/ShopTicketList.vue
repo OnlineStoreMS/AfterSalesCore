@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
@@ -11,6 +11,7 @@ import {
   type MarketplaceShop,
   type ShopTicketKind,
 } from '../../api/shop'
+import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
 import { parseTicketLogistics, signedTimeFromTracks, displayTrackDetail } from '../../utils/ticketLogistics'
 
 const route = useRoute()
@@ -28,6 +29,10 @@ const shopId = ref<number | undefined>()
 const keyword = ref('')
 const reason = ref('')
 const reasons = ref<string[]>([])
+const signedRange = ref<[string, string] | null>(null)
+const sortBy = ref('signedTime')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+const sortReady = ref(false)
 const nowTick = ref(Date.now())
 let tickTimer = 0
 
@@ -47,6 +52,10 @@ async function loadData() {
       shopId: shopId.value || undefined,
       keyword: keyword.value || undefined,
       reason: isRefundKind.value ? reason.value || undefined : undefined,
+      signedFrom: isSignedKind.value ? signedRange.value?.[0] || undefined : undefined,
+      signedTo: isSignedKind.value ? signedRange.value?.[1] || undefined : undefined,
+      sortBy: isSignedKind.value ? sortBy.value : undefined,
+      sortOrder: isSignedKind.value ? sortOrder.value : undefined,
       page: page.value,
       pageSize: pageSize.value,
     })
@@ -61,6 +70,14 @@ async function loadData() {
 }
 
 function handleSearch() {
+  page.value = 1
+  loadData()
+}
+
+function onSortChange(payload: { prop?: string; order?: string | null }) {
+  sortBy.value = payload.prop === 'signedTime' ? 'signedTime' : 'signedTime'
+  sortOrder.value = payload.order === 'ascending' ? 'asc' : 'desc'
+  if (!sortReady.value) return
   page.value = 1
   loadData()
 }
@@ -109,6 +126,7 @@ function pickupPointOf(row: AftersaleTicket) {
 
 const isPickupKind = computed(() => kind.value === 'buyer-return-pickup')
 const isRefundKind = computed(() => kind.value === 'review-shipped-refund')
+const isSignedKind = computed(() => kind.value === 'buyer-return-signed')
 const isDisputeKind = computed(() => kind.value === 'dispute')
 const keywordPlaceholder = computed(() =>
   isPickupKind.value
@@ -116,9 +134,10 @@ const keywordPlaceholder = computed(() =>
     : '售后编号 / 订单号 / 商品 / 退货单号',
 )
 
-onMounted(() => {
+onMounted(async () => {
   loadShops()
-  loadData()
+  await loadData()
+  sortReady.value = true
   tickTimer = window.setInterval(() => {
     nowTick.value = Date.now()
   }, 1000)
@@ -126,12 +145,18 @@ onMounted(() => {
 onUnmounted(() => {
   if (tickTimer) window.clearInterval(tickTimer)
 })
-watch(kind, () => {
+watch(kind, async () => {
   keyword.value = ''
   reason.value = ''
   reasons.value = []
+  signedRange.value = null
+  sortBy.value = 'signedTime'
+  sortOrder.value = 'desc'
+  sortReady.value = false
   page.value = 1
-  loadData()
+  await loadData()
+  await nextTick()
+  sortReady.value = true
 })
 </script>
 
@@ -171,6 +196,22 @@ watch(kind, () => {
         >
           <el-option v-for="item in reasons" :key="item" :label="item" :value="item" />
         </el-select>
+        <template v-if="isSignedKind">
+          <span class="field-label">签收时间</span>
+          <el-date-picker
+            v-model="signedRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            :shortcuts="dateShortcuts"
+            :default-time="dateRangeDefaultTime"
+            clearable
+            style="width: 360px"
+            @change="handleSearch"
+          />
+        </template>
         <el-input
           v-model="keyword"
           clearable
@@ -182,7 +223,13 @@ watch(kind, () => {
         <span class="total">共 {{ total }} 条</span>
       </div>
 
-      <el-table :data="tickets" stripe border>
+      <el-table
+        :data="tickets"
+        stripe
+        border
+        :default-sort="isSignedKind ? { prop: 'signedTime', order: 'descending' } : undefined"
+        @sort-change="onSortChange"
+      >
         <el-table-column prop="shopName" label="店铺" width="140" />
         <el-table-column label="商品信息" min-width="240">
           <template #default="{ row }">
@@ -250,7 +297,13 @@ watch(kind, () => {
             <div class="location">{{ pickupPointOf(row) || '—' }}</div>
           </template>
         </el-table-column>
-        <el-table-column v-if="kind === 'buyer-return-signed'" label="签收时间" width="170">
+        <el-table-column
+          v-if="isSignedKind"
+          prop="signedTime"
+          label="签收时间"
+          width="170"
+          sortable="custom"
+        >
           <template #default="{ row }">{{ signedTimeOf(row) || '—' }}</template>
         </el-table-column>
       </el-table>
@@ -274,7 +327,8 @@ watch(kind, () => {
 .page-head { margin-bottom: 16px; }
 .page-title { margin: 0 0 6px; font-size: 22px; }
 .desc { color: #606266; margin: 0; }
-.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.field-label { color: #606266; font-size: 13px; white-space: nowrap; }
 .total { margin-left: auto; color: #909399; font-size: 13px; }
 .product { display: flex; gap: 10px; align-items: flex-start; }
 .thumb { width: 48px; height: 48px; border-radius: 4px; object-fit: cover; flex-shrink: 0; background: #f5f7fa; }

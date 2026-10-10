@@ -47,3 +47,26 @@ func TestParseQueryDateTimeEndOfDay(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 }
+
+func TestSignedAtFromTrackJSONAndRange(t *testing.T) {
+	got := SignedAtFromTrackJSON(
+		`[{"date":"09/05 19:04:15","title":"已签收","detail":"签收"}]`,
+		"2026/09/01 10:00:00",
+		"",
+	)
+	if got == nil || got.Year() != 2026 || got.Month() != time.September || got.Day() != 5 {
+		t.Fatalf("got %v", got)
+	}
+	from := time.Date(2026, 9, 5, 0, 0, 0, 0, time.Local)
+	to := time.Date(2026, 9, 5, 23, 59, 59, 0, time.Local)
+	if !TimeInRange(got, &from, &to) {
+		t.Fatal("expected in range")
+	}
+	later := time.Date(2026, 9, 6, 0, 0, 0, 0, time.Local)
+	if TimeInRange(got, &later, nil) {
+		t.Fatal("expected out of range")
+	}
+	if TimeInRange(nil, &from, &to) {
+		t.Fatal("nil signed time should miss range filter")
+	}
+}

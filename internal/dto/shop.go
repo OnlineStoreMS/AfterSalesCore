@@ -334,12 +334,16 @@ const (
 )
 
 type ShopTicketListQuery struct {
-	Kind     string
-	ShopID   uint64
-	Keyword  string
-	Reason   string
-	Page     int
-	PageSize int
+	Kind       string
+	ShopID     uint64
+	Keyword    string
+	Reason     string
+	SignedFrom string
+	SignedTo   string
+	SortBy     string
+	SortOrder  string
+	Page       int
+	PageSize   int
 }
 
 type ServiceOrderListQuery struct {
@@ -534,13 +538,17 @@ type ReturnRefundItem struct {
 }
 
 type ReturnRefundListQuery struct {
-	ShopID    uint64
-	Keyword   string
-	Status    string
-	ApplyFrom string
-	ApplyTo   string
-	Page      int
-	PageSize  int
+	ShopID     uint64
+	Keyword    string
+	Status     string
+	ApplyFrom  string
+	ApplyTo    string
+	SignedFrom string
+	SignedTo   string
+	SortBy     string
+	SortOrder  string
+	Page       int
+	PageSize   int
 }
 
 type ShippedRefundListQuery struct {

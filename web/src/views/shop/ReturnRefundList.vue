@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Printer, Search } from '@element-plus/icons-vue'
 import SpecLabelPrintDialog from '../../components/SpecLabelPrintDialog.vue'
@@ -25,6 +25,10 @@ const shopId = ref<number | undefined>()
 const keyword = ref('')
 const status = ref('')
 const applyRange = ref<[string, string] | null>(null)
+const signedRange = ref<[string, string] | null>(null)
+const sortBy = ref('')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+const sortReady = ref(false)
 const selected = ref<ShippedRefund[]>([])
 const printVisible = ref(false)
 const printItems = ref<SpecLabelItem[]>([])
@@ -96,6 +100,10 @@ async function loadData() {
       status: status.value || undefined,
       applyFrom: applyRange.value?.[0] || undefined,
       applyTo: applyRange.value?.[1] || undefined,
+      signedFrom: signedRange.value?.[0] || undefined,
+      signedTo: signedRange.value?.[1] || undefined,
+      sortBy: sortBy.value || undefined,
+      sortOrder: sortBy.value ? sortOrder.value : undefined,
       page: page.value,
       pageSize: pageSize.value,
     })
@@ -109,6 +117,19 @@ async function loadData() {
 }
 
 function handleSearch() {
+  page.value = 1
+  loadData()
+}
+
+function onSortChange(payload: { prop?: string; order?: string | null }) {
+  if (payload.prop === 'signedTime' && payload.order) {
+    sortBy.value = 'signedTime'
+    sortOrder.value = payload.order === 'ascending' ? 'asc' : 'desc'
+  } else {
+    sortBy.value = ''
+    sortOrder.value = 'desc'
+  }
+  if (!sortReady.value) return
   page.value = 1
   loadData()
 }
@@ -133,9 +154,11 @@ function signedTimeOf(row: ShippedRefund) {
   return signedTimeFromTracks(row.tracks, row.signedTime)
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadShops()
-  loadData()
+  await loadData()
+  await nextTick()
+  sortReady.value = true
 })
 </script>
 
@@ -196,6 +219,20 @@ onMounted(() => {
           style="width: 360px"
           @change="handleSearch"
         />
+        <span class="field-label">签收时间</span>
+        <el-date-picker
+          v-model="signedRange"
+          type="datetimerange"
+          range-separator="至"
+          start-placeholder="开始"
+          end-placeholder="结束"
+          value-format="YYYY-MM-DD HH:mm:ss"
+          :shortcuts="dateShortcuts"
+          :default-time="dateRangeDefaultTime"
+          clearable
+          style="width: 360px"
+          @change="handleSearch"
+        />
         <el-input
           v-model="keyword"
           clearable
@@ -207,7 +244,7 @@ onMounted(() => {
         <span class="total">共 {{ total }} 条</span>
       </div>
 
-      <el-table :data="tableData" stripe border @selection-change="onSelectionChange">
+      <el-table :data="tableData" stripe border @selection-change="onSelectionChange" @sort-change="onSortChange">
         <el-table-column type="selection" width="48" />
         <el-table-column prop="shopName" label="店铺" width="140" />
         <el-table-column label="商品信息" min-width="240">
@@ -272,7 +309,7 @@ onMounted(() => {
             </el-popover>
           </template>
         </el-table-column>
-        <el-table-column label="入库时间" width="170">
+        <el-table-column prop="signedTime" label="签收时间" width="170" sortable="custom">
           <template #default="{ row }">
             <el-tooltip content="取自退回物流签收时间" placement="top" :disabled="!signedTimeOf(row)">
               <span>{{ signedTimeOf(row) || '—' }}</span>
