@@ -445,6 +445,38 @@ func (s *ShopService) ListReturns(q dto.ReturnListQuery, bearerToken string) ([]
 	return out, total, nil
 }
 
+// fenFaRemarkSKUSep 与订单中心 FenFaRemarkLookupKey 一致：平台单拆多张销售单时用规格二次匹配。
+const fenFaRemarkSKUSep = "\x1f"
+
+func fenFaRemarkLookupKey(orderNo, sku string) string {
+	orderNo = strings.TrimSpace(orderNo)
+	sku = strings.TrimSpace(sku)
+	if orderNo == "" {
+		return ""
+	}
+	if sku == "" {
+		return orderNo
+	}
+	return orderNo + fenFaRemarkSKUSep + sku
+}
+
+func pickFenFaRemark(remarks map[string]string, orderNo, sku string) string {
+	if len(remarks) == 0 {
+		return ""
+	}
+	orderNo = strings.TrimSpace(orderNo)
+	sku = strings.TrimSpace(sku)
+	if orderNo == "" {
+		return ""
+	}
+	if sku != "" {
+		if r := strings.TrimSpace(remarks[fenFaRemarkLookupKey(orderNo, sku)]); r != "" {
+			return r
+		}
+	}
+	return strings.TrimSpace(remarks[orderNo])
+}
+
 func (s *ShopService) attachFenFaRemarks(items []dto.ReturnPackageItem, bearerToken string) {
 	if s.orders == nil || len(items) == 0 {
 		return
@@ -469,7 +501,7 @@ func (s *ShopService) attachFenFaRemarks(items []dto.ReturnPackageItem, bearerTo
 		return
 	}
 	for i := range items {
-		oc := strings.TrimSpace(remarks[strings.TrimSpace(items[i].OrderNo)])
+		oc := pickFenFaRemark(remarks, items[i].OrderNo, items[i].SKU)
 		if oc != "" {
 			items[i].FenFaRemark = oc
 		}
