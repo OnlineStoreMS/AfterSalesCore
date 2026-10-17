@@ -153,16 +153,10 @@ function labelHtml(item: SpecLabelItem, size: LabelSize, tone: LayoutTone): stri
   const specRaw = resolveSpecText(item)
   const spec = escapeHtml(specRaw)
   const orderRaw = String(item.orderNo || '').trim()
-  const orderNo = escapeHtml(orderRaw || '—')
-  const inboundAt = escapeHtml(String(item.inboundAt || '').trim())
   const barcode = orderRaw ? code128Svg(orderRaw) : ''
-  const barcodeH = tone === 'compact' ? 8 : tone === 'roomy' ? 16 : 12
-  const reserved = 6 + barcodeH + (tone === 'compact' ? 4 : 5) + (inboundAt ? 3.2 : 0)
+  const barcodeH = tone === 'compact' ? 9 : tone === 'roomy' ? 18 : 13
+  const reserved = 5 + barcodeH
   const specSize = specFontMm(specRaw, size, reserved)
-
-  const inboundLine = inboundAt
-    ? `<div class="inbound"><span class="inbound-key">入库</span><span class="inbound-at">${inboundAt}</span></div>`
-    : ''
   const barcodeBlock = barcode
     ? `<div class="barcode" style="height:${barcodeH}mm">${barcode}</div>`
     : ''
@@ -170,8 +164,6 @@ function labelHtml(item: SpecLabelItem, size: LabelSize, tone: LayoutTone): stri
   return `<div class="label tone-${tone}" style="width:${size.widthMm}mm;height:${size.heightMm}mm">
   <div class="inner">
     ${barcodeBlock}
-    <div class="order-no">${orderNo}</div>
-    ${inboundLine}
     <div class="spec" style="font-size:${specSize}mm">${spec}</div>
   </div>
 </div>`
@@ -235,26 +227,6 @@ export function buildSpecLabelPrintHtml(
     height: 100%;
     display: block;
   }
-  .order-no {
-    flex: 0 0 auto;
-    margin-top: 0.4mm;
-    text-align: center;
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-weight: 700;
-    letter-spacing: 0.1mm;
-    word-break: break-all;
-    line-height: 1.15;
-  }
-  .inbound {
-    flex: 0 0 auto;
-    margin-top: 0.3mm;
-    display: flex;
-    justify-content: center;
-    gap: 0.8mm;
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-weight: 600;
-    line-height: 1.15;
-  }
   .spec {
     flex: 1 1 auto;
     min-height: 0;
@@ -265,15 +237,7 @@ export function buildSpecLabelPrintHtml(
     overflow: hidden;
   }
 
-  .tone-compact .order-no { font-size: 2.2mm; }
-  .tone-compact .inbound { font-size: 1.9mm; }
   .tone-compact .inner { padding: 1.2mm 1.6mm 1.4mm; }
-
-  .tone-normal .order-no { font-size: 2.6mm; }
-  .tone-normal .inbound { font-size: 2.2mm; }
-
-  .tone-roomy .order-no { font-size: 3.4mm; }
-  .tone-roomy .inbound { font-size: 2.8mm; }
 
   @media screen {
     body {
