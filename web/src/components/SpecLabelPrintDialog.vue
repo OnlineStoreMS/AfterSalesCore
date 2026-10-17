@@ -224,7 +224,7 @@ function doPrint() {
     </div>
 
     <p class="tip">
-      可直接修改下方「规格名称」，打印与预览都会用修改后的文案；不影响列表原始数据。标签上方是订单号条形码，下面是规格名称（过长会自动缩小字号）。已打印的仍可再次打印。
+      可直接修改下方「规格名称」，打印与预览都会用修改后的文案；不影响列表原始数据。标签上方是订单号条形码，条码下直接印订单号，再往下是规格名称（过长会自动缩小字号）。已打印的仍可再次打印。
     </p>
 
     <el-table :data="rows" border size="small" max-height="280" class="edit-table">
@@ -266,6 +266,7 @@ function doPrint() {
       >
         <div class="preview-inner">
           <div v-if="it.orderNo" class="preview-barcode" v-html="orderBarcodeSvg(it.orderNo)" />
+          <div class="preview-order-no">{{ it.orderNo || '—' }}</div>
           <div class="preview-spec">{{ resolveSpecText(it) }}</div>
         </div>
       </div>
@@ -337,10 +338,20 @@ function doPrint() {
   height: 100%;
   display: block;
 }
+.preview-order-no {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  text-align: center;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  word-break: break-all;
+  line-height: 1.15;
+}
 .preview-spec {
   flex: 1;
   min-height: 0;
-  margin-top: 6px;
+  margin-top: 14px;
   font-weight: 700;
   font-size: 13px;
   line-height: 1.25;
