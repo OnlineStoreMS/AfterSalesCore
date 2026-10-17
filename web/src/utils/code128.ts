@@ -71,22 +71,26 @@ export function code128Svg(raw: string): string {
     if (!pat) return ''
     bits += pat
   }
-  const quiet = 10
-  const barH = 40
-  const total = bits.length + quiet * 2
+  // 细坐标 + 条宽补偿：热敏会把黑条洇粗。高度按宽度的比例画，避免被压成一条细线。
+  const unit = 10
+  const inset = 5.8
+  const quiet = 10 * unit
+  const total = bits.length * unit + quiet * 2
+  const barH = 80
   let x = quiet
   let rects = ''
   for (let i = 0; i < bits.length; ) {
     if (bits[i] !== '1') {
-      x += 1
+      x += unit
       i += 1
       continue
     }
     let w = 1
     while (bits[i + w] === '1') w += 1
-    rects += `<rect x="${x}" y="0" width="${w}" height="${barH}"/>`
-    x += w
+    const width = w * unit - inset
+    rects += `<rect x="${(x + inset / 2).toFixed(2)}" y="0" width="${width.toFixed(2)}" height="${barH}"/>`
+    x += w * unit
     i += w
   }
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${barH}" preserveAspectRatio="xMidYMid meet" role="img"><g fill="#000">${rects}</g></svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${barH}" preserveAspectRatio="none" shape-rendering="crispEdges" role="img"><g fill="#000">${rects}</g></svg>`
 }

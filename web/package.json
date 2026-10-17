@@ -15,6 +15,7 @@
     "axios": "^1.18.1",
     "element-plus": "^2.8.8",
     "pinia": "^2.2.6",
+    "pinyin-pro": "^3.29.5",
     "vue": "^3.5.12",
     "vue-router": "^4.4.5"
   },

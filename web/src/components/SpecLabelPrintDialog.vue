@@ -9,6 +9,7 @@ import {
   resolvePrintSize,
   resolveSpecText,
   saveLabelPrefs,
+  shopPinyinInitials,
   orderBarcodeSvg,
   type LabelOrientation,
   type LabelSize,
@@ -268,6 +269,9 @@ function doPrint() {
           <div v-if="it.orderNo" class="preview-barcode" v-html="orderBarcodeSvg(it.orderNo)" />
           <div class="preview-order-no">{{ it.orderNo || '—' }}</div>
           <div class="preview-spec">{{ resolveSpecText(it) }}</div>
+          <div v-if="shopPinyinInitials(it.shopName || '')" class="preview-shop">
+            {{ shopPinyinInitials(it.shopName || '') }}
+          </div>
         </div>
       </div>
       <div v-if="printItems.length > 6" class="more">… 另有 {{ printItems.length - 6 }} 单</div>
@@ -321,6 +325,7 @@ function doPrint() {
   transition: width .15s ease, height .15s ease;
 }
 .preview-inner {
+  position: relative;
   width: 100%;
   height: 100%;
   padding: 6% 6% 5%;
@@ -334,9 +339,11 @@ function doPrint() {
   width: 100%;
 }
 .preview-barcode :deep(svg) {
-  width: 100%;
+  width: 92%;
   height: 100%;
+  margin: 0 auto;
   display: block;
+  shape-rendering: crispEdges;
 }
 .preview-order-no {
   flex: 0 0 auto;
@@ -352,11 +359,22 @@ function doPrint() {
   flex: 1;
   min-height: 0;
   margin-top: 14px;
+  padding-bottom: 16px;
   font-weight: 700;
   font-size: 13px;
   line-height: 1.25;
   word-break: break-word;
   overflow: hidden;
+}
+.preview-shop {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  line-height: 1;
 }
 .more {
   align-self: center;

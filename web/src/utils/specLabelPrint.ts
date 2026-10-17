@@ -1,5 +1,6 @@
 /** 商品规格标签：尺寸预设与打印排版 */
 
+import { pinyin } from 'pinyin-pro'
 import { code128Svg } from './code128'
 
 export type SpecLabelItem = {
@@ -104,6 +105,19 @@ export function orderBarcodeSvg(orderNo: string): string {
   return code128Svg(orderNo)
 }
 
+/** 店铺名拼音首字母，小写。例：杭州精胜单车 → hzjsdc */
+export function shopPinyinInitials(name: string): string {
+  const raw = String(name || '').trim()
+  if (!raw) return ''
+  const parts = pinyin(raw, {
+    pattern: 'first',
+    toneType: 'none',
+    type: 'array',
+    nonZh: 'consecutive',
+  })
+  return parts.join('').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
 export function resolveSpecText(item: SpecLabelItem): string {
   const sku = String(item.sku || '').trim()
   if (sku) return sku
@@ -156,17 +170,20 @@ function labelHtml(item: SpecLabelItem, size: LabelSize, tone: LayoutTone): stri
   const orderNo = escapeHtml(orderRaw || '—')
   const barcode = orderRaw ? code128Svg(orderRaw) : ''
   const barcodeH = tone === 'compact' ? 8 : tone === 'roomy' ? 16 : 12
-  const reserved = 12 + barcodeH
+  const reserved = barcodeH + 10
   const specSize = specFontMm(specRaw, size, reserved)
   const barcodeBlock = barcode
     ? `<div class="barcode" style="height:${barcodeH}mm">${barcode}</div>`
     : ''
+  const shopMark = escapeHtml(shopPinyinInitials(String(item.shopName || '')))
+  const shopBlock = shopMark ? `<div class="shop-mark">${shopMark}</div>` : ''
 
   return `<div class="label tone-${tone}" style="width:${size.widthMm}mm;height:${size.heightMm}mm">
   <div class="inner">
     ${barcodeBlock}
     <div class="order-no">${orderNo}</div>
     <div class="spec" style="font-size:${specSize}mm">${spec}</div>
+    ${shopBlock}
   </div>
 </div>`
 }
@@ -210,6 +227,7 @@ export function buildSpecLabelPrintHtml(
     break-after: auto;
   }
   .inner {
+    position: relative;
     width: 100%;
     height: 100%;
     padding: 1.6mm 2mm 2mm;
@@ -225,9 +243,11 @@ export function buildSpecLabelPrintHtml(
     justify-content: center;
   }
   .barcode svg {
-    width: 100%;
+    width: 92%;
     height: 100%;
+    margin: 0 auto;
     display: block;
+    shape-rendering: crispEdges;
   }
   .order-no {
     flex: 0 0 auto;
@@ -243,11 +263,23 @@ export function buildSpecLabelPrintHtml(
     flex: 1 1 auto;
     min-height: 0;
     margin-top: 3.6mm;
+    padding-bottom: 3.2mm;
     font-weight: 700;
     line-height: 1.22;
     word-break: break-word;
     overflow: hidden;
   }
+  .shop-mark {
+    position: absolute;
+    right: 1.4mm;
+    bottom: 1.2mm;
+    font-size: 2.4mm;
+    font-weight: 700;
+    letter-spacing: 0.15mm;
+    line-height: 1;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .tone-compact .shop-mark { font-size: 2mm; right: 1mm; bottom: 0.8mm; }
   .tone-compact .spec { margin-top: 2.4mm; }
 
   .tone-compact .order-no { font-size: 2.2mm; }
