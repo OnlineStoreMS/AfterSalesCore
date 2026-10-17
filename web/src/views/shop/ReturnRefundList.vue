@@ -11,6 +11,7 @@ import {
   type MarketplaceShop,
   type ShippedRefund,
 } from '../../api/shop'
+import { useTableFillHeight } from '../../composables/useTableFillHeight'
 import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
 import type { SpecLabelItem } from '../../utils/specLabelPrint'
 import { displayTrackDetail, signedTimeFromTracks } from '../../utils/ticketLogistics'
@@ -32,6 +33,13 @@ const sortReady = ref(false)
 const selected = ref<ShippedRefund[]>([])
 const printVisible = ref(false)
 const printItems = ref<SpecLabelItem[]>([])
+
+const pageRef = ref<HTMLElement | null>(null)
+const toolbarRef = ref<HTMLElement | null>(null)
+const pagerRef = ref<HTMLElement | null>(null)
+const { tableHeight, updateTableHeight } = useTableFillHeight(pageRef, [toolbarRef, pagerRef], {
+  gap: 8,
+})
 
 function toLabelItem(row: ShippedRefund): SpecLabelItem {
   return {
@@ -159,11 +167,12 @@ onMounted(async () => {
   await loadData()
   await nextTick()
   sortReady.value = true
+  updateTableHeight()
 })
 </script>
 
 <template>
-  <div v-loading="loading" class="refund-list">
+  <div class="refund-list">
     <div class="page-head">
       <div>
         <h2 class="page-title">退货退款成功</h2>
@@ -176,8 +185,8 @@ onMounted(async () => {
       </div>
     </div>
 
-    <el-card>
-      <div class="toolbar">
+    <div ref="pageRef" class="table-panel">
+      <div ref="toolbarRef" class="toolbar">
         <el-select
           v-model="shopId"
           clearable
@@ -244,7 +253,15 @@ onMounted(async () => {
         <span class="total">共 {{ total }} 条</span>
       </div>
 
-      <el-table :data="tableData" stripe border @selection-change="onSelectionChange" @sort-change="onSortChange">
+      <el-table
+        v-loading="loading"
+        :data="tableData"
+        :height="tableHeight"
+        stripe
+        border
+        @selection-change="onSelectionChange"
+        @sort-change="onSortChange"
+      >
         <el-table-column type="selection" width="48" />
         <el-table-column prop="shopName" label="店铺" width="140" />
         <el-table-column label="商品信息" min-width="240">
@@ -335,7 +352,7 @@ onMounted(async () => {
         </el-table-column>
       </el-table>
 
-      <div class="pager">
+      <div ref="pagerRef" class="pager">
         <el-pagination
           v-model:current-page="page"
           v-model:page-size="pageSize"
@@ -346,7 +363,7 @@ onMounted(async () => {
           @size-change="() => { page = 1; loadData() }"
         />
       </div>
-    </el-card>
+    </div>
 
     <SpecLabelPrintDialog
       v-model="printVisible"
@@ -357,11 +374,43 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.page-head { margin-bottom: 16px; display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.refund-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: calc(100vh - 56px - 32px);
+  min-height: 0;
+  overflow: hidden;
+}
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
 .page-title { margin: 0 0 6px; font-size: 22px; }
 .desc { color: #606266; margin: 0; }
 .head-actions { flex-shrink: 0; }
-.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.table-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+  padding: 12px 16px 8px;
+  overflow: hidden;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
 .field-label { color: #606266; font-size: 13px; white-space: nowrap; }
 .total { margin-left: auto; color: #909399; font-size: 13px; }
 .product { display: flex; gap: 10px; align-items: flex-start; }
@@ -376,7 +425,7 @@ onMounted(async () => {
 .logistics-status.danger { color: #f56c6c; }
 .logistics-status.warning { color: #e6a23c; }
 .logistics-status.ok { color: #67c23a; }
-.pager { display: flex; justify-content: flex-end; margin-top: 16px; }
+.pager { display: flex; justify-content: flex-end; margin-top: 12px; flex-shrink: 0; }
 </style>
 
 <style>
