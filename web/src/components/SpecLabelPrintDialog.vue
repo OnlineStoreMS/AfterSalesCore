@@ -9,6 +9,7 @@ import {
   resolvePrintSize,
   resolveSpecText,
   saveLabelPrefs,
+  orderBarcodeSvg,
   type LabelOrientation,
   type LabelSize,
   type SpecLabelItem,
@@ -223,7 +224,7 @@ function doPrint() {
     </div>
 
     <p class="tip">
-      可直接修改下方「规格名称」，打印与预览都会用修改后的文案；不影响列表原始数据。标签不打印售后单号。已打印的仍可再次打印。
+      可直接修改下方「规格名称」，打印与预览都会用修改后的文案；不影响列表原始数据。标签上方为订单号条形码，条码下是订单号，再往下是规格名称（过长会自动缩小字号）。已打印的仍可再次打印。
     </p>
 
     <el-table :data="rows" border size="small" max-height="280" class="edit-table">
@@ -264,17 +265,10 @@ function doPrint() {
         }"
       >
         <div class="preview-inner">
+          <div v-if="it.orderNo" class="preview-barcode" v-html="orderBarcodeSvg(it.orderNo)" />
+          <div class="preview-order-no">{{ it.orderNo || '—' }}</div>
+          <div v-if="it.inboundAt" class="preview-inbound">入库 {{ it.inboundAt }}</div>
           <div class="preview-spec">{{ resolveSpecText(it) }}</div>
-          <div class="preview-footer">
-            <div class="preview-order">
-              <span>订单</span>
-              <span class="mono">{{ it.orderNo || '—' }}</span>
-            </div>
-            <div v-if="it.inboundAt" class="preview-order">
-              <span>入库</span>
-              <span class="mono">{{ it.inboundAt }}</span>
-            </div>
-          </div>
         </div>
       </div>
       <div v-if="printItems.length > 6" class="more">… 另有 {{ printItems.length - 6 }} 单</div>
@@ -330,35 +324,47 @@ function doPrint() {
 .preview-inner {
   width: 100%;
   height: 100%;
-  padding: 6%;
+  padding: 6% 6% 5%;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   box-sizing: border-box;
 }
+.preview-barcode {
+  flex: 0 0 28%;
+  min-height: 28px;
+  width: 100%;
+}
+.preview-barcode :deep(svg) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.preview-order-no {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  text-align: center;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  word-break: break-all;
+  line-height: 1.15;
+}
+.preview-inbound {
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 10px;
+  color: #303133;
+  line-height: 1.2;
+}
 .preview-spec {
+  flex: 1;
+  min-height: 0;
+  margin-top: 6px;
   font-weight: 700;
   font-size: 13px;
-  line-height: 1.3;
+  line-height: 1.25;
   word-break: break-word;
   overflow: hidden;
-  flex: 1;
-}
-.preview-footer {
-  border-top: 1px solid #303133;
-  padding-top: 4px;
-}
-.preview-order {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  font-size: 11px;
-  font-weight: 600;
-}
-.preview-order + .preview-order { margin-top: 2px; }
-.preview-order .mono {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  word-break: break-all;
 }
 .more {
   align-self: center;

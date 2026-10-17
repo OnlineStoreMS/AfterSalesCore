@@ -1,5 +1,7 @@
 /** 商品规格标签：尺寸预设与打印排版 */
 
+import { code128Svg } from './code128'
+
 export type SpecLabelItem = {
   id?: number
   orderNo: string
@@ -98,6 +100,10 @@ export function saveLabelSize(size: LabelSize, orientation: LabelOrientation = '
   saveLabelPrefs({ size, orientation })
 }
 
+export function orderBarcodeSvg(orderNo: string): string {
+  return code128Svg(orderNo)
+}
+
 export function resolveSpecText(item: SpecLabelItem): string {
   const sku = String(item.sku || '').trim()
   if (sku) return sku
@@ -130,33 +136,43 @@ function expandCopies(items: SpecLabelItem[]): SpecLabelItem[] {
   return out
 }
 
-function labelHtml(item: SpecLabelItem, size: LabelSize, tone: LayoutTone): string {
-  const spec = escapeHtml(resolveSpecText(item))
-  const orderNo = escapeHtml(String(item.orderNo || '').trim() || '—')
-  const inboundAt = escapeHtml(String(item.inboundAt || '').trim())
-  const title = escapeHtml(String(item.productTitle || '').trim())
-  const shop = escapeHtml(String(item.shopName || '').trim())
+function specFontMm(spec: string, size: LabelSize, reservedMm: number): number {
+  const width = Math.max(size.widthMm - 6, 8)
+  const height = Math.max(size.heightMm - reservedMm, 6)
+  const chars = Math.max([...spec].length, 1)
+  let font = Math.min(7.2, height / 1.25, width / 2)
+  for (; font >= 2.1; font -= 0.15) {
+    const perLine = Math.max(1, Math.floor(width / (font * 0.95)))
+    const lines = Math.ceil(chars / perLine)
+    if (lines * font * 1.22 <= height) return Math.round(font * 10) / 10
+  }
+  return 2.1
+}
 
-  const extras: string[] = []
-  if (tone === 'roomy' && title) {
-    extras.push(`<div class="title">${title}</div>`)
-  }
-  if (tone === 'roomy' && shop) {
-    extras.push(`<div class="meta">店铺 ${shop}</div>`)
-  }
+function labelHtml(item: SpecLabelItem, size: LabelSize, tone: LayoutTone): string {
+  const specRaw = resolveSpecText(item)
+  const spec = escapeHtml(specRaw)
+  const orderRaw = String(item.orderNo || '').trim()
+  const orderNo = escapeHtml(orderRaw || '—')
+  const inboundAt = escapeHtml(String(item.inboundAt || '').trim())
+  const barcode = orderRaw ? code128Svg(orderRaw) : ''
+  const barcodeH = tone === 'compact' ? 8 : tone === 'roomy' ? 16 : 12
+  const reserved = 6 + barcodeH + (tone === 'compact' ? 4 : 5) + (inboundAt ? 3.2 : 0)
+  const specSize = specFontMm(specRaw, size, reserved)
 
   const inboundLine = inboundAt
     ? `<div class="inbound"><span class="inbound-key">入库</span><span class="inbound-at">${inboundAt}</span></div>`
     : ''
+  const barcodeBlock = barcode
+    ? `<div class="barcode" style="height:${barcodeH}mm">${barcode}</div>`
+    : ''
 
   return `<div class="label tone-${tone}" style="width:${size.widthMm}mm;height:${size.heightMm}mm">
   <div class="inner">
-    <div class="spec">${spec}</div>
-    <div class="footer">
-      <div class="order"><span class="order-key">订单</span><span class="order-no">${orderNo}</span></div>
-      ${inboundLine}
-      ${extras.join('\n')}
-    </div>
+    ${barcodeBlock}
+    <div class="order-no">${orderNo}</div>
+    ${inboundLine}
+    <div class="spec" style="font-size:${specSize}mm">${spec}</div>
   </div>
 </div>`
 }
@@ -202,63 +218,62 @@ export function buildSpecLabelPrintHtml(
   .inner {
     width: 100%;
     height: 100%;
-    padding: 2.5mm 2.8mm;
+    padding: 1.6mm 2mm 2mm;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
     font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
   }
-  .spec {
-    font-weight: 700;
-    line-height: 1.25;
-    word-break: break-word;
-    overflow: hidden;
-    flex: 1 1 auto;
-  }
-  .footer {
+  .barcode {
     flex: 0 0 auto;
-    margin-top: 1mm;
-    border-top: 0.3mm solid #000;
-    padding-top: 1mm;
-  }
-  .order, .inbound {
+    width: 100%;
     display: flex;
-    align-items: baseline;
-    gap: 1mm;
+    align-items: center;
+    justify-content: center;
+  }
+  .barcode svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .order-no {
+    flex: 0 0 auto;
+    margin-top: 0.4mm;
+    text-align: center;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  }
-  .inbound { margin-top: 0.6mm; }
-  .order-key, .inbound-key {
-    flex: 0 0 auto;
     font-weight: 700;
-  }
-  .order-no, .inbound-at {
-    flex: 1 1 auto;
+    letter-spacing: 0.1mm;
     word-break: break-all;
-    font-weight: 600;
+    line-height: 1.15;
   }
-  .title, .meta {
+  .inbound {
     flex: 0 0 auto;
-    margin-top: 0.8mm;
-    color: #222;
+    margin-top: 0.3mm;
+    display: flex;
+    justify-content: center;
+    gap: 0.8mm;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 600;
+    line-height: 1.15;
+  }
+  .spec {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 1.2mm;
+    font-weight: 700;
+    line-height: 1.22;
     word-break: break-word;
     overflow: hidden;
   }
 
-  /* 尺寸自适应：紧凑 / 常规 / 宽松 */
-  .tone-compact .spec { font-size: 3.2mm; max-height: 14mm; }
-  .tone-compact .order, .tone-compact .inbound { font-size: 2.1mm; }
-  .tone-compact .order-key, .tone-compact .inbound-key { font-size: 1.9mm; }
-  .tone-compact .inner { padding: 2mm 2.2mm; }
+  .tone-compact .order-no { font-size: 2.2mm; }
+  .tone-compact .inbound { font-size: 1.9mm; }
+  .tone-compact .inner { padding: 1.2mm 1.6mm 1.4mm; }
 
-  .tone-normal .spec { font-size: 4mm; max-height: 28mm; }
-  .tone-normal .order, .tone-normal .inbound { font-size: 2.5mm; }
-  .tone-normal .meta { font-size: 2.2mm; line-height: 1.3; max-height: 8mm; }
+  .tone-normal .order-no { font-size: 2.6mm; }
+  .tone-normal .inbound { font-size: 2.2mm; }
 
-  .tone-roomy .spec { font-size: 7mm; max-height: 50mm; }
-  .tone-roomy .order, .tone-roomy .inbound { font-size: 3.4mm; }
-  .tone-roomy .title { font-size: 3.2mm; line-height: 1.35; max-height: 28mm; }
-  .tone-roomy .meta { font-size: 2.8mm; line-height: 1.35; }
+  .tone-roomy .order-no { font-size: 3.4mm; }
+  .tone-roomy .inbound { font-size: 2.8mm; }
 
   @media screen {
     body {
