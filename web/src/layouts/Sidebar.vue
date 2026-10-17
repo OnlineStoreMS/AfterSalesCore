@@ -223,6 +223,25 @@ watch(() => route.path, () => {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+.menu-scroll:hover {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+}
+.menu-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.menu-scroll:hover::-webkit-scrollbar {
+  width: 6px;
+}
+.menu-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.menu-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 3px;
 }
 .sidebar.collapsed {
   width: 64px;
