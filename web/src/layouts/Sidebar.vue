@@ -84,6 +84,7 @@ watch(() => route.path, () => {
 <template>
   <aside class="sidebar" :class="{ collapsed }">
     <div class="logo">{{ logoText }}</div>
+    <div class="menu-scroll">
     <el-menu
       :default-active="activeMenu"
       :default-openeds="['shops', 'returns', 'returns-packages']"
@@ -201,15 +202,27 @@ watch(() => route.path, () => {
         <span>{{ item.title }}</span>
       </el-menu-item>
     </el-menu>
+    </div>
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
   width: 220px;
+  height: 100%;
   background: #001529;
   transition: width 0.2s;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.menu-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .sidebar.collapsed {
   width: 64px;

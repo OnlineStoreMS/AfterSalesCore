@@ -99,6 +99,7 @@ const breadcrumbs = computed(() => {
 .admin-layout {
   display: flex;
   height: 100vh;
+  overflow: hidden;
   background: #f0f2f5;
 }
 .main-area {
@@ -106,6 +107,8 @@ const breadcrumbs = computed(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 .header {
   height: 56px;
@@ -159,6 +162,7 @@ const breadcrumbs = computed(() => {
 }
 .content {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 16px;
 }
