@@ -575,9 +575,9 @@ func MatchShopTicketKind(t *model.AftersaleTicket, kind string) bool {
 		// 工作台「纠纷」组三张子卡片：仲裁待举证 / 仲裁待协商 / 仲裁平台处理中
 		return ticketHasGroup(t, "纠纷")
 	case dto.TicketKindBuyerReturnSigned:
-		if !ticketHasCard(t, "待商家收/发货", "全部待收货/发货") {
-			return false
-		}
+		// 工作台物流已显示「买家退货 已签收」即归入此列表。
+		// 不依赖抖店筛选卡是否还停在「待商家审核」或「全部待收货/发货」，
+		// 否则签收后卡片未切组的单子会漏进退货已签收。
 		hasBuyer, buyer := ticketBuyerReturnStatus(t)
 		return hasBuyer && buyer == LogisticsSigned
 	default:

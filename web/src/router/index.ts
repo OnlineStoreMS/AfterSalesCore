@@ -108,7 +108,7 @@ const router = createRouter({
           meta: {
             title: '退货已签收',
             kind: 'buyer-return-signed',
-            desc: '待商家收/发货 · 全部待收货/发货中，买家退货状态为已签收的售后单。',
+            desc: '买家退货状态为已签收的售后单（含工作台物流已显示已签收、但抖店筛选卡尚未切到待收货的单据）。',
           },
         },
         {

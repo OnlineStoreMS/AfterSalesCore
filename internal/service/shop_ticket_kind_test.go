@@ -65,8 +65,17 @@ func TestMatchShopTicketKind(t *testing.T) {
 		Logistics: "买家退货 已签收",
 		CardKeys:  []model.AftersaleTicketCard{{CardKey: "待商家收/发货:退货待收货"}},
 	}
-	if MatchShopTicketKind(signedOtherCard, dto.TicketKindBuyerReturnSigned) {
-		t.Fatal("signed without 全部待收货/发货 should not match")
+	if !MatchShopTicketKind(signedOtherCard, dto.TicketKindBuyerReturnSigned) {
+		t.Fatal("signed on 退货待收货 should match")
+	}
+
+	signedStuckOnReview := &model.AftersaleTicket{
+		Logistics: "买家退货 已签收\n订单发货 已签收",
+		TrackJSON: `[{"date":"11/05 18:41:18","title":"已签收","detail":"客户成功从丰巢取出快件"}]`,
+		CardKeys:  []model.AftersaleTicketCard{{CardKey: "待商家审核:全部待审核"}},
+	}
+	if !MatchShopTicketKind(signedStuckOnReview, dto.TicketKindBuyerReturnSigned) {
+		t.Fatal("signed buyer return stuck on 待商家审核 should still match 退货已签收")
 	}
 
 	stalePickup := &model.AftersaleTicket{
