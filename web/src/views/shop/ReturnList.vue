@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Download, Plus, Search } from '@element-plus/icons-vue'
+import { Download, Edit, Plus, Search } from '@element-plus/icons-vue'
 import {
   RETURN_EXPORT_FIELDS,
   createManualReturn,
   exportReturnPackages,
   fetchReturnPackages,
   fetchShops,
+  updateManualReturn,
   uploadReturnImage,
   type LogisticsTrack,
   type MarketplaceShop,
@@ -31,6 +32,7 @@ const exporting = ref(false)
 const exportFields = ref(RETURN_EXPORT_FIELDS.map((f) => f.key))
 const createVisible = ref(false)
 const creating = ref(false)
+const editingId = ref<number | null>(null)
 const form = reactive({
   shopId: undefined as number | undefined,
   shopName: '',
@@ -134,8 +136,57 @@ function openExport() {
 }
 
 function openCreate() {
+  editingId.value = null
   resetForm()
   createVisible.value = true
+}
+
+function openEdit(row: ReturnPackage) {
+  editingId.value = row.id
+  form.shopId = row.shopId || undefined
+  form.shopName = row.shopName || ''
+  form.platformAftersaleId = row.platformAftersaleId || ''
+  form.orderNo = row.orderNo || ''
+  form.productTitle = row.productTitle || ''
+  form.productImage = row.productImage || ''
+  form.sku = row.sku || ''
+  form.qty = row.qty || 0
+  form.buyQty = row.buyQty || row.qty || 0
+  form.payAmount = row.payAmount || ''
+  form.refundAmount = row.refundAmount || ''
+  form.aftersaleType = row.aftersaleType || '已发货退款'
+  form.reason = row.reason || ''
+  form.logisticsNo = row.logisticsNo || ''
+  form.carrier = row.carrier || ''
+  form.returnLocation = row.returnLocation || ''
+  form.fenFaRemark = row.fenFaRemark || ''
+  form.applyTime = row.applyTime || ''
+  form.returnTime = row.returnTime || ''
+  createVisible.value = true
+}
+
+function payload() {
+  return {
+    shopId: form.shopId || undefined,
+    shopName: form.shopName.trim(),
+    platformAftersaleId: form.platformAftersaleId.trim() || undefined,
+    orderNo: form.orderNo.trim() || undefined,
+    productTitle: form.productTitle.trim() || undefined,
+    productImage: form.productImage.trim() || undefined,
+    sku: form.sku.trim() || undefined,
+    qty: Number(form.qty) || 0,
+    buyQty: Number(form.buyQty) || 0,
+    payAmount: form.payAmount.trim() || undefined,
+    refundAmount: form.refundAmount.trim() || undefined,
+    aftersaleType: form.aftersaleType.trim() || undefined,
+    reason: form.reason.trim() || undefined,
+    logisticsNo: form.logisticsNo.trim() || undefined,
+    carrier: form.carrier.trim() || undefined,
+    returnLocation: form.returnLocation.trim() || undefined,
+    fenFaRemark: form.fenFaRemark.trim() || undefined,
+    applyTime: form.applyTime || undefined,
+    returnTime: form.returnTime || undefined,
+  }
 }
 
 async function confirmCreate() {
@@ -149,33 +200,19 @@ async function confirmCreate() {
   }
   creating.value = true
   try {
-    await createManualReturn({
-      shopId: form.shopId || undefined,
-      shopName: form.shopName.trim(),
-      platformAftersaleId: form.platformAftersaleId.trim() || undefined,
-      orderNo: form.orderNo.trim() || undefined,
-      productTitle: form.productTitle.trim() || undefined,
-      productImage: form.productImage.trim() || undefined,
-      sku: form.sku.trim() || undefined,
-      qty: Number(form.qty) || 0,
-      buyQty: Number(form.buyQty) || 0,
-      payAmount: form.payAmount.trim() || undefined,
-      refundAmount: form.refundAmount.trim() || undefined,
-      aftersaleType: form.aftersaleType.trim() || undefined,
-      reason: form.reason.trim() || undefined,
-      logisticsNo: form.logisticsNo.trim() || undefined,
-      carrier: form.carrier.trim() || undefined,
-      returnLocation: form.returnLocation.trim() || undefined,
-      fenFaRemark: form.fenFaRemark.trim() || undefined,
-      applyTime: form.applyTime || undefined,
-      returnTime: form.returnTime || undefined,
-    })
+    if (editingId.value) {
+      await updateManualReturn(editingId.value, payload())
+      ElMessage.success('已保存退回记录')
+    } else {
+      await createManualReturn(payload())
+      ElMessage.success('已添加退回记录')
+      page.value = 1
+    }
     createVisible.value = false
-    ElMessage.success('已添加退回记录')
-    page.value = 1
+    editingId.value = null
     await loadData()
   } catch (e) {
-    ElMessage.error((e as Error).message || '添加失败')
+    ElMessage.error((e as Error).message || (editingId.value ? '保存失败' : '添加失败'))
   } finally {
     creating.value = false
   }
@@ -373,9 +410,14 @@ onMounted(() => {
           <template #default="{ row }">{{ row.applyTime || '—' }}</template>
         </el-table-column>
         <el-table-column prop="syncedAt" label="同步时间" width="170" />
+        <el-table-column label="操作" width="88" fixed="right">
+          <template #default="{ row }">
+            <el-button v-if="row.manual" link type="primary" :icon="Edit" @click="openEdit(row)">编辑</el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
-      <el-dialog v-model="createVisible" title="手动添加退回售后单" width="640px">
+      <el-dialog v-model="createVisible" :title="editingId ? '编辑手工退回售后单' : '手动添加退回售后单'" width="640px">
         <el-form label-width="108px">
           <el-form-item label="店铺名" required>
             <el-input v-model="form.shopName" placeholder="手动填写，或从右侧选择带出" />
@@ -467,7 +509,7 @@ onMounted(() => {
         <p class="create-hint">订单号、售后编号、物流单号至少填一项。店铺名可手填。规格图片会显示在列表商品信息中。</p>
         <template #footer>
           <el-button @click="createVisible = false">取消</el-button>
-          <el-button type="primary" :loading="creating" @click="confirmCreate">添加</el-button>
+          <el-button type="primary" :loading="creating" @click="confirmCreate">{{ editingId ? '保存' : '添加' }}</el-button>
         </template>
       </el-dialog>
 

@@ -450,6 +450,33 @@ export async function createManualReturn(data: {
   return unwrap<ReturnPackage>(await client.post('/return-packages', data))
 }
 
+export async function updateManualReturn(
+  id: number,
+  data: {
+    shopId?: number
+    shopName?: string
+    platformAftersaleId?: string
+    orderNo?: string
+    productTitle?: string
+    productImage?: string
+    sku?: string
+    qty?: number
+    buyQty?: number
+    payAmount?: string
+    refundAmount?: string
+    aftersaleType?: string
+    reason?: string
+    logisticsNo?: string
+    carrier?: string
+    returnLocation?: string
+    fenFaRemark?: string
+    applyTime?: string
+    returnTime?: string
+  },
+) {
+  return unwrap<ReturnPackage>(await client.put(`/return-packages/${id}`, data))
+}
+
 export async function uploadReturnImage(file: File) {
   const form = new FormData()
   form.append('file', file)

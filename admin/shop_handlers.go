@@ -251,6 +251,25 @@ func (h *ShopHandler) CreateManualReturn(c *gin.Context) {
 	response.Created(c, item)
 }
 
+func (h *ShopHandler) UpdateManualReturn(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.ManualReturnRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "参数无效")
+		return
+	}
+	item, err := h.ss(c).UpdateManualReturn(id, in, authcontext.BearerToken(c))
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
 func (h *ShopHandler) UploadReturnImage(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {

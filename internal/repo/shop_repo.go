@@ -1200,9 +1200,22 @@ func (r *ShopRepo) GetReturnByShopAftersale(shopID uint64, aftersaleID string) (
 	return &item, nil
 }
 
+func (r *ShopRepo) GetReturn(id uint64) (*model.ReturnPackage, error) {
+	var item model.ReturnPackage
+	err := r.db.Scopes(scopeTenant(r.tenantID)).Where("id = ?", id).First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (r *ShopRepo) CreateReturn(item *model.ReturnPackage) error {
 	item.TenantID = r.tenantID
 	return r.db.Create(item).Error
+}
+
+func (r *ShopRepo) UpdateReturn(item *model.ReturnPackage) error {
+	return r.db.Save(item).Error
 }
 
 func (r *ShopRepo) ListTenantIDs() ([]uint64, error) {
