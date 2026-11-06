@@ -757,11 +757,24 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 	sort.Strings(reasons)
 	sort.Strings(statuses)
 	if q.Kind == dto.TicketKindBuyerReturnSigned {
-		_, desc := SignedTimeSortDesc(q.SortBy, q.SortOrder, "signedTime")
+		by, desc := SignedTimeSortDesc(q.SortBy, q.SortOrder, "remainTime")
+		if by != "signedTime" && strings.TrimSpace(q.SortOrder) == "" {
+			desc = false
+		}
 		sort.SliceStable(filtered, func(i, j int) bool {
-			cmp := CompareTimePtr(signedAtOf[filtered[i].ID], signedAtOf[filtered[j].ID], desc)
+			var cmp int
+			if by == "signedTime" {
+				cmp = CompareTimePtr(signedAtOf[filtered[i].ID], signedAtOf[filtered[j].ID], desc)
+			} else {
+				cmp = CompareTimePtr(filtered[i].DeadlineAt, filtered[j].DeadlineAt, desc)
+			}
 			if cmp != 0 {
 				return cmp < 0
+			}
+			if by != "signedTime" {
+				if sec := CompareTimePtr(signedAtOf[filtered[i].ID], signedAtOf[filtered[j].ID], true); sec != 0 {
+					return sec < 0
+				}
 			}
 			return filtered[i].ID > filtered[j].ID
 		})

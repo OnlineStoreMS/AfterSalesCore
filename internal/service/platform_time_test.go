@@ -70,3 +70,14 @@ func TestSignedAtFromTrackJSONAndRange(t *testing.T) {
 		t.Fatal("nil signed time should miss range filter")
 	}
 }
+
+func TestCompareDeadlineRemainSoonestFirst(t *testing.T) {
+	soon := time.Now().Add(time.Hour)
+	later := time.Now().Add(48 * time.Hour)
+	if cmp := CompareTimePtr(&soon, &later, false); cmp >= 0 {
+		t.Fatal("sooner deadline should sort first")
+	}
+	if cmp := CompareTimePtr(&soon, nil, false); cmp >= 0 {
+		t.Fatal("missing deadline should sort last")
+	}
+}

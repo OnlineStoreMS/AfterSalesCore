@@ -32,8 +32,8 @@ const reasons = ref<string[]>([])
 const status = ref('')
 const statuses = ref<string[]>([])
 const signedRange = ref<[string, string] | null>(null)
-const sortBy = ref('signedTime')
-const sortOrder = ref<'asc' | 'desc'>('desc')
+const sortBy = ref('remainTime')
+const sortOrder = ref<'asc' | 'desc'>('asc')
 const sortReady = ref(false)
 const nowTick = ref(Date.now())
 let tickTimer = 0
@@ -79,8 +79,13 @@ function handleSearch() {
 }
 
 function onSortChange(payload: { prop?: string; order?: string | null }) {
-  sortBy.value = payload.prop === 'signedTime' ? 'signedTime' : 'signedTime'
-  sortOrder.value = payload.order === 'ascending' ? 'asc' : 'desc'
+  if (payload.prop === 'signedTime') {
+    sortBy.value = 'signedTime'
+    sortOrder.value = payload.order === 'ascending' ? 'asc' : 'desc'
+  } else {
+    sortBy.value = 'remainTime'
+    sortOrder.value = payload.order === 'descending' ? 'desc' : 'asc'
+  }
   if (!sortReady.value) return
   page.value = 1
   loadData()
@@ -161,8 +166,8 @@ watch(kind, async () => {
   status.value = ''
   statuses.value = []
   signedRange.value = null
-  sortBy.value = 'signedTime'
-  sortOrder.value = 'desc'
+  sortBy.value = 'remainTime'
+  sortOrder.value = 'asc'
   sortReady.value = false
   page.value = 1
   await loadData()
@@ -249,7 +254,7 @@ watch(kind, async () => {
         :data="tickets"
         stripe
         border
-        :default-sort="isSignedKind ? { prop: 'signedTime', order: 'descending' } : undefined"
+        :default-sort="isSignedKind ? { prop: 'remainTime', order: 'ascending' } : undefined"
         @sort-change="onSortChange"
       >
         <el-table-column prop="shopName" label="店铺" width="140" />
@@ -283,7 +288,12 @@ watch(kind, async () => {
             <div v-if="row.applyTime" class="sub">申请时间 {{ row.applyTime }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="售后状态" min-width="180">
+        <el-table-column
+          label="售后状态"
+          min-width="180"
+          :prop="isSignedKind ? 'remainTime' : undefined"
+          :sortable="isSignedKind ? 'custom' : false"
+        >
           <template #default="{ row }">
             <div>{{ row.status || '—' }}</div>
             <div
