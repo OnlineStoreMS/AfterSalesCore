@@ -434,11 +434,12 @@ func (h *ShopHandler) ShopTickets(c *gin.Context) {
 		}
 		shopID = id
 	}
-	list, reasons, total, err := h.ss(c).ListShopTickets(dto.ShopTicketListQuery{
+	list, reasons, statuses, total, err := h.ss(c).ListShopTickets(dto.ShopTicketListQuery{
 		Kind:       c.Query("kind"),
 		ShopID:     shopID,
 		Keyword:    c.Query("keyword"),
 		Reason:     c.Query("reason"),
+		Status:     c.Query("status"),
 		SignedFrom: c.Query("signedFrom"),
 		SignedTo:   c.Query("signedTo"),
 		SortBy:     c.Query("sortBy"),
@@ -452,6 +453,7 @@ func (h *ShopHandler) ShopTickets(c *gin.Context) {
 	}
 	data := response.PageResult(list, total, page, pageSize)
 	data["reasons"] = reasons
+	data["statuses"] = statuses
 	response.OK(c, data)
 }
 

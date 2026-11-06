@@ -263,6 +263,7 @@ export async function fetchShopTicketsByKind(params: {
   shopId?: number
   keyword?: string
   reason?: string
+  status?: string
   signedFrom?: string
   signedTo?: string
   sortBy?: string
@@ -270,7 +271,7 @@ export async function fetchShopTicketsByKind(params: {
   page?: number
   pageSize?: number
 }) {
-  return unwrap<PageData<AftersaleTicket> & { reasons?: string[] }>(await client.get('/shop-tickets', { params }))
+  return unwrap<PageData<AftersaleTicket> & { reasons?: string[]; statuses?: string[] }>(await client.get('/shop-tickets', { params }))
 }
 
 export interface ReturnPackage {

@@ -342,6 +342,7 @@ type ShopTicketListQuery struct {
 	ShopID     uint64
 	Keyword    string
 	Reason     string
+	Status     string
 	SignedFrom string
 	SignedTo   string
 	SortBy     string

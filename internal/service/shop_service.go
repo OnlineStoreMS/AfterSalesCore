@@ -685,25 +685,25 @@ func ticketHasCard(t *model.AftersaleTicket, group, label string) bool {
 	return false
 }
 
-func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, []string, int64, error) {
+func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, []string, []string, int64, error) {
 	if !validShopTicketKind(q.Kind) {
-		return nil, nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
+		return nil, nil, nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
 	}
 	if q.ShopID > 0 {
 		if _, err := s.repo().Get(q.ShopID); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, nil, 0, ErrNotFound
+				return nil, nil, nil, 0, ErrNotFound
 			}
-			return nil, nil, 0, err
+			return nil, nil, nil, 0, err
 		}
 	}
 	list, err := s.repo().ListOpenTickets(q.ShopID)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 	shops, err := s.repo().List()
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 	names := make(map[uint64]string, len(shops))
 	for i := range shops {
@@ -711,13 +711,16 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 	}
 	kw := strings.ToLower(strings.TrimSpace(q.Keyword))
 	wantReason := strings.TrimSpace(q.Reason)
+	wantStatus := strings.TrimSpace(q.Status)
 	signedFrom := ParseQueryDateTime(q.SignedFrom, false)
 	signedTo := ParseQueryDateTime(q.SignedTo, true)
 	filterSigned := q.Kind == dto.TicketKindBuyerReturnSigned && (signedFrom != nil || signedTo != nil)
 	filtered := make([]model.AftersaleTicket, 0, len(list))
 	signedAtOf := make(map[uint64]*time.Time, len(list))
 	reasonSet := map[string]struct{}{}
+	statusSet := map[string]struct{}{}
 	var reasons []string
+	var statuses []string
 	for i := range list {
 		t := &list[i]
 		if !MatchShopTicketKind(t, q.Kind) {
@@ -729,10 +732,19 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 				reasons = append(reasons, r)
 			}
 		}
+		if st := strings.TrimSpace(t.Status); st != "" {
+			if _, ok := statusSet[st]; !ok {
+				statusSet[st] = struct{}{}
+				statuses = append(statuses, st)
+			}
+		}
 		if kw != "" && !shopTicketKeywordMatch(t, names[t.ShopID], kw) {
 			continue
 		}
 		if wantReason != "" && strings.TrimSpace(t.Reason) != wantReason {
+			continue
+		}
+		if wantStatus != "" && strings.TrimSpace(t.Status) != wantStatus {
 			continue
 		}
 		signedAt := SignedAtFromTrackJSON(t.TrackJSON, t.ApplyTime, "")
@@ -743,6 +755,7 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		filtered = append(filtered, *t)
 	}
 	sort.Strings(reasons)
+	sort.Strings(statuses)
 	if q.Kind == dto.TicketKindBuyerReturnSigned {
 		_, desc := SignedTimeSortDesc(q.SortBy, q.SortOrder, "signedTime")
 		sort.SliceStable(filtered, func(i, j int) bool {
@@ -763,7 +776,7 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 	}
 	start := (page - 1) * pageSize
 	if start >= len(filtered) {
-		return []dto.TicketItem{}, reasons, total, nil
+		return []dto.TicketItem{}, reasons, statuses, total, nil
 	}
 	end := start + pageSize
 	if end > len(filtered) {
@@ -775,7 +788,7 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		item.ShopName = names[filtered[i].ShopID]
 		out = append(out, item)
 	}
-	return out, reasons, total, nil
+	return out, reasons, statuses, total, nil
 }
 
 func shopTicketKeywordMatch(t *model.AftersaleTicket, shopName, kw string) bool {

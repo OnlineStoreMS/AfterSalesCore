@@ -29,6 +29,8 @@ const shopId = ref<number | undefined>()
 const keyword = ref('')
 const reason = ref('')
 const reasons = ref<string[]>([])
+const status = ref('')
+const statuses = ref<string[]>([])
 const signedRange = ref<[string, string] | null>(null)
 const sortBy = ref('signedTime')
 const sortOrder = ref<'asc' | 'desc'>('desc')
@@ -52,6 +54,7 @@ async function loadData() {
       shopId: shopId.value || undefined,
       keyword: keyword.value || undefined,
       reason: showReasonFilter.value ? reason.value || undefined : undefined,
+      status: showStatusFilter.value ? status.value || undefined : undefined,
       signedFrom: isSignedKind.value ? signedRange.value?.[0] || undefined : undefined,
       signedTo: isSignedKind.value ? signedRange.value?.[1] || undefined : undefined,
       sortBy: isSignedKind.value ? sortBy.value : undefined,
@@ -62,6 +65,7 @@ async function loadData() {
     tickets.value = data.list
     total.value = data.total
     if (data.reasons) reasons.value = data.reasons
+    if (data.statuses) statuses.value = data.statuses
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {
@@ -130,6 +134,7 @@ const showReasonFilter = computed(() =>
   kind.value === 'return-refund' ||
   kind.value === 'exchange',
 )
+const showStatusFilter = computed(() => kind.value === 'return-refund')
 const isSignedKind = computed(() => kind.value === 'buyer-return-signed')
 const isDisputeKind = computed(() => kind.value === 'dispute')
 const keywordPlaceholder = computed(() =>
@@ -153,6 +158,8 @@ watch(kind, async () => {
   keyword.value = ''
   reason.value = ''
   reasons.value = []
+  status.value = ''
+  statuses.value = []
   signedRange.value = null
   sortBy.value = 'signedTime'
   sortOrder.value = 'desc'
@@ -199,6 +206,17 @@ watch(kind, async () => {
           @change="handleSearch"
         >
           <el-option v-for="item in reasons" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-select
+          v-if="showStatusFilter"
+          v-model="status"
+          clearable
+          filterable
+          placeholder="售后状态"
+          style="width: 200px"
+          @change="handleSearch"
+        >
+          <el-option v-for="item in statuses" :key="item" :label="item" :value="item" />
         </el-select>
         <template v-if="isSignedKind">
           <span class="field-label">签收时间</span>
