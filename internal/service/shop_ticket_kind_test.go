@@ -102,6 +102,46 @@ func TestMatchShopTicketKind(t *testing.T) {
 	if MatchShopTicketKind(review, dto.TicketKindDispute) {
 		t.Fatal("shipped refund should not match dispute")
 	}
+
+	returnWaitReceive := &model.AftersaleTicket{
+		AftersaleType: "退货退款",
+		CardKeys:      []model.AftersaleTicketCard{{CardKey: "待商家收/发货:退货待收货"}},
+	}
+	if !MatchShopTicketKind(returnWaitReceive, dto.TicketKindReturnRefund) {
+		t.Fatal("退货待收货 should match 退货退款")
+	}
+	if MatchShopTicketKind(returnWaitReceive, dto.TicketKindExchange) {
+		t.Fatal("退货待收货 should not match 换货")
+	}
+	if MatchShopTicketKind(review, dto.TicketKindReturnRefund) {
+		t.Fatal("已发货退款 should not match 退货退款")
+	}
+
+	buyerPendingReturn := &model.AftersaleTicket{
+		CardKeys: []model.AftersaleTicketCard{{CardKey: "待消费者处理:待退货"}},
+	}
+	if !MatchShopTicketKind(buyerPendingReturn, dto.TicketKindReturnRefund) {
+		t.Fatal("待消费者处理 待退货 should match 退货退款")
+	}
+
+	exchangeReceive := &model.AftersaleTicket{
+		AftersaleType: "换货",
+		CardKeys:      []model.AftersaleTicketCard{{CardKey: "待商家收/发货:换货待收货/发货"}},
+	}
+	if !MatchShopTicketKind(exchangeReceive, dto.TicketKindExchange) {
+		t.Fatal("换货待收货/发货 should match 换货")
+	}
+	if MatchShopTicketKind(exchangeReceive, dto.TicketKindReturnRefund) {
+		t.Fatal("换货 should not match 退货退款")
+	}
+
+	exchangeByType := &model.AftersaleTicket{
+		AftersaleType: "换货",
+		CardKeys:      []model.AftersaleTicketCard{{CardKey: "紧急:临期待处理"}},
+	}
+	if !MatchShopTicketKind(exchangeByType, dto.TicketKindExchange) {
+		t.Fatal("aftersale type 换货 should match even off the receive card")
+	}
 	disputeNegotiate := &model.AftersaleTicket{
 		CardKeys: []model.AftersaleTicketCard{{CardKey: "纠纷:仲裁待协商"}},
 	}

@@ -253,6 +253,8 @@ export async function fetchShopTickets(id: number, params?: {
 export type ShopTicketKind =
   | 'buyer-return-pickup'
   | 'review-shipped-refund'
+  | 'return-refund'
+  | 'exchange'
   | 'buyer-return-signed'
   | 'dispute'
 
@@ -620,6 +622,8 @@ export interface NavCounts {
   ticketTotal: number
   buyerReturnPickup: number
   reviewShippedRefund: number
+  returnRefund: number
+  exchange: number
   disputeOrders: number
   buyerReturnSigned: number
   pendingIssues7d: number

@@ -92,6 +92,26 @@ const router = createRouter({
           },
         },
         {
+          path: 'shops/return-refund',
+          name: 'ShopReturnRefund',
+          component: () => import('../views/shop/ShopTicketList.vue'),
+          meta: {
+            title: '退货退款',
+            kind: 'return-refund',
+            desc: '工作台中售后类型为退货退款的单据，含待商家收/发货 · 退货待收货、待消费者处理 · 待退货等。',
+          },
+        },
+        {
+          path: 'shops/exchange',
+          name: 'ShopExchange',
+          component: () => import('../views/shop/ShopTicketList.vue'),
+          meta: {
+            title: '换货',
+            kind: 'exchange',
+            desc: '工作台中售后类型为换货的单据，对应待商家收/发货 · 换货待收货/发货等。',
+          },
+        },
+        {
           path: 'shops/dispute',
           name: 'ShopDispute',
           component: () => import('../views/shop/ShopTicketList.vue'),

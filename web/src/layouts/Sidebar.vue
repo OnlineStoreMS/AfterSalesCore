@@ -15,6 +15,8 @@ const counts = ref<NavCounts>({
   ticketTotal: 0,
   buyerReturnPickup: 0,
   reviewShippedRefund: 0,
+  returnRefund: 0,
+  exchange: 0,
   disputeOrders: 0,
   buyerReturnSigned: 0,
   pendingIssues7d: 0,
@@ -24,6 +26,8 @@ let pollTimer = 0
 const activeMenu = computed(() => {
   if (route.path.startsWith('/shops/await-pickup')) return '/shops/await-pickup'
   if (route.path.startsWith('/shops/shipped-refund')) return '/shops/shipped-refund'
+  if (route.path.startsWith('/shops/return-refund')) return '/shops/return-refund'
+  if (route.path.startsWith('/shops/exchange')) return '/shops/exchange'
   if (route.path.startsWith('/shops/dispute')) return '/shops/dispute'
   if (route.path.startsWith('/shops')) return '/shops'
   if (route.path.startsWith('/returns/signed-return')) return '/returns/signed-return'
@@ -123,6 +127,22 @@ watch(() => route.path, () => {
             class="nav-badge"
             :title="`已发货退款 ${counts.reviewShippedRefund}`"
           >{{ badgeText(counts.reviewShippedRefund) }}</span>
+        </el-menu-item>
+        <el-menu-item index="/shops/return-refund" @click="navigate('/shops/return-refund')">
+          退货退款
+          <span
+            v-if="counts.returnRefund"
+            class="nav-badge"
+            :title="`退货退款 ${counts.returnRefund}`"
+          >{{ badgeText(counts.returnRefund) }}</span>
+        </el-menu-item>
+        <el-menu-item index="/shops/exchange" @click="navigate('/shops/exchange')">
+          换货
+          <span
+            v-if="counts.exchange"
+            class="nav-badge"
+            :title="`换货 ${counts.exchange}`"
+          >{{ badgeText(counts.exchange) }}</span>
         </el-menu-item>
         <el-menu-item index="/shops/dispute" @click="navigate('/shops/dispute')">
           纠纷

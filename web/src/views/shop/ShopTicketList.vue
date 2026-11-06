@@ -51,7 +51,7 @@ async function loadData() {
       kind: kind.value,
       shopId: shopId.value || undefined,
       keyword: keyword.value || undefined,
-      reason: isRefundKind.value ? reason.value || undefined : undefined,
+      reason: showReasonFilter.value ? reason.value || undefined : undefined,
       signedFrom: isSignedKind.value ? signedRange.value?.[0] || undefined : undefined,
       signedTo: isSignedKind.value ? signedRange.value?.[1] || undefined : undefined,
       sortBy: isSignedKind.value ? sortBy.value : undefined,
@@ -125,7 +125,11 @@ function pickupPointOf(row: AftersaleTicket) {
 }
 
 const isPickupKind = computed(() => kind.value === 'buyer-return-pickup')
-const isRefundKind = computed(() => kind.value === 'review-shipped-refund')
+const showReasonFilter = computed(() =>
+  kind.value === 'review-shipped-refund' ||
+  kind.value === 'return-refund' ||
+  kind.value === 'exchange',
+)
 const isSignedKind = computed(() => kind.value === 'buyer-return-signed')
 const isDisputeKind = computed(() => kind.value === 'dispute')
 const keywordPlaceholder = computed(() =>
@@ -186,7 +190,7 @@ watch(kind, async () => {
           />
         </el-select>
         <el-select
-          v-if="isRefundKind"
+          v-if="showReasonFilter"
           v-model="reason"
           clearable
           filterable

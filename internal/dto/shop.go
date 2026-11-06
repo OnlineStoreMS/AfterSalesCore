@@ -321,6 +321,8 @@ type SidebarCounts struct {
 	TicketTotal          int `json:"ticketTotal"`
 	BuyerReturnPickup    int `json:"buyerReturnPickup"`
 	ReviewShippedRefund  int `json:"reviewShippedRefund"`
+	ReturnRefund         int `json:"returnRefund"`
+	Exchange             int `json:"exchange"`
 	DisputeOrders        int `json:"disputeOrders"`
 	BuyerReturnSigned    int `json:"buyerReturnSigned"`
 	PendingIssues7d      int `json:"pendingIssues7d"`
@@ -329,6 +331,8 @@ type SidebarCounts struct {
 const (
 	TicketKindBuyerReturnPickup   = "buyer-return-pickup"
 	TicketKindReviewShippedRefund = "review-shipped-refund"
+	TicketKindReturnRefund        = "return-refund"
+	TicketKindExchange            = "exchange"
 	TicketKindBuyerReturnSigned   = "buyer-return-signed"
 	TicketKindDispute             = "dispute"
 )

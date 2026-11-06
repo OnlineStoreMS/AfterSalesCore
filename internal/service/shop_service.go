@@ -543,6 +543,12 @@ func (s *ShopService) SidebarCounts() (*dto.SidebarCounts, error) {
 		if MatchShopTicketKind(&openTickets[i], dto.TicketKindReviewShippedRefund) {
 			out.ReviewShippedRefund++
 		}
+		if MatchShopTicketKind(&openTickets[i], dto.TicketKindReturnRefund) {
+			out.ReturnRefund++
+		}
+		if MatchShopTicketKind(&openTickets[i], dto.TicketKindExchange) {
+			out.Exchange++
+		}
 		if MatchShopTicketKind(&openTickets[i], dto.TicketKindDispute) {
 			out.DisputeOrders++
 		}
@@ -571,6 +577,16 @@ func MatchShopTicketKind(t *model.AftersaleTicket, kind string) bool {
 		return hasBuyer && buyer == LogisticsAwaitPickup
 	case dto.TicketKindReviewShippedRefund:
 		return ticketHasCard(t, "待商家审核", "已发货退款")
+	case dto.TicketKindReturnRefund:
+		if isReturnRefundAftersaleType(t.AftersaleType) {
+			return true
+		}
+		return ticketCardLabelIn(t, "退货待收货", "待退货", "退货退款")
+	case dto.TicketKindExchange:
+		if isExchangeAftersaleType(t.AftersaleType) {
+			return true
+		}
+		return ticketCardLabelIn(t, "换货待收货/发货", "换货")
 	case dto.TicketKindDispute:
 		// 工作台「纠纷」组三张子卡片：仲裁待举证 / 仲裁待协商 / 仲裁平台处理中
 		return ticketHasGroup(t, "纠纷")
@@ -596,6 +612,57 @@ func ticketBuyerReturnStatus(t *model.AftersaleTicket) (bool, string) {
 	return true, view.BuyerStatus
 }
 
+func isReturnRefundAftersaleType(typ string) bool {
+	typ = strings.TrimSpace(typ)
+	if typ == "" {
+		return false
+	}
+	if strings.Contains(typ, "未发货退款") || strings.Contains(typ, "已发货退款") {
+		return false
+	}
+	return strings.Contains(typ, "退货退款")
+}
+
+func isExchangeAftersaleType(typ string) bool {
+	return strings.Contains(strings.TrimSpace(typ), "换货")
+}
+
+func ticketCardLabel(cardKey string) string {
+	if i := strings.LastIndex(cardKey, ":"); i >= 0 {
+		return cardKey[i+1:]
+	}
+	return cardKey
+}
+
+func ticketCardLabelIn(t *model.AftersaleTicket, labels ...string) bool {
+	if t == nil {
+		return false
+	}
+	for _, c := range t.CardKeys {
+		got := ticketCardLabel(c.CardKey)
+		for _, want := range labels {
+			if got == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func validShopTicketKind(kind string) bool {
+	switch kind {
+	case dto.TicketKindBuyerReturnPickup,
+		dto.TicketKindReviewShippedRefund,
+		dto.TicketKindReturnRefund,
+		dto.TicketKindExchange,
+		dto.TicketKindBuyerReturnSigned,
+		dto.TicketKindDispute:
+		return true
+	default:
+		return false
+	}
+}
+
 func ticketHasGroup(t *model.AftersaleTicket, group string) bool {
 	for _, c := range t.CardKeys {
 		if strings.HasPrefix(c.CardKey, group+":") || strings.Contains(c.CardKey, group) {
@@ -619,10 +686,7 @@ func ticketHasCard(t *model.AftersaleTicket, group, label string) bool {
 }
 
 func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, []string, int64, error) {
-	if q.Kind != dto.TicketKindBuyerReturnPickup &&
-		q.Kind != dto.TicketKindReviewShippedRefund &&
-		q.Kind != dto.TicketKindBuyerReturnSigned &&
-		q.Kind != dto.TicketKindDispute {
+	if !validShopTicketKind(q.Kind) {
 		return nil, nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
 	}
 	if q.ShopID > 0 {
