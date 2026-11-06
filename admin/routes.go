@@ -77,6 +77,8 @@ func RegisterRoutes(
 	g.PATCH("/issue-records/:id/status", shopH.UpdateIssueStatus)
 	g.DELETE("/issue-records/:id", shopH.DeleteIssue)
 	g.GET("/shop-tickets", shopH.ShopTickets)
+	g.POST("/shop-tickets/:id/mark-handled", shopH.MarkTicketHandled)
+	g.POST("/shop-tickets/:id/to-issue", shopH.TransferTicketToIssue)
 	g.GET("/nav-counts", shopH.NavCounts)
 
 	g.GET("/notifications", notifyH.Get)

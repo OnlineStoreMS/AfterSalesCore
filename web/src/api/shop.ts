@@ -71,6 +71,10 @@ export interface AftersaleTicket {
   shopId?: number
   shopName?: string
   applyTime?: string
+  handleStatus?: string
+  handleStatusLabel?: string
+  handledAt?: string
+  handledByName?: string
   cardKeys: string[]
   syncedAt: string
 }
@@ -264,6 +268,7 @@ export async function fetchShopTicketsByKind(params: {
   keyword?: string
   reason?: string
   status?: string
+  handleStatus?: string
   signedFrom?: string
   signedTo?: string
   sortBy?: string
@@ -272,6 +277,38 @@ export async function fetchShopTicketsByKind(params: {
   pageSize?: number
 }) {
   return unwrap<PageData<AftersaleTicket> & { reasons?: string[]; statuses?: string[] }>(await client.get('/shop-tickets', { params }))
+}
+
+export async function markShopTicketHandled(id: number, handled = true) {
+  return unwrap<AftersaleTicket>(await client.post(`/shop-tickets/${id}/mark-handled`, { handled }))
+}
+
+export async function transferShopTicketToIssue(
+  id: number,
+  body: {
+    shopId?: number
+    shopName?: string
+    orderNo?: string
+    platformAftersaleId?: string
+    productTitle?: string
+    productImage?: string
+    skuSpecs?: string
+    aftersaleStatus?: string
+    aftersaleType?: string
+    logistics?: string
+    returnLogisticsNo?: string
+    shipLogisticsNo?: string
+    problemType: string
+    problemTypeCustom?: string
+    handleMethod?: string
+    handleMethodCustom?: string
+    problemNote?: string
+    handleNote?: string
+    status?: string
+    hasAftersale?: boolean
+  },
+) {
+  return unwrap<{ id: number }>(await client.post(`/shop-tickets/${id}/to-issue`, body))
 }
 
 export interface ReturnPackage {

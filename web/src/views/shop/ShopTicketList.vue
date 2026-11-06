@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import TicketLogisticsCell from '../../components/TicketLogisticsCell.vue'
 import {
   fetchShopTicketsByKind,
   fetchShops,
+  markShopTicketHandled,
+  transferShopTicketToIssue,
   type AftersaleTicket,
   type MarketplaceShop,
   type ShopTicketKind,
 } from '../../api/shop'
+import { fetchIssueMeta, type IssueMeta } from '../../api/issue'
 import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
 import { parseTicketLogistics, signedTimeFromTracks, displayTrackDetail } from '../../utils/ticketLogistics'
 
@@ -31,7 +34,20 @@ const reason = ref('')
 const reasons = ref<string[]>([])
 const status = ref('')
 const statuses = ref<string[]>([])
+const handleStatus = ref('')
 const signedRange = ref<[string, string] | null>(null)
+const issueMeta = ref<IssueMeta>({ problemTypes: [], handleMethods: [], statuses: [] })
+const issueVisible = ref(false)
+const issueSaving = ref(false)
+const issueTicket = ref<AftersaleTicket | null>(null)
+const issueForm = reactive({
+  problemType: '',
+  problemTypeCustom: '',
+  handleMethod: '',
+  handleMethodCustom: '',
+  problemNote: '',
+  handleNote: '',
+})
 const sortBy = ref('remainTime')
 const sortOrder = ref<'asc' | 'desc'>('asc')
 const sortReady = ref(false)
@@ -55,6 +71,7 @@ async function loadData() {
       keyword: keyword.value || undefined,
       reason: showReasonFilter.value ? reason.value || undefined : undefined,
       status: showStatusFilter.value ? status.value || undefined : undefined,
+      handleStatus: isSignedKind.value ? handleStatus.value || undefined : undefined,
       signedFrom: isSignedKind.value ? signedRange.value?.[0] || undefined : undefined,
       signedTo: isSignedKind.value ? signedRange.value?.[1] || undefined : undefined,
       sortBy: isSignedKind.value ? sortBy.value : undefined,
@@ -133,6 +150,97 @@ function pickupPointOf(row: AftersaleTicket) {
   return line || String(track.text || '').trim()
 }
 
+const handleStatusOptions = [
+  { value: '', label: '全部' },
+  { value: 'pending', label: '未处理' },
+  { value: 'handled', label: '已处理' },
+  { value: 'issue', label: '已转问题记录' },
+]
+const isCustomProblem = computed(() => issueForm.problemType === 'custom')
+const isCustomHandle = computed(() => issueForm.handleMethod === 'custom')
+
+function handleStatusTone(s?: string) {
+  if (s === 'handled') return 'success'
+  if (s === 'issue') return 'primary'
+  return 'warning'
+}
+
+async function onMarkHandled(row: AftersaleTicket, handled: boolean) {
+  try {
+    await ElMessageBox.confirm(
+      handled ? `将售后单 ${row.platformAftersaleId} 标记为已处理？` : `取消售后单 ${row.platformAftersaleId} 的已处理标记？`,
+      handled ? '标记已处理' : '取消已处理',
+      { type: handled ? 'success' : 'warning' },
+    )
+    await markShopTicketHandled(row.id, handled)
+    ElMessage.success(handled ? '已标记处理' : '已取消标记')
+    await loadData()
+  } catch (e: any) {
+    if (e === 'cancel' || e === 'close') return
+    ElMessage.error(e.message || '操作失败')
+  }
+}
+
+function openTransfer(row: AftersaleTicket) {
+  issueTicket.value = row
+  issueForm.problemType = ''
+  issueForm.problemTypeCustom = ''
+  issueForm.handleMethod = ''
+  issueForm.handleMethodCustom = ''
+  issueForm.problemNote = ''
+  issueForm.handleNote = ''
+  issueVisible.value = true
+}
+
+async function confirmTransfer() {
+  const row = issueTicket.value
+  if (!row) return
+  if (!issueForm.problemType) {
+    ElMessage.warning('请选择问题类型')
+    return
+  }
+  if (issueForm.problemType === 'custom' && !issueForm.problemTypeCustom.trim()) {
+    ElMessage.warning('请填写自定义问题类型')
+    return
+  }
+  if (issueForm.handleMethod === 'custom' && !issueForm.handleMethodCustom.trim()) {
+    ElMessage.warning('请填写自定义处理方式')
+    return
+  }
+  issueSaving.value = true
+  try {
+    await transferShopTicketToIssue(row.id, {
+      shopId: row.shopId,
+      shopName: row.shopName,
+      orderNo: row.orderNo,
+      platformAftersaleId: row.platformAftersaleId,
+      productTitle: row.productTitle,
+      productImage: row.productImage,
+      skuSpecs: row.sku,
+      aftersaleStatus: row.status,
+      aftersaleType: row.aftersaleType,
+      logistics: row.logistics,
+      returnLogisticsNo: row.returnLogisticsNo,
+      shipLogisticsNo: row.shipLogisticsNo,
+      hasAftersale: true,
+      problemType: issueForm.problemType,
+      problemTypeCustom: issueForm.problemTypeCustom.trim() || undefined,
+      handleMethod: issueForm.handleMethod || undefined,
+      handleMethodCustom: issueForm.handleMethodCustom.trim() || undefined,
+      problemNote: issueForm.problemNote.trim() || undefined,
+      handleNote: issueForm.handleNote.trim() || undefined,
+      status: 'pending',
+    })
+    ElMessage.success('已转到售后问题记录')
+    issueVisible.value = false
+    await loadData()
+  } catch (e: any) {
+    ElMessage.error(e.message || '转出失败')
+  } finally {
+    issueSaving.value = false
+  }
+}
+
 const isPickupKind = computed(() => kind.value === 'buyer-return-pickup')
 const showReasonFilter = computed(() =>
   kind.value === 'review-shipped-refund' ||
@@ -141,6 +249,7 @@ const showReasonFilter = computed(() =>
 )
 const showStatusFilter = computed(() => kind.value === 'return-refund')
 const isSignedKind = computed(() => kind.value === 'buyer-return-signed')
+const showHandleFilter = computed(() => kind.value === 'buyer-return-signed')
 const isDisputeKind = computed(() => kind.value === 'dispute')
 const keywordPlaceholder = computed(() =>
   isPickupKind.value
@@ -150,6 +259,12 @@ const keywordPlaceholder = computed(() =>
 
 onMounted(async () => {
   loadShops()
+  try {
+    issueMeta.value = await fetchIssueMeta()
+  } catch {
+    /* ignore */
+  }
+  if (isSignedKind.value) handleStatus.value = 'pending'
   await loadData()
   sortReady.value = true
   tickTimer = window.setInterval(() => {
@@ -165,6 +280,7 @@ watch(kind, async () => {
   reasons.value = []
   status.value = ''
   statuses.value = []
+  handleStatus.value = kind.value === 'buyer-return-signed' ? 'pending' : ''
   signedRange.value = null
   sortBy.value = 'remainTime'
   sortOrder.value = 'asc'
@@ -222,6 +338,15 @@ watch(kind, async () => {
           @change="handleSearch"
         >
           <el-option v-for="item in statuses" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-select
+          v-if="showHandleFilter"
+          v-model="handleStatus"
+          placeholder="处理状态"
+          style="width: 160px"
+          @change="handleSearch"
+        >
+          <el-option v-for="item in handleStatusOptions" :key="item.value || 'all'" :label="item.label" :value="item.value" />
         </el-select>
         <template v-if="isSignedKind">
           <span class="field-label">签收时间</span>
@@ -338,6 +463,35 @@ watch(kind, async () => {
         >
           <template #default="{ row }">{{ signedTimeOf(row) || '—' }}</template>
         </el-table-column>
+        <el-table-column v-if="isSignedKind" label="处理状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="handleStatusTone(row.handleStatus)" size="small">
+              {{ row.handleStatusLabel || '未处理' }}
+            </el-tag>
+            <div v-if="row.handledByName" class="sub">{{ row.handledByName }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column v-if="isSignedKind" label="操作" width="168" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.handleStatus !== 'handled' && row.handleStatus !== 'issue'"
+              link
+              type="primary"
+              @click="onMarkHandled(row, true)"
+            >标记已处理</el-button>
+            <el-button
+              v-else-if="row.handleStatus === 'handled'"
+              link
+              @click="onMarkHandled(row, false)"
+            >取消处理</el-button>
+            <el-button
+              v-if="row.handleStatus !== 'issue'"
+              link
+              type="primary"
+              @click="openTransfer(row)"
+            >转问题记录</el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <div class="pager">
@@ -352,6 +506,47 @@ watch(kind, async () => {
         />
       </div>
     </el-card>
+
+    <el-dialog v-model="issueVisible" title="转到售后问题记录" width="560px" destroy-on-close>
+      <p v-if="issueTicket" class="issue-preview">
+        {{ issueTicket.shopName }} · {{ issueTicket.productTitle || '—' }}
+        <span class="sub">售后 {{ issueTicket.platformAftersaleId }} / 订单 {{ issueTicket.orderNo || '—' }}</span>
+      </p>
+      <el-form label-width="96px">
+        <el-form-item label="问题类型" required>
+          <el-select v-model="issueForm.problemType" placeholder="选择类型" style="width: 100%">
+            <el-option v-for="p in issueMeta.problemTypes" :key="p.value" :label="p.label" :value="p.value" />
+          </el-select>
+          <el-input
+            v-if="isCustomProblem"
+            v-model="issueForm.problemTypeCustom"
+            placeholder="自定义问题类型"
+            style="margin-top: 8px"
+          />
+        </el-form-item>
+        <el-form-item label="问题记录">
+          <el-input v-model="issueForm.problemNote" type="textarea" :rows="2" placeholder="问题说明" />
+        </el-form-item>
+        <el-form-item label="处理方式">
+          <el-select v-model="issueForm.handleMethod" clearable placeholder="选择处理方式" style="width: 100%">
+            <el-option v-for="h in issueMeta.handleMethods" :key="h.value" :label="h.label" :value="h.value" />
+          </el-select>
+          <el-input
+            v-if="isCustomHandle"
+            v-model="issueForm.handleMethodCustom"
+            placeholder="自定义处理方式"
+            style="margin-top: 8px"
+          />
+        </el-form-item>
+        <el-form-item label="处理说明">
+          <el-input v-model="issueForm.handleNote" type="textarea" :rows="2" placeholder="处理备注" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="issueVisible = false">取消</el-button>
+        <el-button type="primary" :loading="issueSaving" @click="confirmTransfer">转入问题记录</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -373,4 +568,5 @@ watch(kind, async () => {
 .timeout.danger { color: #f56c6c; font-weight: 700; }
 .location { white-space: pre-wrap; line-height: 1.5; word-break: break-word; }
 .pager { display: flex; justify-content: flex-end; margin-top: 16px; }
+.issue-preview { margin: 0 0 12px; line-height: 1.5; }
 </style>

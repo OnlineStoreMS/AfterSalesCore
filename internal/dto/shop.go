@@ -110,6 +110,10 @@ type TicketItem struct {
 	ShopID               uint64           `json:"shopId,omitempty"`
 	ShopName             string           `json:"shopName,omitempty"`
 	ApplyTime            string           `json:"applyTime,omitempty"`
+	HandleStatus         string           `json:"handleStatus,omitempty"`
+	HandleStatusLabel    string           `json:"handleStatusLabel,omitempty"`
+	HandledAt            string           `json:"handledAt,omitempty"`
+	HandledByName        string           `json:"handledByName,omitempty"`
 	CardKeys             []string         `json:"cardKeys"`
 	SyncedAt             string           `json:"syncedAt"`
 }
@@ -341,9 +345,10 @@ type ShopTicketListQuery struct {
 	Kind       string
 	ShopID     uint64
 	Keyword    string
-	Reason     string
-	Status     string
-	SignedFrom string
+	Reason       string
+	Status       string
+	HandleStatus string
+	SignedFrom   string
 	SignedTo   string
 	SortBy     string
 	SortOrder  string

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"aftersalescore/internal/dto"
+	"aftersalescore/internal/model"
 	"aftersalescore/internal/pkg/authcontext"
 	"aftersalescore/internal/pkg/httputil"
 	"aftersalescore/internal/pkg/response"
@@ -438,9 +439,10 @@ func (h *ShopHandler) ShopTickets(c *gin.Context) {
 		Kind:       c.Query("kind"),
 		ShopID:     shopID,
 		Keyword:    c.Query("keyword"),
-		Reason:     c.Query("reason"),
-		Status:     c.Query("status"),
-		SignedFrom: c.Query("signedFrom"),
+		Reason:       c.Query("reason"),
+		Status:       c.Query("status"),
+		HandleStatus: c.Query("handleStatus"),
+		SignedFrom:   c.Query("signedFrom"),
 		SignedTo:   c.Query("signedTo"),
 		SortBy:     c.Query("sortBy"),
 		SortOrder:  c.Query("sortOrder"),
@@ -455,6 +457,50 @@ func (h *ShopHandler) ShopTickets(c *gin.Context) {
 	data["reasons"] = reasons
 	data["statuses"] = statuses
 	response.OK(c, data)
+}
+
+func (h *ShopHandler) MarkTicketHandled(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in struct {
+		Handled *bool `json:"handled"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil && err.Error() != "EOF" {
+		response.Fail(c, http.StatusBadRequest, "参数无效")
+		return
+	}
+	status := model.TicketHandleHandled
+	if in.Handled != nil && !*in.Handled {
+		status = model.TicketHandlePending
+	}
+	item, err := h.ss(c).SetTicketHandleStatus(id, status, authcontext.UserID(c), operatorName(c))
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
+func (h *ShopHandler) TransferTicketToIssue(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.IssueUpsertRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "参数无效")
+		return
+	}
+	item, err := h.ss(c).TransferTicketToIssue(id, in, authcontext.UserID(c), operatorName(c))
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
 }
 
 func (h *ShopHandler) NavCounts(c *gin.Context) {

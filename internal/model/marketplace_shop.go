@@ -95,11 +95,21 @@ type AftersaleTicket struct {
 	TrackJSON           string                `gorm:"type:text" json:"trackJson"`
 	ApplyTime           string                `gorm:"size:64" json:"applyTime"`
 	RawJSON             string                `gorm:"type:text" json:"rawJson"`
+	HandleStatus        string                `gorm:"size:32;index;not null;default:pending" json:"handleStatus"`
+	HandledAt           *time.Time            `json:"handledAt,omitempty"`
+	HandledBy           uint64                `json:"handledBy,omitempty"`
+	HandledByName       string                `gorm:"size:64" json:"handledByName,omitempty"`
 	SyncedAt            time.Time             `json:"syncedAt"`
 	CreatedAt           time.Time             `json:"createdAt"`
 	UpdatedAt           time.Time             `json:"updatedAt"`
 	CardKeys            []AftersaleTicketCard `gorm:"foreignKey:TicketID" json:"cardKeys,omitempty"`
 }
+
+const (
+	TicketHandlePending = "pending"
+	TicketHandleHandled = "handled"
+	TicketHandleIssue   = "issue"
+)
 
 func (AftersaleTicket) TableName() string { return "aftersale_tickets" }
 

@@ -382,6 +382,27 @@ func (r *ShopRepo) FindTicketsByKeyword(keyword string, limit int) ([]model.Afte
 	return list, err
 }
 
+func (r *ShopRepo) GetTicket(id uint64) (*model.AftersaleTicket, error) {
+	var item model.AftersaleTicket
+	err := r.db.Scopes(scopeTenant(r.tenantID)).Where("id = ?", id).First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *ShopRepo) UpdateTicketHandle(id uint64, status string, operatorID uint64, operatorName string, handledAt *time.Time) error {
+	return r.db.Scopes(scopeTenant(r.tenantID)).
+		Model(&model.AftersaleTicket{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"handle_status":   status,
+			"handled_at":      handledAt,
+			"handled_by":      operatorID,
+			"handled_by_name": operatorName,
+		}).Error
+}
+
 func (r *ShopRepo) ListOpenTickets(shopID uint64) ([]model.AftersaleTicket, error) {
 	q := r.db.Model(&model.AftersaleTicket{}).
 		Scopes(scopeTenant(r.tenantID)).

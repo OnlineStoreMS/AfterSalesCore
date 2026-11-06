@@ -747,6 +747,9 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		if wantStatus != "" && strings.TrimSpace(t.Status) != wantStatus {
 			continue
 		}
+		if q.Kind == dto.TicketKindBuyerReturnSigned && !matchTicketHandleStatus(t, q.HandleStatus) {
+			continue
+		}
 		signedAt := SignedAtFromTrackJSON(t.TrackJSON, t.ApplyTime, "")
 		if filterSigned && !TimeInRange(signedAt, signedFrom, signedTo) {
 			continue
@@ -2013,6 +2016,12 @@ func toTicketItem(t *model.AftersaleTicket) dto.TicketItem {
 		PickupPoint:       LatestTrackText(t.TrackJSON),
 		ShopID:            t.ShopID,
 		ApplyTime:         t.ApplyTime, CardKeys: keys, SyncedAt: formatTime(t.SyncedAt),
+		HandleStatus:      ticketHandleStatusOf(t),
+		HandleStatusLabel: TicketHandleStatusLabel(t.HandleStatus),
+		HandledByName:     strings.TrimSpace(t.HandledByName),
+	}
+	if t.HandledAt != nil {
+		item.HandledAt = formatTime(*t.HandledAt)
 	}
 	view := ParseTicketLogistics(t.Logistics)
 	item.NeedIntercept = view.Intercept
