@@ -16,6 +16,10 @@ export interface MarketplaceShop {
   lastSyncAt?: string
   lastSeenAt?: string
   nextSyncAt?: string
+  collectStatus?: 'disabled' | 'ok' | 'waiting' | 'stale' | 'error'
+  collectStatusLabel?: string
+  collectError?: string
+  collectErrorAt?: string
   syncRequested?: boolean
   pendingTicketCount?: number
   remark?: string
@@ -99,6 +103,17 @@ export const PLUGIN_STATUS_MAP: Record<PluginStatus, { label: string; type: '' |
   unbound: { label: '未启用', type: 'info' },
   online: { label: '已启用', type: 'success' },
   offline: { label: '已启用', type: 'success' },
+}
+
+export const COLLECT_STATUS_MAP: Record<
+  NonNullable<MarketplaceShop['collectStatus']>,
+  { label: string; type: '' | 'success' | 'warning' | 'info' | 'danger' }
+> = {
+  disabled: { label: '未启用', type: 'info' },
+  ok: { label: '正常', type: 'success' },
+  waiting: { label: '执行中', type: 'warning' },
+  stale: { label: '同步停滞', type: 'danger' },
+  error: { label: '采集异常', type: 'danger' },
 }
 
 export interface PluginSetting {

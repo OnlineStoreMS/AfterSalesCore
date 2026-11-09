@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Shop } from '@element-plus/icons-vue'
 import {
   PLATFORM_OPTIONS,
+  COLLECT_STATUS_MAP,
   PLUGIN_STATUS_MAP,
   PLUGIN_SYNC_OPTIONS,
   REFUND_APPLY_RANGE_OPTIONS,
@@ -165,6 +166,23 @@ function statusLabel(s: string) {
 
 function statusType(s: string) {
   return PLUGIN_STATUS_MAP[s as keyof typeof PLUGIN_STATUS_MAP]?.type || 'info'
+}
+
+function collectLabel(row: MarketplaceShop) {
+  return row.collectStatusLabel || COLLECT_STATUS_MAP[row.collectStatus || 'disabled']?.label || '—'
+}
+
+function collectType(row: MarketplaceShop) {
+  return COLLECT_STATUS_MAP[row.collectStatus || 'disabled']?.type || 'info'
+}
+
+function collectHint(row: MarketplaceShop) {
+  if (row.collectError) return row.collectError
+  if (row.collectStatus === 'stale') {
+    return row.lastSyncAt ? `最近成功同步 ${row.lastSyncAt}，之后没有新的采集结果` : '启用后还没有成功同步过'
+  }
+  if (row.collectStatus === 'waiting') return '已下发采集任务，等待 Agent 回传'
+  return ''
 }
 
 async function openCreate() {
@@ -367,14 +385,29 @@ async function handleRequestSync(row: MarketplaceShop) {
           </template>
         </el-table-column>
         <el-table-column prop="platformLabel" label="平台" width="100" />
-        <el-table-column label="采集" width="100" align="center">
+        <el-table-column label="采集" width="90" align="center">
           <template #default="{ row }">
             <el-tag v-if="!row.pluginAvailable" type="warning" size="small">未提供</el-tag>
             <el-tag v-else :type="statusType(row.pluginStatus)" size="small">{{ statusLabel(row.pluginStatus) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="采集状态" min-width="200">
+          <template #default="{ row }">
+            <el-tooltip v-if="collectHint(row)" :content="collectHint(row)" placement="top" :show-after="300">
+              <div class="collect-cell">
+                <el-tag :type="collectType(row)" size="small">{{ collectLabel(row) }}</el-tag>
+                <div v-if="row.collectError" class="collect-error">{{ row.collectError }}</div>
+              </div>
+            </el-tooltip>
+            <el-tag v-else :type="collectType(row)" size="small">{{ collectLabel(row) }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="lastSyncAt" label="最近同步" width="170">
-          <template #default="{ row }">{{ row.lastSyncAt || '—' }}</template>
+          <template #default="{ row }">
+            <span :class="{ 'sync-stale': row.collectStatus === 'stale' || row.collectStatus === 'error' }">
+              {{ row.lastSyncAt || '—' }}
+            </span>
+          </template>
         </el-table-column>
         <el-table-column prop="nextSyncAt" label="下次同步" width="190">
           <template #default="{ row }">{{ row.nextSyncAt || '—' }}</template>
@@ -484,4 +517,16 @@ async function handleRequestSync(row: MarketplaceShop) {
   background: #f56c6c; color: #fff; font-size: 12px; line-height: 18px; text-align: center;
 }
 .sub { color: #909399; font-size: 12px; margin-top: 2px; }
+.collect-cell { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 100%; }
+.collect-error {
+  color: #f56c6c;
+  font-size: 12px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+.sync-stale { color: #f56c6c; font-weight: 600; }
 </style>

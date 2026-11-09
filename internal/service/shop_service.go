@@ -1544,7 +1544,9 @@ func (s *ShopService) RequestSync(id uint64) (*dto.ShopItem, error) {
 	}
 	now := time.Now()
 	if err := s.dispatchAftersaleJob(shop); err != nil {
-		return nil, fmt.Errorf("触发 AgentsCenter 采集失败: %w", err)
+		msg := "触发 AgentsCenter 采集失败: " + err.Error()
+		_ = s.RecordCollectError(shop, msg)
+		return nil, fmt.Errorf("%s", msg)
 	}
 	interval := s.pluginSyncInterval(shop.TenantID)
 	s.markCollectTriggered(shop, interval, now)
@@ -1571,6 +1573,7 @@ func (s *ShopService) DispatchDueAgentJobs() (int, error) {
 			continue
 		}
 		if err := s.dispatchAftersaleJob(shop); err != nil {
+			_ = s.RecordCollectError(shop, "下发采集任务失败: "+err.Error())
 			continue
 		}
 		s.markCollectTriggered(shop, interval, now)
@@ -1589,6 +1592,8 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 	shop.LastSeenAt = &now
 	shop.LastSyncAt = &now
 	shop.SyncRequestedAt = nil
+	shop.CollectError = ""
+	shop.CollectErrorAt = nil
 	shop.PluginStatus = model.ShopPluginBound
 	// 不再用页面抓取结果覆盖店铺绑定的 platform_shop_id/name（串店根因之一）。
 
@@ -1889,7 +1894,15 @@ func (s *ShopService) toItem(shop *model.MarketplaceShop) dto.ShopItem {
 	}
 	item.SyncRequested = shop.SyncRequestedAt != nil
 	interval := s.pluginSyncInterval(shop.TenantID)
-	item.NextSyncAt = nextSyncHint(shop, interval, time.Now())
+	now := time.Now()
+	item.NextSyncAt = nextSyncHint(shop, interval, now)
+	item.CollectStatus, item.CollectStatusLabel = DeriveCollectStatus(shop, interval, now)
+	if hasFreshCollectError(shop) {
+		item.CollectError = strings.TrimSpace(shop.CollectError)
+		if shop.CollectErrorAt != nil {
+			item.CollectErrorAt = formatTime(*shop.CollectErrorAt)
+		}
+	}
 	return item
 }
 

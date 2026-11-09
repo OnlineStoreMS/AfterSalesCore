@@ -82,6 +82,7 @@ func (h *Handler) Sync(c *gin.Context) {
 	}
 	item, err := h.svc.Sync(shop, &in)
 	if err != nil {
+		_ = h.svc.RecordCollectError(shop, err.Error())
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -89,6 +90,28 @@ func (h *Handler) Sync(c *gin.Context) {
 		go h.notify.NotifyShop(context.Background(), shop.TenantID, shop.ID)
 	}
 	response.OK(c, item)
+}
+
+func (h *Handler) SyncFail(c *gin.Context) {
+	shop := mustShop(c)
+	if shop == nil {
+		response.Fail(c, http.StatusUnauthorized, service.ErrPluginAuth.Error())
+		return
+	}
+	var in dto.PluginCollectFailInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	msg := strings.TrimSpace(in.Error)
+	if msg == "" {
+		msg = "采集失败"
+	}
+	if err := h.svc.RecordCollectError(shop, msg); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"ok": true})
 }
 
 func pluginCreds(c *gin.Context) (key, secret string) {

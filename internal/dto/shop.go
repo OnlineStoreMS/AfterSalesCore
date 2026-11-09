@@ -49,6 +49,10 @@ type ShopItem struct {
 	LastSyncAt         string `json:"lastSyncAt,omitempty"`
 	LastSeenAt         string `json:"lastSeenAt,omitempty"`
 	NextSyncAt         string `json:"nextSyncAt,omitempty"`
+	CollectStatus      string `json:"collectStatus,omitempty"`
+	CollectStatusLabel string `json:"collectStatusLabel,omitempty"`
+	CollectError       string `json:"collectError,omitempty"`
+	CollectErrorAt     string `json:"collectErrorAt,omitempty"`
 	SyncRequested      bool   `json:"syncRequested"`
 	PendingTicketCount int    `json:"pendingTicketCount,omitempty"`
 	Remark             string `json:"remark,omitempty"`
@@ -209,6 +213,10 @@ type PluginSyncReturn struct {
 	ReturnTime          string `json:"returnTime"`
 	TrackJSON           string `json:"trackJson"`
 	RawJSON             string `json:"rawJson"`
+}
+
+type PluginCollectFailInput struct {
+	Error string `json:"error"`
 }
 
 type PluginSyncInput struct {

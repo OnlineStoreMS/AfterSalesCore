@@ -28,6 +28,8 @@ type MarketplaceShop struct {
 	LastSyncAt       *time.Time `json:"lastSyncAt"`
 	LastSeenAt       *time.Time `json:"lastSeenAt"`
 	SyncRequestedAt  *time.Time `json:"syncRequestedAt"`
+	CollectError     string     `gorm:"type:text" json:"collectError"`
+	CollectErrorAt   *time.Time `json:"collectErrorAt"`
 	// AgentNextRunAt 新框架采集下次触发时间；到点由售后调度向 Agents 触发执行（非 pluginShouldSync）。
 	AgentNextRunAt *time.Time `json:"agentNextRunAt"`
 	Remark         string     `gorm:"type:text" json:"remark"`

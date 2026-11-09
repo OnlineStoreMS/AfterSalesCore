@@ -130,6 +130,16 @@ func (r *ShopRepo) TouchHeartbeat(shop *model.MarketplaceShop) error {
 	return r.db.Model(&model.MarketplaceShop{}).Where("id = ?", shop.ID).Updates(updates).Error
 }
 
+func (r *ShopRepo) SaveCollectError(id uint64, errMsg string, at *time.Time) error {
+	return r.db.Model(&model.MarketplaceShop{}).Where("id = ?", id).
+		Select("collect_error", "collect_error_at", "updated_at").
+		Updates(map[string]any{
+			"collect_error":    errMsg,
+			"collect_error_at": at,
+			"updated_at":       time.Now(),
+		}).Error
+}
+
 func (r *ShopRepo) Delete(id uint64) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		var tickets []model.AftersaleTicket

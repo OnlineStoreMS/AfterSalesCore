@@ -91,6 +91,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	authed.Use(pluginH.AuthRequired())
 	authed.POST("/heartbeat", pluginH.Heartbeat)
 	authed.POST("/sync", pluginH.Sync)
+	authed.POST("/sync-fail", pluginH.SyncFail)
 
 	internalGroup := v1.Group("/internal")
 	internalGroup.Use(internalH.AuthRequired())
