@@ -154,6 +154,7 @@ onMounted(() => {
           <el-option label="待取件" value="待取件" />
           <el-option label="已签收" value="已签收" />
           <el-option label="运输中" value="运输中" />
+          <el-option label="已退回" value="已退回" />
           <el-option label="已发货" value="已发货" />
           <el-option label="已取消" value="已取消" />
         </el-select>
