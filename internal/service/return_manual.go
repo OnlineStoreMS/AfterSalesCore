@@ -91,6 +91,9 @@ func (s *ShopService) CreateManualReturn(in dto.ManualReturnRequest, bearerToken
 		}
 		return nil, err
 	}
+	if err := s.mirrorReturnToShippedRefund(item); err != nil {
+		return nil, err
+	}
 	out := toReturnItem(item, shopName)
 	list := []dto.ReturnPackageItem{out}
 	s.attachFenFaRemarks(list, bearerToken)
@@ -211,10 +214,25 @@ func (s *ShopService) UpdateManualReturn(id uint64, in dto.ManualReturnRequest, 
 		}
 		return nil, err
 	}
+	if err := s.mirrorReturnToShippedRefund(item); err != nil {
+		return nil, err
+	}
 	out := toReturnItem(item, shopName)
 	list := []dto.ReturnPackageItem{out}
 	s.attachFenFaRemarks(list, bearerToken)
 	return &list[0], nil
+}
+
+func (s *ShopService) mirrorReturnToShippedRefund(item *model.ReturnPackage) error {
+	row, ok := shippedRefundFromReturn(item)
+	if !ok || item.ShopID == 0 {
+		return nil
+	}
+	shop, err := s.repo().Get(item.ShopID)
+	if err != nil {
+		return err
+	}
+	return s.repo().UpsertShippedRefunds(shop, []model.ShippedRefundSuccess{row})
 }
 
 func isUniqueViolation(err error) bool {

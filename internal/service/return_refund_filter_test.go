@@ -1,6 +1,10 @@
 package service
 
-import "testing"
+import (
+	"testing"
+
+	"aftersalescore/internal/model"
+)
 
 func TestIsShippedRefundSuccessRecord(t *testing.T) {
 	cases := []struct {
@@ -44,5 +48,25 @@ func TestIsReturnRefundSuccessRecord(t *testing.T) {
 		if got != c.ok {
 			t.Fatalf("type=%q status=%q got %v want %v", c.typ, c.status, got, c.ok)
 		}
+	}
+}
+
+func TestShippedRefundFromReturnKeepsReturned(t *testing.T) {
+	got, ok := shippedRefundFromReturn(&model.ReturnPackage{
+		PlatformAftersaleID: "A1",
+		AftersaleType:       "已发货退款",
+		Status:              "已退回",
+		Logistics:           "已退回",
+		LogisticsNo:         "SF1",
+	})
+	if !ok || got.LogisticsStatus != LogisticsReturned || got.LogisticsNo != "SF1" {
+		t.Fatalf("returned shipped refund = %+v ok=%v", got, ok)
+	}
+	if _, ok := shippedRefundFromReturn(&model.ReturnPackage{
+		PlatformAftersaleID: "A2",
+		AftersaleType:       "退货退款",
+		Status:              "已退回",
+	}); ok {
+		t.Fatal("退货退款 should stay out of 已发货退款")
 	}
 }

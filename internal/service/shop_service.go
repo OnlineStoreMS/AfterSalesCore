@@ -937,6 +937,54 @@ func (s *ShopService) successTicketsForAllList(shopID uint64, applyFrom, applyTo
 	return out, nil
 }
 
+func shippedRefundFromReturn(item *model.ReturnPackage) (model.ShippedRefundSuccess, bool) {
+	if item == nil || strings.TrimSpace(item.PlatformAftersaleID) == "" {
+		return model.ShippedRefundSuccess{}, false
+	}
+	if !IsShippedRefundSuccessRecord(item.AftersaleType) {
+		return model.ShippedRefundSuccess{}, false
+	}
+	logistics := strings.TrimSpace(item.Logistics)
+	trackJSON := strings.TrimSpace(item.TrackJSON)
+	status := ClassifyShippedRefundStatus(logistics, trackJSON, "")
+	if status == "" {
+		status = matchLogisticsKeyword(item.Status)
+	}
+	if status == "" {
+		status = LogisticsShipped
+	}
+	applyTime := strings.TrimSpace(item.ApplyTime)
+	appliedAt := item.AppliedAt
+	if appliedAt == nil {
+		appliedAt = ParsePlatformDateTime(applyTime, 0)
+	}
+	return model.ShippedRefundSuccess{
+		PlatformAftersaleID: strings.TrimSpace(item.PlatformAftersaleID),
+		OrderNo:             strings.TrimSpace(item.OrderNo),
+		ProductTitle:        strings.TrimSpace(item.ProductTitle),
+		ProductImage:        strings.TrimSpace(item.ProductImage),
+		SKU:                 strings.TrimSpace(item.SKU),
+		Qty:                 item.Qty,
+		BuyQty:              item.BuyQty,
+		PayAmount:           strings.TrimSpace(item.PayAmount),
+		RefundAmount:        strings.TrimSpace(item.RefundAmount),
+		AftersaleType:       strings.TrimSpace(item.AftersaleType),
+		Reason:              strings.TrimSpace(item.Reason),
+		Status:              strings.TrimSpace(item.Status),
+		OrderInfo:           strings.TrimSpace(item.OrderInfo),
+		AftersaleInfo:       strings.TrimSpace(item.AftersaleInfo),
+		Logistics:           logistics,
+		LogisticsStatus:     status,
+		LogisticsNo:         strings.TrimSpace(item.LogisticsNo),
+		Carrier:             strings.TrimSpace(item.Carrier),
+		ShipTime:            strings.TrimSpace(item.ShipTime),
+		TrackJSON:           trackJSON,
+		ApplyTime:           applyTime,
+		AppliedAt:           appliedAt,
+		RawJSON:             item.RawJSON,
+	}, true
+}
+
 func ticketFromShippedRefund(item *model.ShippedRefundSuccess) model.AftersaleTicket {
 	t := model.AftersaleTicket{
 		ID: item.ID + allListShippedIDBase, ShopID: item.ShopID,
@@ -1841,6 +1889,7 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 	}
 
 	returnCount := 0
+	var syncedReturns []model.ReturnPackage
 	if in.Returns != nil && len(*in.Returns) > 0 {
 		returns := make([]model.ReturnPackage, 0, len(*in.Returns))
 		for _, item := range *in.Returns {
@@ -1884,60 +1933,81 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 		if err := s.repos.Shop.UpsertReturns(shop, returns); err != nil {
 			return nil, err
 		}
+		syncedReturns = returns
 		returnCount = len(returns)
 	}
 
 	shippedCount := 0
-	if in.ShippedRefunds != nil {
-		shipped := make([]model.ShippedRefundSuccess, 0, len(*in.ShippedRefunds))
-		for _, item := range *in.ShippedRefunds {
-			aid := strings.TrimSpace(item.PlatformAftersaleID)
-			if aid == "" {
-				continue
+	if in.ShippedRefunds != nil || len(syncedReturns) > 0 {
+		shipped := make([]model.ShippedRefundSuccess, 0)
+		seen := map[string]struct{}{}
+		if in.ShippedRefunds != nil {
+			shipped = make([]model.ShippedRefundSuccess, 0, len(*in.ShippedRefunds))
+			for _, item := range *in.ShippedRefunds {
+				aid := strings.TrimSpace(item.PlatformAftersaleID)
+				if aid == "" {
+					continue
+				}
+				if !IsShippedRefundSuccessRecord(strings.TrimSpace(item.AftersaleType)) {
+					continue
+				}
+				logistics := strings.TrimSpace(item.Logistics)
+				trackJSON := LimitLogisticsTracksJSON(item.TrackJSON)
+				status := ClassifyShippedRefundStatus(logistics, trackJSON, item.LogisticsStatus)
+				if status == "" {
+					status = LogisticsShipped
+				}
+				seen[aid] = struct{}{}
+				applyTime := strings.TrimSpace(item.ApplyTime)
+				shipped = append(shipped, model.ShippedRefundSuccess{
+					PlatformAftersaleID: aid,
+					OrderNo:             strings.TrimSpace(item.OrderNo),
+					ProductTitle:        strings.TrimSpace(item.ProductTitle),
+					ProductImage:        strings.TrimSpace(item.ProductImage),
+					SKU:                 strings.TrimSpace(item.SKU),
+					ProductTags:         strings.TrimSpace(item.ProductTags),
+					Tags:                strings.TrimSpace(item.Tags),
+					Qty:                 item.Qty,
+					BuyQty:              item.BuyQty,
+					PayAmount:           strings.TrimSpace(item.PayAmount),
+					RefundAmount:        strings.TrimSpace(item.RefundAmount),
+					AftersaleType:       strings.TrimSpace(item.AftersaleType),
+					Reason:              strings.TrimSpace(item.Reason),
+					Status:              strings.TrimSpace(item.Status),
+					OrderInfo:           strings.TrimSpace(item.OrderInfo),
+					AftersaleInfo:       strings.TrimSpace(item.AftersaleInfo),
+					Logistics:           logistics,
+					LogisticsStatus:     status,
+					LogisticsNo:         strings.TrimSpace(item.LogisticsNo),
+					Carrier:             strings.TrimSpace(item.Carrier),
+					ShipTime:            strings.TrimSpace(item.ShipTime),
+					TrackJSON:           trackJSON,
+					ApplyTime:           applyTime,
+					AppliedAt:           ParsePlatformDateTime(applyTime, 0),
+					RawJSON:             item.RawJSON,
+				})
 			}
-			if !IsShippedRefundSuccessRecord(strings.TrimSpace(item.AftersaleType)) {
-				continue
-			}
-			logistics := strings.TrimSpace(item.Logistics)
-			trackJSON := LimitLogisticsTracksJSON(item.TrackJSON)
-			status := ClassifyShippedRefundStatus(logistics, trackJSON, item.LogisticsStatus)
-			if status == LogisticsReturned {
-				continue
-			}
-			applyTime := strings.TrimSpace(item.ApplyTime)
-			shipped = append(shipped, model.ShippedRefundSuccess{
-				PlatformAftersaleID: aid,
-				OrderNo:             strings.TrimSpace(item.OrderNo),
-				ProductTitle:        strings.TrimSpace(item.ProductTitle),
-				ProductImage:        strings.TrimSpace(item.ProductImage),
-				SKU:                 strings.TrimSpace(item.SKU),
-				ProductTags:         strings.TrimSpace(item.ProductTags),
-				Tags:                strings.TrimSpace(item.Tags),
-				Qty:                 item.Qty,
-				BuyQty:              item.BuyQty,
-				PayAmount:           strings.TrimSpace(item.PayAmount),
-				RefundAmount:        strings.TrimSpace(item.RefundAmount),
-				AftersaleType:       strings.TrimSpace(item.AftersaleType),
-				Reason:              strings.TrimSpace(item.Reason),
-				Status:              strings.TrimSpace(item.Status),
-				OrderInfo:           strings.TrimSpace(item.OrderInfo),
-				AftersaleInfo:       strings.TrimSpace(item.AftersaleInfo),
-				Logistics:           logistics,
-				LogisticsStatus:     status,
-				LogisticsNo:         strings.TrimSpace(item.LogisticsNo),
-				Carrier:             strings.TrimSpace(item.Carrier),
-				ShipTime:            strings.TrimSpace(item.ShipTime),
-				TrackJSON:           trackJSON,
-				ApplyTime:           applyTime,
-				AppliedAt:           ParsePlatformDateTime(applyTime, 0),
-				RawJSON:             item.RawJSON,
-			})
 		}
-		if err := s.repos.Shop.UpsertShippedRefunds(shop, shipped); err != nil {
-			return nil, err
+		for i := range syncedReturns {
+			row, ok := shippedRefundFromReturn(&syncedReturns[i])
+			if !ok {
+				continue
+			}
+			if _, exists := seen[row.PlatformAftersaleID]; exists {
+				continue
+			}
+			seen[row.PlatformAftersaleID] = struct{}{}
+			shipped = append(shipped, row)
 		}
-		if err := s.repos.Shop.DeleteUnshippedShippedRefunds(shop.ID); err != nil {
-			return nil, err
+		if len(shipped) > 0 {
+			if err := s.repos.Shop.UpsertShippedRefunds(shop, shipped); err != nil {
+				return nil, err
+			}
+		}
+		if in.ShippedRefunds != nil {
+			if err := s.repos.Shop.DeleteUnshippedShippedRefunds(shop.ID); err != nil {
+				return nil, err
+			}
 		}
 		shippedCount = len(shipped)
 	}
