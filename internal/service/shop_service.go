@@ -700,7 +700,13 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 			return nil, nil, nil, nil, 0, err
 		}
 	}
-	list, err := s.repo().ListOpenTickets(q.ShopID)
+	var list []model.AftersaleTicket
+	var err error
+	if q.Kind == dto.TicketKindAll {
+		list, err = s.repo().ListAllTickets(q.ShopID)
+	} else {
+		list, err = s.repo().ListOpenTickets(q.ShopID)
+	}
 	if err != nil {
 		return nil, nil, nil, nil, 0, err
 	}
@@ -721,7 +727,18 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 	applyFrom := ParseQueryDateTime(q.ApplyFrom, false)
 	applyTo := ParseQueryDateTime(q.ApplyTo, true)
 	filterSigned := (q.Kind == dto.TicketKindBuyerReturnSigned || q.Kind == dto.TicketKindAll) && (signedFrom != nil || signedTo != nil)
-	filterApply := q.Kind == dto.TicketKindAll && (applyFrom != nil || applyTo != nil)
+	filterApply := q.Kind == dto.TicketKindAll
+	if q.Kind == dto.TicketKindAll && applyFrom == nil && applyTo == nil {
+		from, to := DefaultAllTicketApplyRange(time.Now())
+		applyFrom, applyTo = &from, &to
+	}
+	if q.Kind == dto.TicketKindAll {
+		extras, extraErr := s.successTicketsForAllList(q.ShopID, applyFrom, applyTo)
+		if extraErr != nil {
+			return nil, nil, nil, nil, 0, extraErr
+		}
+		list = mergeTicketsByAftersale(list, extras)
+	}
 	filtered := make([]model.AftersaleTicket, 0, len(list))
 	signedAtOf := make(map[uint64]*time.Time, len(list))
 	appliedAtOf := make(map[uint64]*time.Time, len(list))
@@ -773,7 +790,7 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		if filterSigned && !TimeInRange(signedAt, signedFrom, signedTo) {
 			continue
 		}
-		appliedAt := ParsePlatformDateTime(t.ApplyTime, 0)
+		appliedAt := ticketApplyAt(t)
 		if filterApply && !TimeInRange(appliedAt, applyFrom, applyTo) {
 			continue
 		}
@@ -840,6 +857,113 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		out = append(out, item)
 	}
 	return out, reasons, statuses, aftersaleTypes, total, nil
+}
+
+const (
+	allListShippedIDBase = uint64(1) << 60
+	allListReturnIDBase  = uint64(1) << 61
+)
+
+func ticketApplyAt(t *model.AftersaleTicket) *time.Time {
+	if t == nil {
+		return nil
+	}
+	if at := ParsePlatformDateTime(t.ApplyTime, 0); at != nil {
+		return at
+	}
+	if !t.SyncedAt.IsZero() {
+		ts := t.SyncedAt
+		return &ts
+	}
+	if !t.CreatedAt.IsZero() {
+		ts := t.CreatedAt
+		return &ts
+	}
+	return nil
+}
+
+func ticketAftersaleKey(shopID uint64, aftersaleID string) string {
+	return fmt.Sprintf("%d:%s", shopID, strings.TrimSpace(aftersaleID))
+}
+
+func mergeTicketsByAftersale(primary, extra []model.AftersaleTicket) []model.AftersaleTicket {
+	seen := make(map[string]struct{}, len(primary)+len(extra))
+	out := make([]model.AftersaleTicket, 0, len(primary)+len(extra))
+	for i := range primary {
+		key := ticketAftersaleKey(primary[i].ShopID, primary[i].PlatformAftersaleID)
+		if key == "0:" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, primary[i])
+	}
+	for i := range extra {
+		key := ticketAftersaleKey(extra[i].ShopID, extra[i].PlatformAftersaleID)
+		if key == "0:" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, extra[i])
+	}
+	return out
+}
+
+func (s *ShopService) successTicketsForAllList(shopID uint64, applyFrom, applyTo *time.Time) ([]model.AftersaleTicket, error) {
+	shipped, _, err := s.repo().ListShippedRefunds(repo.ShippedRefundListFilter{
+		ShopID: shopID, ApplyFrom: applyFrom, ApplyTo: applyTo, Unpaged: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	returns, _, err := s.repo().ListReturnRefunds(repo.ReturnRefundListFilter{
+		ShopID: shopID, ApplyFrom: applyFrom, ApplyTo: applyTo, Unpaged: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.AftersaleTicket, 0, len(shipped)+len(returns))
+	for i := range shipped {
+		out = append(out, ticketFromShippedRefund(&shipped[i]))
+	}
+	for i := range returns {
+		out = append(out, ticketFromReturnRefund(&returns[i]))
+	}
+	return out, nil
+}
+
+func ticketFromShippedRefund(item *model.ShippedRefundSuccess) model.AftersaleTicket {
+	t := model.AftersaleTicket{
+		ID: item.ID + allListShippedIDBase, ShopID: item.ShopID,
+		PlatformAftersaleID: item.PlatformAftersaleID, OrderNo: item.OrderNo,
+		ProductTitle: item.ProductTitle, ProductImage: item.ProductImage, SKU: item.SKU,
+		ProductTags: item.ProductTags, Tags: item.Tags,
+		Qty: item.Qty, BuyQty: item.BuyQty, PayAmount: item.PayAmount, RefundAmount: item.RefundAmount,
+		AftersaleType: firstNonEmpty(item.AftersaleType, "已发货退款"), Reason: item.Reason, Status: item.Status,
+		Logistics: item.Logistics, ReturnLogisticsNo: item.LogisticsNo,
+		TrackJSON: item.TrackJSON, ApplyTime: item.ApplyTime,
+		SyncedAt: item.SyncedAt, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
+	}
+	return t
+}
+
+func ticketFromReturnRefund(item *model.ReturnRefundSuccess) model.AftersaleTicket {
+	return model.AftersaleTicket{
+		ID: item.ID + allListReturnIDBase, ShopID: item.ShopID,
+		PlatformAftersaleID: item.PlatformAftersaleID, OrderNo: item.OrderNo,
+		ProductTitle: item.ProductTitle, ProductImage: item.ProductImage, SKU: item.SKU,
+		ProductTags: item.ProductTags, Tags: item.Tags,
+		Qty: item.Qty, BuyQty: item.BuyQty, PayAmount: item.PayAmount, RefundAmount: item.RefundAmount,
+		AftersaleType: firstNonEmpty(item.AftersaleType, "退货退款"), Reason: item.Reason, Status: item.Status,
+		Logistics: item.Logistics, ReturnLogisticsNo: item.LogisticsNo,
+		TrackJSON: item.TrackJSON, ApplyTime: item.ApplyTime,
+		SyncedAt: item.SyncedAt, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt,
+	}
 }
 
 func shopTicketKeywordMatch(t *model.AftersaleTicket, shopName, kw string) bool {

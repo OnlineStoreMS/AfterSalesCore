@@ -102,21 +102,9 @@ watch(() => route.path, () => {
         <template #title>
           <el-icon><HomeFilled /></el-icon>
           <span>工作台</span>
-          <span
-            v-if="counts.ticketTotal"
-            class="nav-badge"
-            :title="`全部售后单 ${counts.ticketTotal}`"
-          >{{ badgeText(counts.ticketTotal) }}</span>
         </template>
         <el-menu-item index="/dashboard" @click="navigate('/dashboard')">概览</el-menu-item>
-        <el-menu-item index="/shops/all-tickets" @click="navigate('/shops/all-tickets')">
-          全部售后单
-          <span
-            v-if="counts.ticketTotal"
-            class="nav-badge"
-            :title="`全部售后单 ${counts.ticketTotal}`"
-          >{{ badgeText(counts.ticketTotal) }}</span>
-        </el-menu-item>
+        <el-menu-item index="/shops/all-tickets" @click="navigate('/shops/all-tickets')">全部售后单</el-menu-item>
       </el-sub-menu>
       <el-sub-menu index="shops">
         <template #title>

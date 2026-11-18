@@ -115,6 +115,13 @@ func SignedAtFromTrackJSON(trackJSON, applyTime, shipTime string) *time.Time {
 	return ParsePlatformDateTime(raw, yearHintFrom(applyTime, shipTime))
 }
 
+func DefaultAllTicketApplyRange(now time.Time) (from, to time.Time) {
+	to = time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
+	start := now.AddDate(0, -6, 0)
+	from = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+	return from, to
+}
+
 func TimeInRange(t, from, to *time.Time) bool {
 	if from == nil && to == nil {
 		return true

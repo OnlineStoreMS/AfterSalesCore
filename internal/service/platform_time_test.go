@@ -71,6 +71,17 @@ func TestSignedAtFromTrackJSONAndRange(t *testing.T) {
 	}
 }
 
+func TestDefaultAllTicketApplyRange(t *testing.T) {
+	now := time.Date(2026, 11, 19, 12, 0, 0, 0, time.Local)
+	from, to := DefaultAllTicketApplyRange(now)
+	if from.Year() != 2026 || from.Month() != time.May || from.Day() != 19 {
+		t.Fatalf("from %v", from)
+	}
+	if from.Hour() != 0 || to.Hour() != 23 || to.Day() != 19 {
+		t.Fatalf("bounds %v %v", from, to)
+	}
+}
+
 func TestCompareDeadlineRemainSoonestFirst(t *testing.T) {
 	soon := time.Now().Add(time.Hour)
 	later := time.Now().Add(48 * time.Hour)

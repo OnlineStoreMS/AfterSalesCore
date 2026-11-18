@@ -56,4 +56,22 @@ export const dateShortcuts = [
       return [start, end]
     },
   },
+  {
+    text: '最近半年',
+    value: () => lastHalfYearRangeDates(),
+  },
 ]
+
+export function lastHalfYearRangeDates(): [Date, Date] {
+  const end = new Date()
+  end.setHours(23, 59, 59, 0)
+  const start = new Date()
+  start.setMonth(start.getMonth() - 6)
+  start.setHours(0, 0, 0, 0)
+  return [start, end]
+}
+
+export function lastHalfYearRange(): [string, string] {
+  const [start, end] = lastHalfYearRangeDates()
+  return [formatDateTimeLocal(start), formatDateTimeLocal(end)]
+}

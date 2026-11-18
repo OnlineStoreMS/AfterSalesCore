@@ -165,6 +165,21 @@ func TestMatchShopTicketKind(t *testing.T) {
 	}
 }
 
+func TestMergeTicketsByAftersalePrefersPrimary(t *testing.T) {
+	primary := []model.AftersaleTicket{{ID: 1, ShopID: 9, PlatformAftersaleID: "A1", Status: "待审核"}}
+	extra := []model.AftersaleTicket{{ID: 99, ShopID: 9, PlatformAftersaleID: "A1", Status: "退款成功"}, {ID: 2, ShopID: 9, PlatformAftersaleID: "A2"}}
+	got := mergeTicketsByAftersale(primary, extra)
+	if len(got) != 2 {
+		t.Fatalf("len=%d", len(got))
+	}
+	if got[0].Status != "待审核" {
+		t.Fatalf("should keep workbench ticket, got %s", got[0].Status)
+	}
+	if got[1].PlatformAftersaleID != "A2" {
+		t.Fatalf("missing extra %s", got[1].PlatformAftersaleID)
+	}
+}
+
 func TestInterceptFromTicketCopiesTimeout(t *testing.T) {
 	deadline := time.Date(2026, 9, 26, 22, 11, 18, 0, time.Local)
 	item := interceptFromTicket(&model.AftersaleTicket{

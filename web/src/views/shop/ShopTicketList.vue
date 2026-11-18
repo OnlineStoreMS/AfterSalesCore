@@ -14,7 +14,7 @@ import {
   type ShopTicketKind,
 } from '../../api/shop'
 import { fetchIssueMeta, type IssueMeta } from '../../api/issue'
-import { dateRangeDefaultTime, dateShortcuts } from '../../utils/date'
+import { dateRangeDefaultTime, dateShortcuts, lastHalfYearRange } from '../../utils/date'
 import { parseTicketLogistics, signedTimeFromTracks, displayTrackDetail } from '../../utils/ticketLogistics'
 
 const route = useRoute()
@@ -38,7 +38,7 @@ const aftersaleType = ref('')
 const aftersaleTypes = ref<string[]>([])
 const handleStatus = ref('')
 const signedRange = ref<[string, string] | null>(null)
-const applyRange = ref<[string, string] | null>(null)
+const applyRange = ref<[string, string] | null>(kind.value === 'all' ? lastHalfYearRange() : null)
 const issueMeta = ref<IssueMeta>({ problemTypes: [], handleMethods: [], statuses: [] })
 const issueVisible = ref(false)
 const issueSaving = ref(false)
@@ -301,7 +301,7 @@ watch(kind, async () => {
   aftersaleTypes.value = []
   handleStatus.value = kind.value === 'buyer-return-signed' ? 'pending' : ''
   signedRange.value = null
-  applyRange.value = null
+  applyRange.value = kind.value === 'all' ? lastHalfYearRange() : null
   sortBy.value = kind.value === 'all' ? 'applyTime' : 'remainTime'
   sortOrder.value = kind.value === 'all' ? 'desc' : 'asc'
   sortReady.value = false

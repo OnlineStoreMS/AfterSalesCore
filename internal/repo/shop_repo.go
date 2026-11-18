@@ -326,12 +326,22 @@ func (r *ShopRepo) UpsertTickets(shop *model.MarketplaceShop, tickets []model.Af
 		if err := q.Delete(&model.AftersaleTicketCard{}).Error; err != nil {
 			return err
 		}
-		left := tx.Where("shop_id = ?", shop.ID)
-		if len(seenIDs) > 0 {
-			left = left.Where("id NOT IN ?", seenIDs)
-		}
-		return left.Delete(&model.AftersaleTicket{}).Error
+		// 离开工作台的单保留行，供「全部售后单」按申请时间回看。
+		return nil
 	})
+}
+
+func (r *ShopRepo) ListAllTickets(shopID uint64) ([]model.AftersaleTicket, error) {
+	q := r.db.Model(&model.AftersaleTicket{}).Scopes(scopeTenant(r.tenantID))
+	if shopID > 0 {
+		q = q.Where("shop_id = ?", shopID)
+	}
+	var list []model.AftersaleTicket
+	err := q.Preload("CardKeys").
+		Order("id DESC").
+		Limit(8000).
+		Find(&list).Error
+	return list, err
 }
 
 func uniqueStrings(in []string) []string {
