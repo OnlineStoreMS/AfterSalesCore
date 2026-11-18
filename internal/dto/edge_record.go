@@ -4,6 +4,8 @@ type EdgeRecordCreateInput struct {
 	Type        string `json:"type" binding:"required"`
 	TrackingNo  string `json:"trackingNo" binding:"required"`
 	Remark      string `json:"remark"`
+	EdgeID      string `json:"edgeId"`
+	EdgeName    string `json:"edgeName"`
 }
 
 type EdgeRecordCompleteInput struct {

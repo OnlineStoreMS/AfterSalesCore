@@ -73,8 +73,26 @@ func (s *EdgeRecordService) Create(in *dto.EdgeRecordCreateInput) (*dto.EdgeReco
 	if trackingNo == "" {
 		return nil, ErrBadRequest
 	}
+	edgeID := s.cloudEdgeID
+	if wireless := wirelessEdgeID(in.EdgeID); wireless != "" {
+		edgeID = wireless
+		name := strings.TrimSpace(in.EdgeName)
+		if name == "" {
+			name = "无线录制端"
+		}
+		if err := s.repos.EdgeDevice.UpsertByEdgeID(edgeID, name); err != nil {
+			return nil, err
+		}
+		if dev, err := s.repos.EdgeDevice.GetByEdgeID(edgeID); err == nil {
+			now := time.Now()
+			dev.Status = model.EdgeDeviceStatusOnline
+			dev.LastSeenAt = &now
+			dev.Remark = "无线录制端"
+			_ = s.repos.EdgeDevice.Save(dev)
+		}
+	}
 	rec := &model.EdgeRecord{
-		EdgeID: s.cloudEdgeID, Type: recordType,
+		EdgeID: edgeID, Type: recordType,
 		TrackingNumber: trackingNo, Status: model.EdgeRecordStatusDraft,
 		Remark: strings.TrimSpace(in.Remark), PhotoPaths: model.StringSlice{},
 	}
@@ -229,13 +247,26 @@ func (s *EdgeRecordService) getEditableCloudRecord(id int64) (*model.EdgeRecord,
 	if err != nil {
 		return nil, err
 	}
-	if rec.EdgeID != s.cloudEdgeID {
+	if rec.EdgeID != s.cloudEdgeID && !strings.HasPrefix(rec.EdgeID, "pda-") {
 		return nil, ErrInvalidStatus
 	}
 	if rec.Status == model.EdgeRecordStatusCompleted {
 		return nil, ErrInvalidStatus
 	}
 	return rec, nil
+}
+
+func wirelessEdgeID(raw string) string {
+	id := strings.TrimSpace(raw)
+	if !strings.HasPrefix(id, "pda-") || len(id) < 5 || len(id) > 64 {
+		return ""
+	}
+	for _, r := range id {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+			return ""
+		}
+	}
+	return id
 }
 
 func (s *EdgeRecordService) edgeNameMap() map[string]string {
