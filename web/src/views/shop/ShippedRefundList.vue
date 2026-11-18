@@ -205,7 +205,7 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="售后信息" min-width="220">
           <template #default="{ row }">
-            <div>{{ row.aftersaleType || '已发货退款' }}</div>
+            <div>{{ row.aftersaleType || '—' }}</div>
             <div class="sub">售后退款 ¥{{ row.refundAmount || '—' }}</div>
             <div class="sub">申请件数 {{ row.qty || 0 }} 件</div>
             <div v-if="row.reason" class="sub">申请原因 {{ row.reason }}</div>

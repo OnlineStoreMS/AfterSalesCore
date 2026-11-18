@@ -637,6 +637,7 @@ func (r *ShopRepo) ListShippedRefunds(f ShippedRefundListFilter) ([]model.Shippe
 	if f.ShopID > 0 {
 		q = q.Where("shop_id = ?", f.ShopID)
 	}
+	q = q.Where("aftersale_type ILIKE ? AND aftersale_type NOT ILIKE ?", "%已发货退款%", "%未发货退款%")
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
 		like := "%" + kw + "%"
 		q = q.Where(
@@ -700,7 +701,8 @@ func (r *ShopRepo) ListInterceptTickets(shopID uint64, keyword string) ([]model.
 
 func (r *ShopRepo) ListShippedRefundReasons(shopID uint64) ([]string, error) {
 	q := r.db.Model(&model.ShippedRefundSuccess{}).Scopes(scopeTenant(r.tenantID)).
-		Where("COALESCE(reason, '') <> ''")
+		Where("COALESCE(reason, '') <> ''").
+		Where("aftersale_type ILIKE ? AND aftersale_type NOT ILIKE ?", "%已发货退款%", "%未发货退款%")
 	if shopID > 0 {
 		q = q.Where("shop_id = ?", shopID)
 	}
@@ -712,12 +714,20 @@ func (r *ShopRepo) ListShippedRefundReasons(shopID uint64) ([]string, error) {
 func (r *ShopRepo) ListShippedRefundsByStatus(shopID uint64, status string) ([]model.ShippedRefundSuccess, error) {
 	var list []model.ShippedRefundSuccess
 	q := r.db.Model(&model.ShippedRefundSuccess{}).Scopes(scopeTenant(r.tenantID)).
-		Where("logistics_status = ?", status)
+		Where("logistics_status = ?", status).
+		Where("aftersale_type ILIKE ? AND aftersale_type NOT ILIKE ?", "%已发货退款%", "%未发货退款%")
 	if shopID > 0 {
 		q = q.Where("shop_id = ?", shopID)
 	}
 	err := q.Order("COALESCE(applied_at, synced_at) DESC").Find(&list).Error
 	return list, err
+}
+
+func (r *ShopRepo) DeleteUnshippedShippedRefunds(shopID uint64) error {
+	return r.db.Scopes(scopeTenant(r.tenantID)).
+		Where("shop_id = ?", shopID).
+		Where("aftersale_type NOT ILIKE ? OR aftersale_type ILIKE ?", "%已发货退款%", "%未发货退款%").
+		Delete(&model.ShippedRefundSuccess{}).Error
 }
 
 func (r *ShopRepo) UpsertShippedRefunds(shop *model.MarketplaceShop, items []model.ShippedRefundSuccess) error {

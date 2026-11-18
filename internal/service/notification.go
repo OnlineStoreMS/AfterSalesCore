@@ -466,6 +466,9 @@ func (s *NotificationService) sendScenario(
 			return 0, 0, 0, "", err
 		}
 		for _, row := range rows {
+			if !IsShippedRefundSuccessRecord(row.AftersaleType) {
+				continue
+			}
 			if ClassifyShippedRefundStatus(row.Logistics, row.TrackJSON, row.LogisticsStatus) != status {
 				continue
 			}

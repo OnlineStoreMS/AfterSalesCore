@@ -985,6 +985,9 @@ func (s *ShopService) ListIntercepts(q dto.InterceptListQuery) ([]dto.InterceptI
 		if !IsMerchantInterceptPickup(p.Logistics, p.LogisticsStatus) {
 			continue
 		}
+		if !IsShippedRefundSuccessRecord(p.AftersaleType) {
+			continue
+		}
 		if kw != "" && !interceptKeywordMatch(p, kw) {
 			continue
 		}
@@ -1265,6 +1268,21 @@ func (s *ShopService) MarkReturnRefundLabelPrinted(ids []uint64) error {
 		return fmt.Errorf("%w: 请选择要记录的记录", ErrBadRequest)
 	}
 	return s.repo().IncrementReturnRefundLabelPrint(clean)
+}
+
+// IsShippedRefundSuccessRecord 已发货退款成功列表仅收：售后类型=已发货退款（排除未发货退款）。
+func IsShippedRefundSuccessRecord(aftersaleType string) bool {
+	typ := strings.TrimSpace(aftersaleType)
+	if typ == "" {
+		return false
+	}
+	if strings.Contains(typ, "未发货退款") {
+		return false
+	}
+	if strings.Contains(typ, "退货退款") {
+		return false
+	}
+	return strings.Contains(typ, "已发货退款")
 }
 
 // IsReturnRefundSuccessRecord 退货退款成功列表仅收：售后类型=退货退款（排除未发货/已发货退款），状态含退款成功。
@@ -1711,11 +1729,14 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 	}
 
 	shippedCount := 0
-	if in.ShippedRefunds != nil && len(*in.ShippedRefunds) > 0 {
+	if in.ShippedRefunds != nil {
 		shipped := make([]model.ShippedRefundSuccess, 0, len(*in.ShippedRefunds))
 		for _, item := range *in.ShippedRefunds {
 			aid := strings.TrimSpace(item.PlatformAftersaleID)
 			if aid == "" {
+				continue
+			}
+			if !IsShippedRefundSuccessRecord(strings.TrimSpace(item.AftersaleType)) {
 				continue
 			}
 			logistics := strings.TrimSpace(item.Logistics)
@@ -1754,6 +1775,9 @@ func (s *ShopService) Sync(shop *model.MarketplaceShop, in *dto.PluginSyncInput)
 			})
 		}
 		if err := s.repos.Shop.UpsertShippedRefunds(shop, shipped); err != nil {
+			return nil, err
+		}
+		if err := s.repos.Shop.DeleteUnshippedShippedRefunds(shop.ID); err != nil {
 			return nil, err
 		}
 		shippedCount = len(shipped)

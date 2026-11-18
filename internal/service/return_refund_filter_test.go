@@ -2,6 +2,28 @@ package service
 
 import "testing"
 
+func TestIsShippedRefundSuccessRecord(t *testing.T) {
+	cases := []struct {
+		typ string
+		ok  bool
+	}{
+		{"已发货退款", true},
+		{"仅退款已发货退款", true},
+		{"未发货退款", false},
+		{"已发货退款/未发货退款", false},
+		{"退货退款", false},
+		{"退货退款成功", false},
+		{"仅退款", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		got := IsShippedRefundSuccessRecord(c.typ)
+		if got != c.ok {
+			t.Fatalf("type=%q got %v want %v", c.typ, got, c.ok)
+		}
+	}
+}
+
 func TestIsReturnRefundSuccessRecord(t *testing.T) {
 	cases := []struct {
 		typ, status string
