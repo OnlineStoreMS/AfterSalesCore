@@ -148,6 +148,21 @@ func TestMatchShopTicketKind(t *testing.T) {
 	if !MatchShopTicketKind(disputeNegotiate, dto.TicketKindDispute) {
 		t.Fatal("仲裁待协商 should match dispute")
 	}
+
+	shippedWithReturn := &model.AftersaleTicket{
+		AftersaleType:     "已发货退款",
+		ReturnLogisticsNo: "SF123",
+		CardKeys:          []model.AftersaleTicketCard{{CardKey: "待商家收/发货:全部待收货/发货"}},
+	}
+	if !MatchShopTicketKind(shippedWithReturn, dto.TicketKindAll) {
+		t.Fatal("all tickets should include 已发货退款 with return logistics")
+	}
+	if !MatchShopTicketKind(review, dto.TicketKindAll) || !MatchShopTicketKind(exchangeReceive, dto.TicketKindAll) {
+		t.Fatal("all tickets should include review and exchange")
+	}
+	if MatchShopTicketKind(nil, dto.TicketKindAll) {
+		t.Fatal("nil ticket should not match all")
+	}
 }
 
 func TestInterceptFromTicketCopiesTimeout(t *testing.T) {

@@ -569,6 +569,8 @@ func MatchShopTicketKind(t *model.AftersaleTicket, kind string) bool {
 		return false
 	}
 	switch kind {
+	case dto.TicketKindAll:
+		return true
 	case dto.TicketKindBuyerReturnPickup:
 		if !ticketHasGroup(t, "待商家收/发货") {
 			return false
@@ -651,7 +653,8 @@ func ticketCardLabelIn(t *model.AftersaleTicket, labels ...string) bool {
 
 func validShopTicketKind(kind string) bool {
 	switch kind {
-	case dto.TicketKindBuyerReturnPickup,
+	case dto.TicketKindAll,
+		dto.TicketKindBuyerReturnPickup,
 		dto.TicketKindReviewShippedRefund,
 		dto.TicketKindReturnRefund,
 		dto.TicketKindExchange,
@@ -685,25 +688,25 @@ func ticketHasCard(t *model.AftersaleTicket, group, label string) bool {
 	return false
 }
 
-func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, []string, []string, int64, error) {
+func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketItem, []string, []string, []string, int64, error) {
 	if !validShopTicketKind(q.Kind) {
-		return nil, nil, nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
+		return nil, nil, nil, nil, 0, fmt.Errorf("%w: 无效筛选", ErrBadRequest)
 	}
 	if q.ShopID > 0 {
 		if _, err := s.repo().Get(q.ShopID); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, nil, nil, 0, ErrNotFound
+				return nil, nil, nil, nil, 0, ErrNotFound
 			}
-			return nil, nil, nil, 0, err
+			return nil, nil, nil, nil, 0, err
 		}
 	}
 	list, err := s.repo().ListOpenTickets(q.ShopID)
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, nil, 0, err
 	}
 	shops, err := s.repo().List()
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, nil, 0, err
 	}
 	names := make(map[uint64]string, len(shops))
 	for i := range shops {
@@ -712,15 +715,22 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 	kw := strings.ToLower(strings.TrimSpace(q.Keyword))
 	wantReason := strings.TrimSpace(q.Reason)
 	wantStatus := strings.TrimSpace(q.Status)
+	wantType := strings.TrimSpace(q.AftersaleType)
 	signedFrom := ParseQueryDateTime(q.SignedFrom, false)
 	signedTo := ParseQueryDateTime(q.SignedTo, true)
-	filterSigned := q.Kind == dto.TicketKindBuyerReturnSigned && (signedFrom != nil || signedTo != nil)
+	applyFrom := ParseQueryDateTime(q.ApplyFrom, false)
+	applyTo := ParseQueryDateTime(q.ApplyTo, true)
+	filterSigned := (q.Kind == dto.TicketKindBuyerReturnSigned || q.Kind == dto.TicketKindAll) && (signedFrom != nil || signedTo != nil)
+	filterApply := q.Kind == dto.TicketKindAll && (applyFrom != nil || applyTo != nil)
 	filtered := make([]model.AftersaleTicket, 0, len(list))
 	signedAtOf := make(map[uint64]*time.Time, len(list))
+	appliedAtOf := make(map[uint64]*time.Time, len(list))
 	reasonSet := map[string]struct{}{}
 	statusSet := map[string]struct{}{}
+	typeSet := map[string]struct{}{}
 	var reasons []string
 	var statuses []string
+	var aftersaleTypes []string
 	for i := range list {
 		t := &list[i]
 		if !MatchShopTicketKind(t, q.Kind) {
@@ -738,6 +748,12 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 				statuses = append(statuses, st)
 			}
 		}
+		if typ := strings.TrimSpace(t.AftersaleType); typ != "" {
+			if _, ok := typeSet[typ]; !ok {
+				typeSet[typ] = struct{}{}
+				aftersaleTypes = append(aftersaleTypes, typ)
+			}
+		}
 		if kw != "" && !shopTicketKeywordMatch(t, names[t.ShopID], kw) {
 			continue
 		}
@@ -747,6 +763,9 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		if wantStatus != "" && strings.TrimSpace(t.Status) != wantStatus {
 			continue
 		}
+		if wantType != "" && strings.TrimSpace(t.AftersaleType) != wantType {
+			continue
+		}
 		if q.Kind == dto.TicketKindBuyerReturnSigned && !matchTicketHandleStatus(t, q.HandleStatus) {
 			continue
 		}
@@ -754,21 +773,37 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		if filterSigned && !TimeInRange(signedAt, signedFrom, signedTo) {
 			continue
 		}
+		appliedAt := ParsePlatformDateTime(t.ApplyTime, 0)
+		if filterApply && !TimeInRange(appliedAt, applyFrom, applyTo) {
+			continue
+		}
 		signedAtOf[t.ID] = signedAt
+		appliedAtOf[t.ID] = appliedAt
 		filtered = append(filtered, *t)
 	}
 	sort.Strings(reasons)
 	sort.Strings(statuses)
-	if q.Kind == dto.TicketKindBuyerReturnSigned {
-		by, desc := SignedTimeSortDesc(q.SortBy, q.SortOrder, "remainTime")
-		if by != "signedTime" && strings.TrimSpace(q.SortOrder) == "" {
+	sort.Strings(aftersaleTypes)
+	if q.Kind == dto.TicketKindBuyerReturnSigned || q.Kind == dto.TicketKindAll {
+		defaultBy := "remainTime"
+		if q.Kind == dto.TicketKindAll {
+			defaultBy = "applyTime"
+		}
+		by, desc := SignedTimeSortDesc(q.SortBy, q.SortOrder, defaultBy)
+		if q.Kind == dto.TicketKindBuyerReturnSigned && by != "signedTime" && strings.TrimSpace(q.SortOrder) == "" {
 			desc = false
 		}
 		sort.SliceStable(filtered, func(i, j int) bool {
 			var cmp int
-			if by == "signedTime" {
+			switch by {
+			case "signedTime":
 				cmp = CompareTimePtr(signedAtOf[filtered[i].ID], signedAtOf[filtered[j].ID], desc)
-			} else {
+			case "applyTime":
+				cmp = CompareTimePtr(appliedAtOf[filtered[i].ID], appliedAtOf[filtered[j].ID], desc)
+			case "syncedAt":
+				left, right := filtered[i].SyncedAt, filtered[j].SyncedAt
+				cmp = CompareTimePtr(&left, &right, desc)
+			default:
 				cmp = CompareTimePtr(filtered[i].DeadlineAt, filtered[j].DeadlineAt, desc)
 			}
 			if cmp != 0 {
@@ -792,7 +827,7 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 	}
 	start := (page - 1) * pageSize
 	if start >= len(filtered) {
-		return []dto.TicketItem{}, reasons, statuses, total, nil
+		return []dto.TicketItem{}, reasons, statuses, aftersaleTypes, total, nil
 	}
 	end := start + pageSize
 	if end > len(filtered) {
@@ -804,7 +839,7 @@ func (s *ShopService) ListShopTickets(q dto.ShopTicketListQuery) ([]dto.TicketIt
 		item.ShopName = names[filtered[i].ShopID]
 		out = append(out, item)
 	}
-	return out, reasons, statuses, total, nil
+	return out, reasons, statuses, aftersaleTypes, total, nil
 }
 
 func shopTicketKeywordMatch(t *model.AftersaleTicket, shopName, kw string) bool {

@@ -30,6 +30,16 @@ const router = createRouter({
       children: [
         { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '工作台' } },
         {
+          path: 'shops/all-tickets',
+          name: 'ShopAllTickets',
+          component: () => import('../views/shop/ShopTicketList.vue'),
+          meta: {
+            title: '全部售后单',
+            kind: 'all',
+            desc: '全部店铺当前工作台售后单：已发货退款（含有退回物流的）、退货退款、换货、纠纷等。悬停退货单号可看最近物流轨迹。',
+          },
+        },
+        {
           path: 'unboxing',
           name: 'UnboxingList',
           component: () => import('../views/record/RecordList.vue'),

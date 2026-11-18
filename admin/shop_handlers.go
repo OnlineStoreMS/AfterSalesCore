@@ -435,19 +435,22 @@ func (h *ShopHandler) ShopTickets(c *gin.Context) {
 		}
 		shopID = id
 	}
-	list, reasons, statuses, total, err := h.ss(c).ListShopTickets(dto.ShopTicketListQuery{
-		Kind:       c.Query("kind"),
-		ShopID:     shopID,
-		Keyword:    c.Query("keyword"),
-		Reason:       c.Query("reason"),
-		Status:       c.Query("status"),
-		HandleStatus: c.Query("handleStatus"),
-		SignedFrom:   c.Query("signedFrom"),
-		SignedTo:   c.Query("signedTo"),
-		SortBy:     c.Query("sortBy"),
-		SortOrder:  c.Query("sortOrder"),
-		Page:       page,
-		PageSize:   pageSize,
+	list, reasons, statuses, aftersaleTypes, total, err := h.ss(c).ListShopTickets(dto.ShopTicketListQuery{
+		Kind:          c.Query("kind"),
+		ShopID:        shopID,
+		Keyword:       c.Query("keyword"),
+		Reason:        c.Query("reason"),
+		Status:        c.Query("status"),
+		AftersaleType: c.Query("aftersaleType"),
+		HandleStatus:  c.Query("handleStatus"),
+		SignedFrom:    c.Query("signedFrom"),
+		SignedTo:      c.Query("signedTo"),
+		ApplyFrom:     c.Query("applyFrom"),
+		ApplyTo:       c.Query("applyTo"),
+		SortBy:        c.Query("sortBy"),
+		SortOrder:     c.Query("sortOrder"),
+		Page:          page,
+		PageSize:      pageSize,
 	})
 	if err != nil {
 		httputil.HandleServiceError(c, err)
@@ -456,6 +459,7 @@ func (h *ShopHandler) ShopTickets(c *gin.Context) {
 	data := response.PageResult(list, total, page, pageSize)
 	data["reasons"] = reasons
 	data["statuses"] = statuses
+	data["aftersaleTypes"] = aftersaleTypes
 	response.OK(c, data)
 }
 

@@ -24,6 +24,7 @@ const counts = ref<NavCounts>({
 let pollTimer = 0
 
 const activeMenu = computed(() => {
+  if (route.path.startsWith('/shops/all-tickets')) return '/shops/all-tickets'
   if (route.path.startsWith('/shops/await-pickup')) return '/shops/await-pickup'
   if (route.path.startsWith('/shops/shipped-refund')) return '/shops/shipped-refund'
   if (route.path.startsWith('/shops/return-refund')) return '/shops/return-refund'
@@ -91,16 +92,32 @@ watch(() => route.path, () => {
     <div class="menu-scroll">
     <el-menu
       :default-active="activeMenu"
-      :default-openeds="['shops', 'returns', 'returns-packages']"
+      :default-openeds="['workbench', 'shops', 'returns', 'returns-packages']"
       :collapse="collapsed"
       background-color="#001529"
       text-color="#ffffffa6"
       active-text-color="#fff"
     >
-      <el-menu-item index="/dashboard" @click="navigate('/dashboard')">
-        <el-icon><HomeFilled /></el-icon>
-        <span>工作台</span>
-      </el-menu-item>
+      <el-sub-menu index="workbench">
+        <template #title>
+          <el-icon><HomeFilled /></el-icon>
+          <span>工作台</span>
+          <span
+            v-if="counts.ticketTotal"
+            class="nav-badge"
+            :title="`全部售后单 ${counts.ticketTotal}`"
+          >{{ badgeText(counts.ticketTotal) }}</span>
+        </template>
+        <el-menu-item index="/dashboard" @click="navigate('/dashboard')">概览</el-menu-item>
+        <el-menu-item index="/shops/all-tickets" @click="navigate('/shops/all-tickets')">
+          全部售后单
+          <span
+            v-if="counts.ticketTotal"
+            class="nav-badge"
+            :title="`全部售后单 ${counts.ticketTotal}`"
+          >{{ badgeText(counts.ticketTotal) }}</span>
+        </el-menu-item>
+      </el-sub-menu>
       <el-sub-menu index="shops">
         <template #title>
           <el-icon><Shop /></el-icon>

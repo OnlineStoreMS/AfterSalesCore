@@ -270,6 +270,7 @@ export async function fetchShopTickets(id: number, params?: {
 }
 
 export type ShopTicketKind =
+  | 'all'
   | 'buyer-return-pickup'
   | 'review-shipped-refund'
   | 'return-refund'
@@ -283,15 +284,20 @@ export async function fetchShopTicketsByKind(params: {
   keyword?: string
   reason?: string
   status?: string
+  aftersaleType?: string
   handleStatus?: string
   signedFrom?: string
   signedTo?: string
+  applyFrom?: string
+  applyTo?: string
   sortBy?: string
   sortOrder?: string
   page?: number
   pageSize?: number
 }) {
-  return unwrap<PageData<AftersaleTicket> & { reasons?: string[]; statuses?: string[] }>(await client.get('/shop-tickets', { params }))
+  return unwrap<PageData<AftersaleTicket> & { reasons?: string[]; statuses?: string[]; aftersaleTypes?: string[] }>(
+    await client.get('/shop-tickets', { params }),
+  )
 }
 
 export async function markShopTicketHandled(id: number, handled = true) {

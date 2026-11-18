@@ -34,8 +34,11 @@ const reason = ref('')
 const reasons = ref<string[]>([])
 const status = ref('')
 const statuses = ref<string[]>([])
+const aftersaleType = ref('')
+const aftersaleTypes = ref<string[]>([])
 const handleStatus = ref('')
 const signedRange = ref<[string, string] | null>(null)
+const applyRange = ref<[string, string] | null>(null)
 const issueMeta = ref<IssueMeta>({ problemTypes: [], handleMethods: [], statuses: [] })
 const issueVisible = ref(false)
 const issueSaving = ref(false)
@@ -48,8 +51,22 @@ const issueForm = reactive({
   problemNote: '',
   handleNote: '',
 })
-const sortBy = ref('remainTime')
-const sortOrder = ref<'asc' | 'desc'>('asc')
+const isAllKind = computed(() => kind.value === 'all')
+const isPickupKind = computed(() => kind.value === 'buyer-return-pickup')
+const isSignedKind = computed(() => kind.value === 'buyer-return-signed')
+const isDisputeKind = computed(() => kind.value === 'dispute')
+const sortableKind = computed(() => isSignedKind.value || isAllKind.value)
+const showSignedFilter = computed(() => isSignedKind.value || isAllKind.value)
+const showReasonFilter = computed(() =>
+  isAllKind.value ||
+  kind.value === 'review-shipped-refund' ||
+  kind.value === 'return-refund' ||
+  kind.value === 'exchange',
+)
+const showStatusFilter = computed(() => isAllKind.value || kind.value === 'return-refund')
+const showHandleFilter = computed(() => kind.value === 'buyer-return-signed')
+const sortBy = ref(kind.value === 'all' ? 'applyTime' : 'remainTime')
+const sortOrder = ref<'asc' | 'desc'>(kind.value === 'all' ? 'desc' : 'asc')
 const sortReady = ref(false)
 const nowTick = ref(Date.now())
 let tickTimer = 0
@@ -71,11 +88,14 @@ async function loadData() {
       keyword: keyword.value || undefined,
       reason: showReasonFilter.value ? reason.value || undefined : undefined,
       status: showStatusFilter.value ? status.value || undefined : undefined,
+      aftersaleType: isAllKind.value ? aftersaleType.value || undefined : undefined,
       handleStatus: isSignedKind.value ? handleStatus.value || undefined : undefined,
-      signedFrom: isSignedKind.value ? signedRange.value?.[0] || undefined : undefined,
-      signedTo: isSignedKind.value ? signedRange.value?.[1] || undefined : undefined,
-      sortBy: isSignedKind.value ? sortBy.value : undefined,
-      sortOrder: isSignedKind.value ? sortOrder.value : undefined,
+      signedFrom: showSignedFilter.value ? signedRange.value?.[0] || undefined : undefined,
+      signedTo: showSignedFilter.value ? signedRange.value?.[1] || undefined : undefined,
+      applyFrom: isAllKind.value ? applyRange.value?.[0] || undefined : undefined,
+      applyTo: isAllKind.value ? applyRange.value?.[1] || undefined : undefined,
+      sortBy: sortableKind.value ? sortBy.value : undefined,
+      sortOrder: sortableKind.value ? sortOrder.value : undefined,
       page: page.value,
       pageSize: pageSize.value,
     })
@@ -83,6 +103,7 @@ async function loadData() {
     total.value = data.total
     if (data.reasons) reasons.value = data.reasons
     if (data.statuses) statuses.value = data.statuses
+    if (data.aftersaleTypes) aftersaleTypes.value = data.aftersaleTypes
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {
@@ -98,6 +119,12 @@ function handleSearch() {
 function onSortChange(payload: { prop?: string; order?: string | null }) {
   if (payload.prop === 'signedTime') {
     sortBy.value = 'signedTime'
+    sortOrder.value = payload.order === 'ascending' ? 'asc' : 'desc'
+  } else if (payload.prop === 'applyTime') {
+    sortBy.value = 'applyTime'
+    sortOrder.value = payload.order === 'ascending' ? 'asc' : 'desc'
+  } else if (payload.prop === 'syncedAt') {
+    sortBy.value = 'syncedAt'
     sortOrder.value = payload.order === 'ascending' ? 'asc' : 'desc'
   } else {
     sortBy.value = 'remainTime'
@@ -241,18 +268,8 @@ async function confirmTransfer() {
   }
 }
 
-const isPickupKind = computed(() => kind.value === 'buyer-return-pickup')
-const showReasonFilter = computed(() =>
-  kind.value === 'review-shipped-refund' ||
-  kind.value === 'return-refund' ||
-  kind.value === 'exchange',
-)
-const showStatusFilter = computed(() => kind.value === 'return-refund')
-const isSignedKind = computed(() => kind.value === 'buyer-return-signed')
-const showHandleFilter = computed(() => kind.value === 'buyer-return-signed')
-const isDisputeKind = computed(() => kind.value === 'dispute')
 const keywordPlaceholder = computed(() =>
-  isPickupKind.value
+  isPickupKind.value || isAllKind.value
     ? '售后编号 / 订单号 / 商品 / 退货单号 / 代收点'
     : '售后编号 / 订单号 / 商品 / 退货单号',
 )
@@ -280,10 +297,13 @@ watch(kind, async () => {
   reasons.value = []
   status.value = ''
   statuses.value = []
+  aftersaleType.value = ''
+  aftersaleTypes.value = []
   handleStatus.value = kind.value === 'buyer-return-signed' ? 'pending' : ''
   signedRange.value = null
-  sortBy.value = 'remainTime'
-  sortOrder.value = 'asc'
+  applyRange.value = null
+  sortBy.value = kind.value === 'all' ? 'applyTime' : 'remainTime'
+  sortOrder.value = kind.value === 'all' ? 'desc' : 'asc'
   sortReady.value = false
   page.value = 1
   await loadData()
@@ -318,6 +338,17 @@ watch(kind, async () => {
           />
         </el-select>
         <el-select
+          v-if="isAllKind"
+          v-model="aftersaleType"
+          clearable
+          filterable
+          placeholder="售后类型"
+          style="width: 160px"
+          @change="handleSearch"
+        >
+          <el-option v-for="item in aftersaleTypes" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-select
           v-if="showReasonFilter"
           v-model="reason"
           clearable
@@ -348,7 +379,23 @@ watch(kind, async () => {
         >
           <el-option v-for="item in handleStatusOptions" :key="item.value || 'all'" :label="item.label" :value="item.value" />
         </el-select>
-        <template v-if="isSignedKind">
+        <template v-if="isAllKind">
+          <span class="field-label">申请时间</span>
+          <el-date-picker
+            v-model="applyRange"
+            type="datetimerange"
+            range-separator="至"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            :shortcuts="dateShortcuts"
+            :default-time="dateRangeDefaultTime"
+            clearable
+            style="width: 360px"
+            @change="handleSearch"
+          />
+        </template>
+        <template v-if="showSignedFilter">
           <span class="field-label">签收时间</span>
           <el-date-picker
             v-model="signedRange"
@@ -379,7 +426,9 @@ watch(kind, async () => {
         :data="tickets"
         stripe
         border
-        :default-sort="isSignedKind ? { prop: 'remainTime', order: 'ascending' } : undefined"
+        :default-sort="isAllKind
+          ? { prop: 'applyTime', order: 'descending' }
+          : (isSignedKind ? { prop: 'remainTime', order: 'ascending' } : undefined)"
         @sort-change="onSortChange"
       >
         <el-table-column prop="shopName" label="店铺" width="140" />
@@ -416,8 +465,8 @@ watch(kind, async () => {
         <el-table-column
           label="售后状态"
           min-width="180"
-          :prop="isSignedKind ? 'remainTime' : undefined"
-          :sortable="isSignedKind ? 'custom' : false"
+          :prop="sortableKind ? 'remainTime' : undefined"
+          :sortable="sortableKind ? 'custom' : false"
         >
           <template #default="{ row }">
             <div>{{ row.status || '—' }}</div>
@@ -439,7 +488,7 @@ watch(kind, async () => {
             </div>
           </template>
         </el-table-column>
-        <el-table-column v-if="isDisputeKind" prop="dispute" label="纠纷仲裁" width="140" />
+        <el-table-column v-if="isDisputeKind || isAllKind" prop="dispute" label="纠纷仲裁" width="140" />
         <el-table-column label="物流信息" min-width="220">
           <template #default="{ row }">
             <TicketLogisticsCell
@@ -449,13 +498,13 @@ watch(kind, async () => {
             />
           </template>
         </el-table-column>
-        <el-table-column v-if="isPickupKind" label="代收点" min-width="220">
+        <el-table-column v-if="isPickupKind || isAllKind" label="代收点" min-width="220">
           <template #default="{ row }">
             <div class="location">{{ pickupPointOf(row) || '—' }}</div>
           </template>
         </el-table-column>
         <el-table-column
-          v-if="isSignedKind"
+          v-if="isSignedKind || isAllKind"
           prop="signedTime"
           label="签收时间"
           width="170"
@@ -463,6 +512,22 @@ watch(kind, async () => {
         >
           <template #default="{ row }">{{ signedTimeOf(row) || '—' }}</template>
         </el-table-column>
+        <el-table-column
+          v-if="isAllKind"
+          prop="applyTime"
+          label="申请时间"
+          width="170"
+          sortable="custom"
+        >
+          <template #default="{ row }">{{ row.applyTime || '—' }}</template>
+        </el-table-column>
+        <el-table-column
+          v-if="isAllKind"
+          prop="syncedAt"
+          label="同步时间"
+          width="170"
+          sortable="custom"
+        />
         <el-table-column v-if="isSignedKind" label="处理状态" width="120">
           <template #default="{ row }">
             <el-tag :type="handleStatusTone(row.handleStatus)" size="small">

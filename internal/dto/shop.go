@@ -341,6 +341,7 @@ type SidebarCounts struct {
 }
 
 const (
+	TicketKindAll                 = "all"
 	TicketKindBuyerReturnPickup   = "buyer-return-pickup"
 	TicketKindReviewShippedRefund = "review-shipped-refund"
 	TicketKindReturnRefund        = "return-refund"
@@ -350,18 +351,21 @@ const (
 )
 
 type ShopTicketListQuery struct {
-	Kind       string
-	ShopID     uint64
-	Keyword    string
-	Reason       string
-	Status       string
-	HandleStatus string
-	SignedFrom   string
-	SignedTo   string
-	SortBy     string
-	SortOrder  string
-	Page       int
-	PageSize   int
+	Kind          string
+	ShopID        uint64
+	Keyword       string
+	Reason        string
+	Status        string
+	AftersaleType string
+	HandleStatus  string
+	SignedFrom    string
+	SignedTo      string
+	ApplyFrom     string
+	ApplyTo       string
+	SortBy        string
+	SortOrder     string
+	Page          int
+	PageSize      int
 }
 
 type ServiceOrderListQuery struct {
